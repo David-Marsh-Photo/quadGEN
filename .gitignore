@@ -9,5 +9,6 @@ targets/
 .claude*
 test-results/
 archives/
+artifacts/
 githubtoken.md
 scripts/push-with-token.sh
