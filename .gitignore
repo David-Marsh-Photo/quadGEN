@@ -16,6 +16,7 @@ docs/pops_profiler_formulas/
 artifacts/
 config/
 playwright/
+runner/
 githubtoken.md
 scripts/push-with-token.sh
 AGENTS.md
