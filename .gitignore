@@ -9,6 +9,13 @@ targets/
 .claude*
 test-results/
 archives/
+docs/POPS_intent_pipeline.md
+docs/POPS_vs_quadGEN_formula_map.md
+docs/POPS_vs_quadGEN_report.md
+docs/pops_profiler_formulas/
 artifacts/
 githubtoken.md
 scripts/push-with-token.sh
+AGENTS.md
+CLAUDE.md
+CLAUDE_ARCHITECTURE.md
