@@ -17,6 +17,7 @@ artifacts/
 config/
 playwright/
 runner/
+themes/
 githubtoken.md
 scripts/push-with-token.sh
 AGENTS.md
