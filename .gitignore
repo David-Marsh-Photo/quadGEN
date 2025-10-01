@@ -17,6 +17,7 @@ artifacts/
 config/
 playwright/
 runner/
+scripts/legacy-analysis/
 themes/
 githubtoken.md
 scripts/push-with-token.sh
