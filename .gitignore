@@ -15,6 +15,7 @@ docs/POPS_vs_quadGEN_report.md
 docs/pops_profiler_formulas/
 artifacts/
 config/
+playwright/
 githubtoken.md
 scripts/push-with-token.sh
 AGENTS.md
