@@ -1,0 +1,16 @@
+started:  2025-09-28T00:59:28.009Z
+finished: 2025-09-28T00:59:30.058Z
+exitCode: 0
+env:      {}
+args:     ["tests/manual-lstar-parity.js"]
+
+--- STDOUT ---
+
+> quadgen@1.0.0 test:e2e
+> node run-playwright-test.js tests/manual-lstar-parity.js
+
+Manual L* parity comparison
+ - Max abs diff: 0
+ - Mean abs diff: 0
+PASS: curves match within tolerance
+

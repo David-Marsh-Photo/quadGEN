@@ -1,0 +1,648 @@
+{
+  "timestamp": "2025-09-26T15:45:56.287Z",
+  "summary": {
+    "totalTested": 15,
+    "workingInBoth": 15,
+    "brokenInModern": 0,
+    "notFoundInModern": 0,
+    "criticalIssues": 0
+  },
+  "elementResults": [
+    {
+      "element": {
+        "id": "editModeToggleBtn",
+        "description": "Edit Mode Toggle",
+        "critical": true
+      },
+      "legacy": {
+        "system": "legacy",
+        "elementExists": true,
+        "elementState": {
+          "visible": true,
+          "enabled": true,
+          "clickable": true,
+          "tag": "button",
+          "type": "button"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 2,
+          "changeTypes": [
+            "edit-mode",
+            "quad-data"
+          ]
+        }
+      },
+      "modern": {
+        "system": "modern",
+        "elementExists": true,
+        "elementState": {
+          "visible": true,
+          "enabled": true,
+          "clickable": true,
+          "tag": "button",
+          "type": "button"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 1,
+          "changeTypes": [
+            "edit-mode"
+          ]
+        }
+      },
+      "status": "working",
+      "summary": "Both systems respond to interaction",
+      "issue": null
+    },
+    {
+      "element": {
+        "selector": "[data-channel=\"MK\"] .per-channel-btn",
+        "description": "MK Channel Load File",
+        "critical": true
+      },
+      "legacy": {
+        "system": "legacy",
+        "elementExists": true,
+        "elementState": {
+          "visible": true,
+          "enabled": true,
+          "clickable": true,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "modern": {
+        "system": "modern",
+        "elementExists": true,
+        "elementState": {
+          "visible": true,
+          "enabled": true,
+          "clickable": true,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "status": "passive",
+      "summary": "No state changes detected in either system",
+      "issue": null
+    },
+    {
+      "element": {
+        "selector": "[data-channel=\"K\"] .per-channel-btn",
+        "description": "K Channel Load File",
+        "critical": true
+      },
+      "legacy": {
+        "system": "legacy",
+        "elementExists": true,
+        "elementState": {
+          "visible": false,
+          "enabled": true,
+          "clickable": false,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "modern": {
+        "system": "modern",
+        "elementExists": true,
+        "elementState": {
+          "visible": false,
+          "enabled": true,
+          "clickable": false,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "status": "passive",
+      "summary": "No state changes detected in either system",
+      "issue": null
+    },
+    {
+      "element": {
+        "selector": "[data-channel=\"C\"] .per-channel-btn",
+        "description": "C Channel Load File",
+        "critical": true
+      },
+      "legacy": {
+        "system": "legacy",
+        "elementExists": true,
+        "elementState": {
+          "visible": false,
+          "enabled": true,
+          "clickable": false,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "modern": {
+        "system": "modern",
+        "elementExists": true,
+        "elementState": {
+          "visible": false,
+          "enabled": true,
+          "clickable": false,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "status": "passive",
+      "summary": "No state changes detected in either system",
+      "issue": null
+    },
+    {
+      "element": {
+        "selector": "[data-channel=\"M\"] .per-channel-btn",
+        "description": "M Channel Load File",
+        "critical": true
+      },
+      "legacy": {
+        "system": "legacy",
+        "elementExists": true,
+        "elementState": {
+          "visible": false,
+          "enabled": true,
+          "clickable": false,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "modern": {
+        "system": "modern",
+        "elementExists": true,
+        "elementState": {
+          "visible": false,
+          "enabled": true,
+          "clickable": false,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "status": "passive",
+      "summary": "No state changes detected in either system",
+      "issue": null
+    },
+    {
+      "element": {
+        "selector": "[data-channel=\"Y\"] .per-channel-btn",
+        "description": "Y Channel Load File",
+        "critical": true
+      },
+      "legacy": {
+        "system": "legacy",
+        "elementExists": true,
+        "elementState": {
+          "visible": false,
+          "enabled": true,
+          "clickable": false,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "modern": {
+        "system": "modern",
+        "elementExists": true,
+        "elementState": {
+          "visible": false,
+          "enabled": true,
+          "clickable": false,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "status": "passive",
+      "summary": "No state changes detected in either system",
+      "issue": null
+    },
+    {
+      "element": {
+        "selector": "[data-channel=\"K\"] .percent-input",
+        "description": "K Channel Percent",
+        "critical": true
+      },
+      "legacy": {
+        "system": "legacy",
+        "elementExists": true,
+        "elementState": {
+          "visible": false,
+          "enabled": true,
+          "clickable": false,
+          "tag": "input",
+          "type": "number"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "modern": {
+        "system": "modern",
+        "elementExists": true,
+        "elementState": {
+          "visible": false,
+          "enabled": true,
+          "clickable": false,
+          "tag": "input",
+          "type": "number"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "status": "passive",
+      "summary": "No state changes detected in either system",
+      "issue": null
+    },
+    {
+      "element": {
+        "selector": "[data-channel=\"K\"] .end-input",
+        "description": "K Channel End",
+        "critical": true
+      },
+      "legacy": {
+        "system": "legacy",
+        "elementExists": true,
+        "elementState": {
+          "visible": false,
+          "enabled": true,
+          "clickable": false,
+          "tag": "input",
+          "type": "number"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "modern": {
+        "system": "modern",
+        "elementExists": true,
+        "elementState": {
+          "visible": false,
+          "enabled": true,
+          "clickable": false,
+          "tag": "input",
+          "type": "number"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "status": "passive",
+      "summary": "No state changes detected in either system",
+      "issue": null
+    },
+    {
+      "element": {
+        "id": "globalLinearizationBtn",
+        "description": "Global Linearization Load",
+        "critical": true
+      },
+      "legacy": {
+        "system": "legacy",
+        "elementExists": true,
+        "elementState": {
+          "visible": true,
+          "enabled": true,
+          "clickable": true,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "modern": {
+        "system": "modern",
+        "elementExists": true,
+        "elementState": {
+          "visible": true,
+          "enabled": true,
+          "clickable": true,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "status": "passive",
+      "summary": "No state changes detected in either system",
+      "issue": null
+    },
+    {
+      "element": {
+        "id": "revertGlobalToMeasurementBtn",
+        "description": "Revert to Measurement",
+        "critical": true
+      },
+      "legacy": {
+        "system": "legacy",
+        "elementExists": true,
+        "elementState": {
+          "visible": true,
+          "enabled": false,
+          "clickable": false,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "modern": {
+        "system": "modern",
+        "elementExists": true,
+        "elementState": {
+          "visible": true,
+          "enabled": false,
+          "clickable": false,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "status": "passive",
+      "summary": "No state changes detected in either system",
+      "issue": null
+    },
+    {
+      "element": {
+        "id": "manualLstarBtn",
+        "description": "Manual L* Entry",
+        "critical": true
+      },
+      "legacy": {
+        "system": "legacy",
+        "elementExists": true,
+        "elementState": {
+          "visible": true,
+          "enabled": true,
+          "clickable": true,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "modern": {
+        "system": "modern",
+        "elementExists": true,
+        "elementState": {
+          "visible": true,
+          "enabled": true,
+          "clickable": true,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "status": "passive",
+      "summary": "No state changes detected in either system",
+      "issue": null
+    },
+    {
+      "element": {
+        "id": "loadQuadBtn",
+        "description": "Load Quad File",
+        "critical": true
+      },
+      "legacy": {
+        "system": "legacy",
+        "elementExists": true,
+        "elementState": {
+          "visible": true,
+          "enabled": true,
+          "clickable": true,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "modern": {
+        "system": "modern",
+        "elementExists": true,
+        "elementState": {
+          "visible": true,
+          "enabled": true,
+          "clickable": true,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "status": "passive",
+      "summary": "No state changes detected in either system",
+      "issue": null
+    },
+    {
+      "element": {
+        "id": "downloadBtn",
+        "description": "Download Quad",
+        "critical": true
+      },
+      "legacy": {
+        "system": "legacy",
+        "elementExists": true,
+        "elementState": {
+          "visible": true,
+          "enabled": true,
+          "clickable": true,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "modern": {
+        "system": "modern",
+        "elementExists": true,
+        "elementState": {
+          "visible": true,
+          "enabled": true,
+          "clickable": true,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "status": "passive",
+      "summary": "No state changes detected in either system",
+      "issue": null
+    },
+    {
+      "element": {
+        "id": "undoBtn",
+        "description": "Undo Button",
+        "critical": true
+      },
+      "legacy": {
+        "system": "legacy",
+        "elementExists": true,
+        "elementState": {
+          "visible": true,
+          "enabled": true,
+          "clickable": true,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "modern": {
+        "system": "modern",
+        "elementExists": true,
+        "elementState": {
+          "visible": true,
+          "enabled": false,
+          "clickable": false,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "status": "passive",
+      "summary": "No state changes detected in either system",
+      "issue": null
+    },
+    {
+      "element": {
+        "id": "redoBtn",
+        "description": "Redo Button",
+        "critical": true
+      },
+      "legacy": {
+        "system": "legacy",
+        "elementExists": true,
+        "elementState": {
+          "visible": true,
+          "enabled": false,
+          "clickable": false,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "modern": {
+        "system": "modern",
+        "elementExists": true,
+        "elementState": {
+          "visible": true,
+          "enabled": false,
+          "clickable": false,
+          "tag": "button",
+          "type": "submit"
+        },
+        "interaction": {
+          "successful": true,
+          "changes": 0,
+          "changeTypes": []
+        }
+      },
+      "status": "passive",
+      "summary": "No state changes detected in either system",
+      "issue": null
+    }
+  ],
+  "criticalIssues": []
+}

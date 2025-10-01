@@ -1,0 +1,34 @@
+# quadGEN Documentation Index
+
+This directory holds the reference material that ships with the modular quadGEN build. Use this guide to find the right document quickly.
+
+## Product Guides
+- `quadgen_user_guide.md` – user-facing overview of the app, terminology, and daily workflows.
+- `quadgen_workflow.md` – recommended end-to-end calibration sequence (measurement → correction → verification).
+- `manual_tests.md` – regression checklist the lab follows when exercising critical UI paths.
+- `print_linearization_guide.md` – ground-truth math for LAB and manual L* calibrations in printer space.
+
+## Technical Reference
+- `architecture-map.md` – auto-generated mermaid diagram of module clusters and dependencies (`node scripts/docs/export-architecture-map.js`).
+- `contrast_intents.md`, `correction_vs_intent.md`, `POPS_intent_pipeline.md`, `Auto_White_Black_Limit_Rolloff.md`, `hybrid_density.md` – intent math, rolloff handling, and hybrid workflows.
+- `LAB_LINEARIZATION_WORKFLOW.md`, `LAB_LSTAR_PIPELINE.md` – deep dive on measurement ingestion and Smart curve generation.
+- `REVERT_BUTTON_FUNCTIONALITY.md`, `EDIT_MODE.md` – detailed behaviour notes for revert controls and Edit Mode tooling.
+
+## File Format Specs
+- `File_Specs/ACV_SPEC_SUMMARY.md`, `CGATS17_SPEC_SUMMARY.md`, `CUBE_LUT_SPEC_SUMMARY.md`, `LAB_TXT_SPEC_SUMMARY.md`, `QTR_QUAD_SPEC_SUMMARY.md` – parsing rules and edge cases for supported import/export formats.
+- `File_Specs/Quad-Ink-Descriptor-Spec-En.pdf` – vendor-provided reference for QuadToneRIP ink descriptors.
+
+## POPS Comparative Data
+- `POPS_vs_quadGEN_report.md`, `POPS_vs_quadGEN_formula_map.md` – side-by-side analysis of POPS vs quadGEN correction models.
+- `pops_profiler_formulas/` – raw CSV artifacts backing the comparison study.
+
+## Developer Resources
+- `dev/BUILD_INSTRUCTIONS.md`, `dev/QUADGEN_DEVELOPMENT.md` – setup notes for local development and build process.
+- `dev/QUADGEN_DATA_TYPES.md`, `dev/QUADGEN_AI_INTEGRATION.md` – data contracts and Lab Tech automation hooks.
+- `dev/CLOUDFLARE_SETUP.md` – instructions for deploying the Cloudflare worker proxy used in production.
+
+## Testing & Tooling
+- `playwright_external_runner.md` – how to drive the MCP-adjacent Playwright harness.
+- `calibration-targets-untagged-vs-color-space.md` – test target handling notes when ICC metadata is absent.
+
+If you add new documentation, update this index so the team can surface it from a single place.

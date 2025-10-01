@@ -1,0 +1,899 @@
+<!doctype html>
+<html lang="en">
+
+<!--
+MIT License
+
+Copyright (c) 2025 David Marsh
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Scope: This license applies to this HTML file (quadgen.html) only.
+-->
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title id="pageTitle">quadGEN</title>
+  <meta name="description" content="quadGEN - Generate Epson P700-P900/P600-P800 QuadToneRIP .quad files with 256-step ramps per channel." />
+  <!-- Version History notes guidance: keep entries concise, direct, factual, and short. See AGENTS.md and CLAUDE.md. -->
+  <script src="https://cdn.tailwindcss.com"></script>
+<script type="module" src="/src/main.js"></script>
+</head>
+
+<body class="min-h-screen bg-gray-50 px-2 md:px-4 py-3">
+  <main class="main-container">
+    <section class="app-shell bg-white rounded-2xl shadow-lg px-4 md:px-6 py-5 md:py-6">
+      <header class="mb-6">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-center mb-2">
+          <div class="flex items-center gap-4 lg:col-span-3">
+            <svg id="quadgenLogo" xmlns="http://www.w3.org/2000/svg" width="56" height="56" viewBox="0 0 160 160" role="img" aria-labelledby="quadgenTitle quadgenDesc">
+              <title id="quadgenTitle">quadGEN icon (CMYK)</title>
+              <desc id="quadgenDesc">Four CMYK bars with a rising Bezier-style curve and nodes, flat design.</desc>
+              <!-- baseline -->
+              <path d="M16 132H144" fill="none" stroke="#1A1A1A" stroke-width="8" stroke-linecap="round"/>
+              <!-- CMYK bars -->
+              <rect id="cyanBar" x="20" y="90" width="20" height="40" rx="6" ry="6" fill="#00B5E2"/>
+              <rect id="magentaBar" x="52" y="70" width="20" height="60" rx="6" ry="6" fill="#FF2A8A"/>
+              <rect id="yellowBar" x="84" y="50" width="20" height="80" rx="6" ry="6" fill="#FFD400"/>
+              <rect id="blackBar" x="116" y="22" width="20" height="110" rx="6" ry="6" fill="#1A1A1A"/>
+              <!-- Bezier-like curve -->
+              <path id="logoPath" d="M30 88 C 44 84, 50 72, 62 68 S 86 50, 94 48 S 118 28, 126 18"
+                    fill="none" stroke="#1A1A1A" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+              <!-- curve nodes -->
+              <circle id="node1" cx="30" cy="88" r="6" fill="white" stroke="#1A1A1A" stroke-width="2"/>
+              <circle id="node2" cx="62" cy="68" r="6" fill="white" stroke="#1A1A1A" stroke-width="2"/>
+              <circle id="node3" cx="94" cy="48" r="6" fill="white" stroke="#1A1A1A" stroke-width="2"/>
+              <circle id="node4" cx="126" cy="18" r="6" fill="white" stroke="#1A1A1A" stroke-width="2"/>
+            </svg>
+            <div>
+              <h1 class="text-2xl md:text-3xl font-semibold tracking-tight">
+                quadGEN
+                <span id="appVersion" class="text-gray-400 text-lg"></span>
+              </h1>
+              <p class="text-gray-400 text-sm -mt-1">by <a href="https://www.davidmarshprints.com/" target="_blank" rel="noopener noreferrer" class="hover:text-gray-600 underline">David Marsh</a></p>
+            </div>
+            
+            <!-- Compact printer selector -->
+            <div class="flex items-center gap-2 bg-gray-50 rounded-lg border border-gray-200 px-3 py-2 flex-1 ml-4">
+              <label for="printerSelect" class="text-sm font-medium text-gray-700">Printer:</label>
+              <select id="printerSelect" class="standard-dropdown" style="width: 120px;">
+                <option value="P700P900" selected>P700-P900</option>
+                <option value="P5-7-9000">P5-7-9000</option>
+                <option value="P800">P600-P800</option>
+                <option value="P400">P400</option>
+                <option value="x900">x900</option>
+                <option value="3880-7880">3880-7880</option>
+                <option value="x800-x890">x800-x890</option>
+                <option value="P4-6-8000">P4-6-8000</option>
+              </select>
+              <p id="channelInfo" class="flex-1 text-xs text-gray-600 ml-1"></p>
+              <button id="helpBtn" class="text-sm bg-blue-600 hover:bg-blue-700 text-white rounded px-3 py-1 transition-colors ml-auto font-bold" title="Help and quick start">
+                📖 Help
+              </button>
+              <button id="themeToggle" class="ml-2 text-sm rounded px-2 py-1 font-bold border border-gray-300 bg-white hover:bg-gray-50 transition-colors" title="Toggle dark mode" aria-pressed="false">🌙</button>
+              
+            </div>
+          </div>
+          
+        </div>
+        <p id="printerDescription" class="text-gray-600 mt-1"></p>
+      </header>
+
+      <!-- Main Actions -->
+      <div class="mb-4">
+              <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-xl p-4">
+          <input type="file" id="quadFile" accept=".quad" class="hidden">
+          <button id="undoBtn" class="px-4 py-2 text-sm bg-slate-600 text-white hover:bg-slate-700 rounded transition-colors font-bold disabled:opacity-50 disabled:cursor-not-allowed" disabled title="No changes to undo">
+            ↺ Undo
+          </button>
+          <button id="redoBtn" class="px-4 py-2 text-sm bg-slate-600 text-white hover:bg-slate-700 rounded transition-colors font-bold disabled:opacity-50 disabled:cursor-not-allowed" disabled title="No changes to redo">
+            ↻ Redo
+          </button>
+          <button id="loadQuadBtn" class="px-4 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white rounded transition-colors font-bold">
+            → Load .quad
+          </button>
+          <button id="downloadBtn" class="px-4 py-2 text-sm bg-black text-white hover:bg-black/90 rounded transition-colors font-bold">
+            ↓ Download .quad
+          </button>
+          <input id="filenameInput" type="text" placeholder="P900_K33_C33_M33..." class="flex-1 ml-3 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black/10 focus:border-gray-400" />
+          <span class="text-sm text-gray-500">.quad</span>
+        </div>
+      </div>
+
+      <!-- Ink Limits Graph and Linearization -->
+      <div class="mb-4 flex flex-col lg:flex-row gap-6">
+        <!-- Graph Section -->
+        <div class="flex-1 min-w-0 space-y-4">
+          <div class="bg-white border border-gray-200 rounded-xl p-2 relative">
+            <div class="chart-wrapper">
+              <canvas id="inkChart" width="950" height="700" class="w-full h-auto max-h-none"></canvas>
+
+              <!-- Status Display -->
+              <div class="absolute top-1 right-4 z-10 max-w-xs">
+                <div class="bg-gray-50 rounded-lg px-3 py-2 text-center flex items-center justify-center">
+                  <span id="status" class="text-xs text-gray-600 font-medium transition-opacity duration-500 ease-in-out">&nbsp;</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="chart-zoom-controls" aria-label="Adjust chart zoom">
+                <button id="chartZoomOutBtn" type="button" class="chart-zoom-btn" title="Zoom out (show more ink range)">−</button>
+                <div class="chart-zoom-divider" aria-hidden="true"></div>
+                <button id="chartZoomInBtn" type="button" class="chart-zoom-btn" title="Zoom in (magnify ink range)">+</button>
+              </div>
+
+              <div id="autoLimitDebugPanel" class="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4 text-xs space-y-3 hidden" aria-hidden="true">
+                <div class="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                  <h3 class="text-sm font-semibold text-gray-700">Auto Endpoint Debug</h3>
+                  <p class="text-[11px] text-gray-500">Leave fields blank to use defaults.</p>
+                </div>
+                <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <label class="flex flex-col gap-1">
+                    <span class="font-medium text-gray-700">Limit proximity (%)</span>
+                    <input id="autoLimitInputLimitProximity" type="number" min="0" max="100" step="0.1" class="rounded border border-gray-300 px-2 py-1" />
+                  </label>
+                  <label class="flex flex-col gap-1">
+                    <span class="font-medium text-gray-700">Slope threshold (% of End per sample)</span>
+                    <input id="autoLimitInputSlopeFactor" type="number" min="0" max="20" step="0.05" class="rounded border border-gray-300 px-2 py-1" />
+                  </label>
+                  <label class="flex flex-col gap-1">
+                    <span class="font-medium text-gray-700">Sustain samples</span>
+                    <input id="autoLimitInputSustain" type="number" min="1" max="64" step="1" class="rounded border border-gray-300 px-2 py-1" />
+                  </label>
+                  <label class="flex flex-col gap-1">
+                    <span class="font-medium text-gray-700">Minimum width (% of curve)</span>
+                    <input id="autoLimitInputMinWidth" type="number" min="0" max="50" step="0.5" class="rounded border border-gray-300 px-2 py-1" />
+                  </label>
+                  <label class="flex flex-col gap-1">
+                    <span class="font-medium text-gray-700">Black shoulder scan start (% of curve)</span>
+                    <input id="autoLimitInputBlackShoulder" type="number" min="0" max="99" step="0.5" class="rounded border border-gray-300 px-2 py-1" />
+                  </label>
+                  <label class="flex flex-col gap-1">
+                    <span class="font-medium text-gray-700">White toe scan end (% of curve)</span>
+                    <input id="autoLimitInputWhiteToe" type="number" min="1" max="50" step="0.5" class="rounded border border-gray-300 px-2 py-1" />
+                  </label>
+                  <label class="flex flex-col gap-1">
+                    <span class="font-medium text-gray-700">Fallback plateau (% of curve)</span>
+                    <input id="autoLimitInputFallback" type="number" min="1" max="50" step="0.5" class="rounded border border-gray-300 px-2 py-1" />
+                  </label>
+                </div>
+                <div class="flex flex-wrap gap-2 text-xs">
+                  <button id="autoLimitApplyBtn" type="button" class="rounded bg-blue-600 px-3 py-1 font-semibold text-white hover:bg-blue-700">Apply overrides &amp; replot</button>
+                  <button id="autoLimitRecalcBtn" type="button" class="rounded border border-gray-300 px-3 py-1 font-semibold text-gray-700 hover:bg-gray-100">Replot with current settings</button>
+                  <button id="autoLimitResetBtn" type="button" class="rounded border border-gray-300 px-3 py-1 font-semibold text-gray-700 hover:bg-gray-100">Reset to defaults</button>
+                </div>
+              </div>
+
+              <!-- (Removed) Smoothing Note -->
+            </div>
+            <!-- Cursor tooltip for X,Y coordinates over the graph -->
+            <div id="chartCursorTooltip" class="hidden absolute z-20 px-1.5 py-0.5 text-xs rounded bg-black text-white pointer-events-none shadow-md"></div>
+            
+            </div>
+            <div class="absolute top-1 left-4 z-10">
+              <span id="sessionStatus" class="text-xs text-gray-500">&nbsp;</span>
+            </div>
+            
+            <!-- Interpolation Controls (moved inside graph container) -->
+            <div class="mt-0">
+              <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <!-- Left Column: Interpolation Method -->
+                <div class="space-y-2">
+                  <div style="display: none;">
+                    <h3 class="text-xs font-medium text-gray-700 mb-1">Interpolation Method</h3>
+                    <select id="curveSmoothingMethod" class="standard-dropdown" disabled>
+                      <option value="pchip" selected>PCHIP (monotonic)</option>
+                      <option value="linear">Linear (none)</option>
+                    </select>
+                    <p id="interpolationDescription" class="text-xs text-gray-500 mt-2">Monotonic interpolation preserves data trends</p>
+                  </div>
+                  
+                  <!-- Catmull-Rom Tension Control -->
+                  <div id="catmullTensionContainer" style="display: none;">
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Curve Tension</label>
+                    <div class="flex items-center gap-2">
+                      <span class="text-xs text-gray-500">Tight</span>
+                      <input type="range" id="catmullTension" min="0" max="100" value="50" class="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer" disabled>
+                      <span class="text-xs text-gray-500">Loose</span>
+                    </div>
+                    <p class="text-xs text-gray-500 mt-1">Adjust how curvy the interpolation becomes</p>
+                  </div>
+
+                  
+                </div>
+                
+                <!-- Right Column (reserved) -->
+                <div class="space-y-2"></div>
+              </div>
+            </div>
+
+            <!-- Debug Intent Tuning Panel (hidden unless DEBUG_INTENT_TUNING true) -->
+            <div id="intentTuningPanel" class="mt-4 border border-amber-400 bg-amber-50 rounded-lg p-3 space-y-3 hidden">
+              <div class="flex items-center justify-between">
+                <span class="text-xs font-semibold text-amber-700">Intent Tuning (debug)</span>
+                <span class="text-[10px] text-amber-600">Restore via button below</span>
+              </div>
+              <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                <div class="space-y-2">
+                  <label class="block font-semibold text-amber-700">Interpolation</label>
+                  <select id="tuningInterpolationSelect" class="standard-dropdown text-xs">
+                    <option value="pchip">PCHIP (monotonic)</option>
+                    <option value="cubic">Cubic spline</option>
+                    <option value="linear">Linear</option>
+                  </select>
+                  <div class="pt-2">
+                    <label class="block font-semibold text-amber-700">Primary smoothing</label>
+                    <div class="flex items-center gap-2">
+                      <input type="range" id="tuningSmoothingPercent" min="0" max="30" step="1" value="30" class="flex-1">
+                      <span id="tuningSmoothingLabel" class="w-8 text-right">30%</span>
+                    </div>
+                    <select id="tuningSmoothingAlgorithm" class="standard-dropdown text-xs mt-1">
+                      <option value="smoothing-splines">Smoothing splines</option>
+                      <option value="uniform">Uniform sampling</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="space-y-2">
+                  <label class="block font-semibold text-amber-700">Post smoothing</label>
+                  <div class="flex items-center gap-2">
+                    <select id="tuningPostPasses" class="standard-dropdown text-xs w-20">
+                      <option value="0">0 passes</option>
+                      <option value="1" selected>1 pass</option>
+                    </select>
+                    <div class="flex-1 flex items-center gap-2">
+                      <input type="range" id="tuningPostPercent" min="0" max="30" step="1" value="30" class="flex-1">
+                      <span id="tuningPostLabel" class="w-8 text-right">30%</span>
+                    </div>
+                  </div>
+                  <select id="tuningPostAlgorithm" class="standard-dropdown text-xs">
+                    <option value="smoothing-splines">Smoothing splines</option>
+                    <option value="uniform">Uniform sampling</option>
+                  </select>
+                  <p class="text-[11px] text-amber-700">Post smoothing only applies when pass count &gt; 0.</p>
+                </div>
+                <div class="space-y-2">
+                  <label class="block font-semibold text-amber-700">LAB bandwidth overrides</label>
+                  <div class="grid grid-cols-2 gap-2">
+                    <label class="block">K neighbors
+                      <input type="number" id="tuningNeighbors" class="standard-input text-xs" value="2" min="1" max="12">
+                    </label>
+                    <label class="block">σ floor
+                      <input type="number" id="tuningSigmaFloor" class="standard-input text-xs" value="0.036" step="0.005" min="0.001" max="0.5">
+                    </label>
+                    <label class="block">σ ceil
+                      <input type="number" id="tuningSigmaCeil" class="standard-input text-xs" value="0.15" step="0.01" min="0.05" max="0.5">
+                    </label>
+                    <label class="block">σ alpha
+                      <input type="number" id="tuningSigmaAlpha" class="standard-input text-xs" value="2.0" step="0.1" min="0.5" max="6">
+                    </label>
+                  </div>
+                  <p class="text-[11px] text-amber-700">Leave defaults to use current LAB smoothing.</p>
+                </div>
+              </div>
+              <div class="flex items-center gap-2 text-xs">
+                <button id="tuningApplyBtn" class="px-3 py-2 rounded bg-amber-600 hover:bg-amber-700 text-white font-semibold">Apply Candidate</button>
+                <button id="tuningRestoreBtn" class="px-3 py-2 rounded border border-amber-400 text-amber-700 hover:bg-amber-100" disabled>Restore Original</button>
+                <span id="tuningStatus" class="text-[11px] text-amber-700"></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Linearization Section -->
+        <div class="flex-none lg:w-[380px] space-y-4">
+          <!-- Global Linearization -->
+          <div class="bg-white border border-gray-200 rounded-xl p-2 md:p-3">
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex items-center gap-2">
+                <h3 class="text-sm font-bold">🌐 Global Correction</h3>
+                <label class="slider-toggle" title="Enable/disable global correction">
+                  <input type="checkbox" id="globalLinearizationToggle" disabled>
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <button id="intentHelpBtn" class="text-xs text-gray-400 hover:text-gray-600 bg-gray-100 hover:bg-gray-200 rounded px-2 py-1 transition-colors font-bold" title="Correction vs. Intent" aria-label="Correction vs. Intent">?</button>
+            </div>
+            <div class="flex items-center gap-2 mb-1">
+              <button id="globalLinearizationBtn" class="px-3 py-2 text-xs bg-slate-600 hover:bg-slate-700 text-white rounded transition-colors font-bold whitespace-nowrap shrink-0 inline-flex items-center" data-tooltip="Load LUT.cube, LABdata.txt, or .acv curve files">Load Data File</button>
+              <input type="file" id="linearizationFile" accept=".cube,.txt,.cgats,.cgats17,.ti3,.acv" class="hidden">
+              <button id="manualLstarBtn" class="px-3 py-2 text-xs bg-slate-600 hover:bg-slate-700 text-white rounded transition-colors font-bold whitespace-nowrap shrink-0 inline-flex items-center">
+                Enter L* Values
+              </button>
+              <button id="revertGlobalToMeasurementBtn" class="px-3 py-2 text-xs bg-slate-600 hover:bg-slate-700 text-white rounded transition-colors font-bold whitespace-nowrap shrink-0 inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed" title="Revert to measurement source (global)" disabled>↺ Revert</button>
+            </div>
+            <p id="globalLinearizationHint" class="text-xs text-gray-500 mb-1">LUT (.cube), LAB data (.txt), or curves (.acv)</p>
+            <div id="globalLinearizationInfo" class="text-xs text-gray-600 mb-2 hidden">
+              <span id="globalLinearizationFilename" class="font-medium"></span>
+              <span id="globalLinearizationDetails" class="text-gray-500"></span>
+              <span id="deltaSummary" class="ml-2 inline-block align-middle hidden"></span>
+              <span class="ml-3 inline-flex items-center gap-1 align-middle hidden">
+                <label for="perChannelDeltaSelect" class="text-gray-600">Channel change:</label>
+                <select id="perChannelDeltaSelect" class="text-xs border border-gray-300 rounded px-1 py-0.5"></select>
+                <span id="perChannelDeltaSummary" class="ml-1"></span>
+              </span>
+            </div>
+            <!-- Auto endpoint rolloff controls -->
+            <div class="mt-2 flex items-center gap-3 text-xs text-gray-600 hidden" aria-hidden="true">
+              <span class="font-bold" title="Detect early plateau at the ends and apply a soft shoulder/toe so the curve reaches the ink limit exactly at 100% without flattening.">Auto limits</span>
+              <label for="autoWhiteLimitToggle" class="inline-flex items-center gap-1" title="Enable automatic white-shoulder rolloff near paper white.">
+                <input type="checkbox" id="autoWhiteLimitToggle" class="h-3 w-3 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                <span>White</span>
+              </label>
+              <label for="autoBlackLimitToggle" class="inline-flex items-center gap-1" title="Enable automatic black-toe rolloff near maximum ink.">
+                <input type="checkbox" id="autoBlackLimitToggle" class="h-3 w-3 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                <span>Black</span>
+              </label>
+            </div>
+            <div class="mt-2">
+              <label for="contrastIntentSelect" class="text-xs text-gray-600 font-bold block mb-1">Intent</label>
+              <div class="flex items-center gap-2">
+                <select id="contrastIntentSelect" class="standard-dropdown text-xs" style="width: 200px;">
+                  <!-- Preset options will be populated dynamically from CONTRAST_INTENT_PRESETS -->
+                  <option value="custom">Custom (saved)</option>
+                  <option value="enter_custom">Enter Custom…</option>
+                </select>
+                <button id="applyIntentToQuadBtn" class="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 rounded transition-colors font-bold disabled:bg-gray-200 disabled:text-gray-400 disabled:opacity-60 disabled:cursor-not-allowed dark:bg-slate-700 dark:hover:bg-slate-600 dark:text-slate-100 dark:disabled:bg-slate-600 dark:disabled:text-slate-400 dark:disabled:opacity-60" disabled title="Load a .quad (no LAB data) to enable intent remap">Apply Intent</button>
+              </div>
+            </div>
+            
+            <!-- Linearization Controls -->
+          <div class="space-y-3">
+              <!-- File Upload -->
+              <div>
+                <!-- Buttons moved above; keep info here only -->
+              </div>
+            </div>
+            
+            
+
+            <!-- Sample Data moved to About window -->
+          </div>
+
+          <!-- Edit Curves Panel -->
+          <div class="bg-white border border-gray-200 rounded-xl p-3">
+            <div class="flex items-center justify-between mb-4">
+              <button id="editModeToggleBtn" type="button" class="inline-flex text-xs font-bold px-2.5 py-1.5 rounded cursor-pointer relative z-10 text-white bg-slate-600 hover:bg-slate-700 border-0" aria-pressed="false" role="switch" aria-checked="false" title="Toggle edit mode">
+                <span id="editModeLabel">⟐ Edit Mode: OFF</span>
+              </button>
+              <button id="editModeHelpBtn" class="text-xs text-gray-400 hover:text-gray-600 bg-gray-100 hover:bg-gray-200 rounded px-2 py-1 transition-colors font-bold" title="Edit Mode Help" aria-label="Edit Mode Help">?</button>
+            </div>
+            <div id="editPanelBody">
+
+            <!-- (Removed) Edit-panel smoothing: moved to Global Correction panel -->
+
+            <!-- Calculate points -->
+            <div class="border border-gray-200 rounded-lg p-3 mb-3 relative">
+              <span class="absolute top-0 left-2 -translate-y-1/2 bg-white px-2 text-xs text-gray-700 z-10">Calculate points</span>
+              <div class="flex items-end gap-4">
+                <label class="text-xs text-gray-700 flex flex-col items-center">
+                  <span class="mb-1">Max error %</span>
+                  <input type="number" id="editMaxError" class="w-20 px-2 py-1 text-xs border border-gray-300 rounded" min="0.05" max="5" step="0.05" value="0.25">
+                </label>
+                <label class="text-xs text-gray-700 flex flex-col items-center">
+                  <span class="mb-1">Max Key Points</span>
+                  <input type="number" id="editMaxPoints" class="w-16 px-2 py-1 text-xs border border-gray-300 rounded" min="2" max="21" step="1" value="21">
+                </label>
+                <button id="editRecomputeBtn" class="px-3 py-1.5 text-xs bg-green-600 hover:bg-green-700 text-white rounded transition-colors font-bold">↻ Recompute</button>
+              </div>
+            </div>
+
+            <!-- Channel selection -->
+            <div class="border border-gray-200 rounded-lg p-3 mb-3 relative">
+              <span class="absolute top-0 left-2 -translate-y-1/2 bg-white px-2 text-xs text-gray-700 z-10">Channel</span>
+              <div class="grid grid-cols-3 items-center">
+                <label for="editChannelSelect" class="text-sm text-gray-700 justify-self-start invisible">Channel:</label>
+                <div class="justify-self-center flex items-center gap-2">
+                  <button id="editChannelPrev" class="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded font-bold" title="Previous channel" aria-label="Previous channel">◀</button>
+                  <select id="editChannelSelect" class="standard-dropdown text-center" style="width:56px; padding-left:0.25rem; padding-right:0.25rem;"></select>
+                  <button id="editChannelNext" class="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded font-bold" title="Next channel" aria-label="Next channel">▶</button>
+                </div>
+                <div></div>
+              </div>
+              <div class="mt-1 text-center"><span id="editChannelState" class="text-xs text-gray-500"></span></div>
+            </div>
+
+          <!-- Selected Key Point tools -->
+          <div class="border border-gray-200 rounded-lg p-3 relative">
+              <span class="absolute top-0 left-2 -translate-y-1/2 bg-white px-2 text-xs text-gray-700 z-10">Key Point</span>
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <div class="inline-flex items-center gap-2">
+                    <button id="editPointLeft" class="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded font-bold" title="Previous Key Point">◀</button>
+                    <span id="editPointIndex" class="text-sm font-bold text-white bg-black min-w-[1.5rem] text-center px-2 py-0.5 rounded is-disabled">–</span>
+                    <button id="editPointRight" class="px-2 py-1 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded font-bold" title="Next Key Point">▶</button>
+                  </div>
+                </div>
+                <button id="editDeleteBtn" class="px-2 py-1 text-xs bg-red-600 hover:bg-red-700 text-white rounded font-bold" title="Delete selected key point">✖︎ Delete</button>
+              </div>
+              <div class="flex items-center justify-center gap-2">
+                <button id="editNudgeYUp" class="px-2 py-1 text-xs rounded font-bold nudge-btn" title="Nudge Y up">△</button>
+              </div>
+              <div class="flex items-center justify-center gap-2 mt-1">
+                <button id="editNudgeXNeg" class="px-2 py-1 text-xs rounded font-bold nudge-btn" title="Nudge X left">◁</button>
+                <input id="editXYInput" class="w-24 text-center px-2 py-1 text-xs border border-gray-300 rounded" placeholder="X,Y" title="Edit key point as 'X,Y' percent">
+                <button id="editNudgeXPos" class="px-2 py-1 text-xs rounded font-bold nudge-btn" title="Nudge X right">▷</button>
+              </div>
+              <div class="flex items-center justify-center gap-2 mt-1">
+                <button id="editNudgeYDown" class="px-2 py-1 text-xs rounded font-bold nudge-btn" title="Nudge Y down">▽</button>
+              </div>
+            <div id="editDisabledHint" class="text-xs text-gray-500 text-center mt-2 hidden">Channel is disabled (End=0). Enable in Channels to edit.</div>
+          </div>
+          <!-- Inline help moved to Edit Mode Help popup -->
+            </div>
+          </div>
+      </div>
+      </div>
+
+
+      <!-- Quick Enable Chips -->
+      <div id="disabledChannelsCompact" class="disabled-channels-compact mb-3">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div id="disabledChannelsRow" class="disabled-channels-row flex-1 min-w-0">
+            <!-- Channel chips will be inserted here -->
+          </div>
+          <div class="flex items-center gap-2 shrink-0" title="Multiply every channel’s End by this factor (100% = no change)">
+            <label for="scaleAllInput" class="text-xs font-medium text-gray-700">Scale:</label>
+            <div class="flex items-center gap-1">
+              <input id="scaleAllInput" type="number" min="10" max="1000" step="1" value="100" class="w-16 m-0 rounded-lg border border-gray-300 px-2 py-1 text-xs text-right focus:outline-none focus:ring-2 focus:ring-blue-500" aria-label="Scale all channels percent">
+              <span class="text-xs text-gray-500">%</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Channel table -->
+      <div class="overflow-auto">
+        <table class="w-full text-sm border border-gray-200 rounded-xl overflow-hidden border-collapse">
+          <thead>
+            <tr class="bg-gray-50 text-gray-700 text-xs">
+              <th class="text-center p-0" style="width:0;"></th>
+              <th class="text-left px-1 py-2" style="width: 100px;">Channel</th>
+              <th class="text-center px-1 py-2" style="width: 250px;">Correction</th>
+              <th class="text-left px-1 py-2">Status</th>
+              <th class="text-right pr-0 py-2" style="width:120px;">
+                Percent <span class="font-normal text-gray-500">(0–100)</span>
+              </th>
+              <th class="text-right pl-0 py-2" style="width:120px;">
+                End <span class="font-normal text-gray-500">(0–65,535)</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody id="rows">
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Lab Tech (console-style, matches .quad File Preview framing) -->
+      <div class="mt-3">
+          <div class="border border-gray-200 rounded-xl overflow-hidden">
+          <div class="console-header bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 flex items-center justify-between">
+            <span><span id="labTechIcon" class="mr-1">💬</span>Lab Tech</span>
+            <div class="flex items-center gap-3">
+              <label class="flex items-center gap-1 text-xs text-gray-700 hidden" title="Show assistant status messages in chat">
+                <input type="checkbox" id="aiShowStatusToggle" class="rounded border-gray-300" checked>
+                <span>Show assistant status</span>
+              </label>
+              <button id="clearChatBtn" class="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded px-2 py-0.5 font-bold focus:outline-none focus:ring-0">Clear</button>
+            </div>
+          </div>
+          <div id="labTechConsole" class="font-mono p-2">
+            <!-- Chat History -->
+            <div id="chatHistory" class="overflow-y-auto text-xs leading-4 mb-2" style="height:224px;">
+              <div class="labtech-sample px-2 py-1 rounded mb-2">
+                <strong>Try this:</strong> "Reduce all ink limits by 20%"<br>
+                <strong>or:</strong> "generate a curve with points 0,0 25,20 75,85 100,100"<br>
+                <strong>or:</strong> "apply a midtone lift"<br>
+                <strong>or:</strong> "delete the key point near 25%"<br>
+                <strong>or:</strong> "delete key point 2"
+              </div>
+            </div>
+            <!-- Resizer for Lab Tech console -->
+            <div id="labTechResizer" class="h-4 bg-gray-800/40 hover:bg-gray-700/60 cursor-row-resize mb-2 rounded relative" role="separator" aria-orientation="horizontal" title="Drag to resize">
+              <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <span class="inline-block w-10 h-[2px] bg-gray-400/80 rounded"></span>
+                <span class="inline-block w-10 h-[2px] bg-gray-400/80 rounded ml-1"></span>
+              </div>
+            </div>
+            <!-- Bottom input area -->
+            <div class="flex items-center gap-2">
+              <input type="text" id="aiInputCompact" placeholder="Ask Lab Tech… (Enter to send)" 
+                     class="flex-1 min-w-0 rounded border px-3 py-1 text-xs focus:outline-none focus:ring-2 placeholder-gray-400">
+              <button id="sendMessageBtnCompact" class="px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded font-bold focus:outline-none focus:ring-0" disabled>Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      
+
+      <!-- Full Preview -->
+      <div class="mt-5">
+          <div class="border border-gray-200 rounded-xl overflow-hidden">
+          <div class="console-header bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700">📝 .quad File Preview</div>
+          <!-- Attached notes input styled like preview -->
+          <div id="previewConsole" class="font-mono p-2 border-t">
+            <textarea id="userNotes" placeholder="Notes (saved as # comments in the .quad file)" rows="3"
+                      class="w-full font-mono text-xs p-2 outline-none resize-y border rounded-sm placeholder-gray-400"></textarea>
+          </div>
+          <pre id="previewFull" class="p-2 text-xs leading-none overflow-auto font-mono" style="max-height:224px;">–</pre>
+          <div id="previewResizer" class="h-4 bg-gray-200 hover:bg-gray-300 cursor-row-resize relative" role="separator" aria-orientation="horizontal" title="Drag to resize">
+            <div class="absolute inset-0 flex items-center justify-center pointer-events-none">
+              <span class="inline-block w-10 h-[2px] bg-gray-400 rounded"></span>
+              <span class="inline-block w-10 h-[2px] bg-gray-400 rounded ml-1"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    
+  
+  </main>
+
+  <!-- Contrast Intent Modal -->
+  <div id="intentModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col">
+      <div class="p-5 pb-3 flex-shrink-0 flex items-center justify-between">
+        <h3 class="text-lg font-semibold">Contrast Intent</h3>
+        <button id="closeIntentModal" class="text-gray-500 hover:text-gray-700 text-xl">&times;</button>
+      </div>
+      <div class="px-5 flex gap-2 text-sm border-b border-gray-200">
+        <button class="px-3 py-2 rounded-t text-gray-700 bg-gray-100 font-medium" data-intent-tab="presets">Presets</button>
+        <button class="px-3 py-2 rounded-t text-gray-600 hover:text-gray-800" data-intent-tab="custom">Custom</button>
+        <button class="px-3 py-2 rounded-t text-gray-600 hover:text-gray-800" data-intent-tab="paste">Paste CSV/JSON</button>
+        <button class="px-3 py-2 rounded-t text-gray-600 hover:text-gray-800" data-intent-tab="import">Import ACV/LUT</button>
+      </div>
+      <div id="intentContent" class="overflow-y-auto p-5 space-y-5 h-[512px]">
+        <div id="intentTab-presets" class="space-y-4">
+          <div class="text-sm text-gray-700">Choose a preset tonal intent for your linearization data.</div>
+          <div class="flex items-center gap-3">
+            <label class="text-sm text-gray-700">Preset:</label>
+            <select id="intentPresetSelect" class="standard-dropdown text-sm" style="width: 220px;">
+              <!-- Options will be populated dynamically from CONTRAST_INTENT_PRESETS -->
+            </select>
+          </div>
+          <div id="presetDescription" class="border border-gray-200 rounded-lg p-4 bg-gray-50">
+            <div id="presetDescriptionContent">
+              <h4 class="font-medium text-gray-900 mb-2">Linear</h4>
+              <p class="text-sm text-gray-600">No curve adjustment. 1:1 input-to-output mapping for neutral, unmodified tonal reproduction.</p>
+            </div>
+          </div>
+        </div>
+        <div id="intentTab-import" class="hidden space-y-4">
+          <div class="text-sm text-gray-700">
+            <div class="p-3 rounded border bg-gray-50">
+              <div class="font-medium">Import Target (ACV/LUT)</div>
+              <div class="text-xs text-gray-600 mt-1">Import an ACV/LUT as a target tonal intent (the curve you want to aim for if not the default Linear). This does not apply a correction. To apply ACV/LUT as a correction, use Global Corrections → Load Data File.</div>
+            </div>
+          </div>
+          <div class="flex items-center gap-2">
+            <input id="intentImportFile" type="file" accept=".acv,.cube" class="hidden">
+            <button id="intentImportBtn" class="px-3 py-2 text-xs bg-slate-600 hover:bg-slate-700 text-white rounded font-bold" title="Treats the file as a target curve (intent). No correction is applied.">Load ACV/LUT as Target</button>
+          </div>
+          <div id="intentImportInfo" class="text-xs text-gray-600"></div>
+          
+        </div>
+        <div id="intentTab-custom" class="hidden space-y-4">
+          <div class="text-sm text-gray-700">Define a simple custom shape.</div>
+          <div class="flex items-center gap-3">
+            <label class="text-sm text-gray-700" for="customGamma">Gamma:</label>
+            <input id="customGamma" type="range" min="0.6" max="1.6" step="0.01" value="1.00" class="flex-1">
+            <span id="customGammaVal" class="text-xs text-gray-600 w-12 text-right">1.00</span>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="flex items-center gap-2">
+              <label class="text-sm text-gray-700" for="customGain">Midtone gain:</label>
+              <input id="customGain" type="range" min="0.30" max="0.70" step="0.01" value="0.55" class="flex-1">
+              <span id="customGainVal" class="text-xs text-gray-600 w-10 text-right">0.55</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <label class="text-sm text-gray-700" for="customShoulder">Shoulder:</label>
+              <input id="customShoulder" type="range" min="0.00" max="0.60" step="0.01" value="0.35" class="flex-1">
+              <span id="customShoulderVal" class="text-xs text-gray-600 w-10 text-right">0.35</span>
+            </div>
+          </div>
+        </div>
+        <div id="intentTab-paste" class="hidden space-y-3">
+          <div class="text-sm text-gray-700">
+            Supported formats:
+            <ul class="list-disc list-inside text-xs text-gray-600 mt-1 space-y-0.5">
+              <li>CSV with headers: <code>percent_input</code> + <code>density_rel</code> | <code>density_abs</code> | <code>Lstar</code></li>
+              <li>Label-first CSV: <code>Matte Inkjet,20,20,12</code></li>
+              <li>Pipe k/v: <code>Matte Inkjet | Input=20 Linear=20 Intent=12</code></li>
+              <li>CGATS-like: <code>BEGIN_DATA_FORMAT ... BEGIN_DATA ... END_DATA</code> (uses <code>INPUT</code>/<code>INTENT</code>)</li>
+              <li>JSON: <code>points[]</code>, <code>generator</code> (gamma/filmic), or <code>{ Media, Curve:[{Input, Intent}] }</code></li>
+              <li>Whitespace table: rows like <code>0 0 0</code>, <code>20 20 12</code></li>
+              <li>1D list (even spacing): one value per line, optional label as first line</li>
+            </ul>
+          </div>
+          <div id="intentPasteNote" class="text-sm bg-gray-50 text-gray-700 border border-gray-200 rounded p-2">
+            Note: pasted intent data is applied over a fixed 0–100% input scale. Black and white points (0% and 100%) do not move. To change endpoints, adjust ink limits/end values rather than the contrast intent.
+          </div>
+          <textarea id="intentPasteArea" class="w-full h-40 border border-gray-300 rounded p-2 text-sm" placeholder="Enter or paste data..."></textarea>
+          <div class="flex items-center gap-3">
+            <div id="intentPasteValidation" class="text-sm hidden flex-1"></div>
+            <button id="intentParseBtn" class="px-3 py-2 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded font-bold whitespace-nowrap">Parse</button>
+          </div>
+        </div>
+      </div>
+      <div class="p-5 pt-3 flex-shrink-0 border-t border-gray-200">
+        <div class="flex justify-end gap-3">
+          <button id="resetIntentBtn" class="px-4 py-2 text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded font-bold">Reset to Linear</button>
+          <button id="cancelIntentBtn" class="px-4 py-2 text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded font-bold">Cancel</button>
+          <button id="applyIntentBtn" class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded">Apply Intent</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Manual L* Entry Modal -->
+  <div id="lstarModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg max-w-3xl w-full mx-4 max-h-[90vh] flex flex-col">
+      <!-- Fixed Header -->
+      <div class="p-6 pb-4 flex-shrink-0">
+        <div class="flex justify-between items-center mb-2">
+          <h3 class="text-lg font-semibold">Manual Luminosity (L*) Entry</h3>
+          <button id="closeLstarModal" class="text-gray-500 hover:text-gray-700 text-xl">&times;</button>
+        </div>
+        <div class="hidden text-xs italic text-gray-700 mb-3 p-2 px-3 bg-gray-50 border border-gray-200 rounded">The L* component of the Lab color system represents perceived lightness, ranging from 0 (black) to 100 (white). Equal steps in L* correspond approximately to equal perceptual differences in light–dark appearance.</div>
+        
+        <div class="hidden mb-4 text-sm text-gray-600">
+          <ul class="list-disc list-inside space-y-1">
+            <li>Measure and enter L* values for each patch (e.g., using a device like the <a href="https://amzn.to/45R8rof" target="_blank" rel="noopener">Color Muse 2</a> or <a href="https://amzn.to/4msSLOv" target="_blank" rel="noopener">Nix Spectro L</a>).</li>
+            <li>If your chart uses even steps (0, 5, 10 … 100%), leave <span class="font-medium">Patch %</span> as‑is.</li>
+            <li>Edit <span class="font-medium">Patch %</span> for irregular spacing (more steps in the highlights / shadows).</li>
+            <li>Target result is linear (L* 100 → 0) and linked to Patch %.</li>
+            <li>Inspired by & compatible with data from the <a href="https://clayharmonblog.com/wedgie.html" target="_blank" rel="noopener noreferrer" class="text-green-700 underline">Wedgie tool</a> by Clay Harmon.</li>
+            <li>A good resource for target images is <a href="https://clayharmonblog.com/downloads" target="_blank" rel="noopener noreferrer" class="text-green-700 underline">clayharmonblog.com/downloads</a>.</li>
+          </ul>
+          
+        </div>
+
+        <div class="hidden flex items-center justify-center gap-6 mb-4 p-3 bg-gray-50 rounded border">
+          <div class="flex gap-2">
+            <button id="addLstarInputHeader" class="px-3 py-1 text-sm bg-green-100 hover:bg-green-200 text-green-700 rounded font-bold">+ Add</button>
+            <button id="removeLstarInputHeader" class="px-3 py-1 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded font-bold">- Remove</button>
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="text-sm text-gray-600">Patches:</label>
+            <input type="number" id="lstarCountInputHeader" min="5" max="50" value="5" class="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500">
+          </div>
+        </div>
+      </div>
+
+      <!-- Scrollable Content -->
+      <div class="flex-1 overflow-y-auto overflow-x-auto px-6">
+        <div class="text-xs italic text-gray-700 mb-3 p-2 px-3 bg-gray-50 border border-gray-200 rounded">The L* component of the Lab color system represents perceived lightness, ranging from 0 (black) to 100 (white). Equal steps in L* correspond approximately to equal perceptual differences in light–dark appearance.</div>
+
+        <div class="mb-4 text-sm text-gray-600">
+          <ul class="list-disc list-inside space-y-1">
+            <li>Measure and enter L* values for each patch (e.g., using a device like the <a href="https://amzn.to/45R8rof" target="_blank" rel="noopener">Color Muse 2</a> or <a href="https://amzn.to/4msSLOv" target="_blank" rel="noopener">Nix Spectro L</a>).</li>
+            <li>If your chart uses even steps (0, 5, 10 … 100%), leave <span class="font-medium">Patch %</span> as‑is.</li>
+            <li>Edit <span class="font-medium">Patch %</span> for irregular spacing (more steps in the highlights / shadows).</li>
+            <li>Target result is linear (L* 100 → 0) and linked to Patch %.</li>
+            <li>Inspired by & compatible with data from the <a href="https://clayharmonblog.com/wedgie.html" target="_blank" rel="noopener noreferrer" class="text-green-700 underline">Wedgie tool</a> by Clay Harmon.</li>
+            <li>A good resource for target images is <a href="https://clayharmonblog.com/downloads" target="_blank" rel="noopener noreferrer" class="text-green-700 underline">clayharmonblog.com/downloads</a>.</li>
+          </ul>
+        </div>
+
+        <div class="flex items-center justify-center gap-6 mb-4 p-3 bg-gray-50 rounded border">
+          <div class="flex gap-2">
+            <button id="addLstarInput" class="px-3 py-1 text-sm bg-green-100 hover:bg-green-200 text-green-700 rounded font-bold">+ Add</button>
+            <button id="removeLstarInput" class="px-3 py-1 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded font-bold">- Remove</button>
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="text-sm text-gray-600">Patches:</label>
+            <input type="number" id="lstarCountInput" min="5" max="50" value="5" class="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500">
+          </div>
+        </div>
+        <table class="w-auto mx-auto text-sm border border-gray-200 rounded overflow-hidden">
+          <thead class="bg-gray-50 sticky top-0 z-10">
+            <tr>
+              <th class="px-2 py-2 w-8 text-center">#</th>
+              <th class="px-2 py-2 w-24 text-center">Patch %</th>
+              <th class="px-2 py-2 w-24 text-center">Target / Measured</th>
+              <th class="px-2 py-2 w-24 text-center">L* (0–100)</th>
+            </tr>
+          </thead>
+          <tbody id="lstarInputs" class="align-middle">
+            <!-- Dynamic rows will be added here -->
+          </tbody>
+        </table>
+        <div id="lstarValidation" class="text-sm text-red-600 mt-3 hidden"></div>
+      </div>
+
+      <!-- Fixed Footer -->
+      <div class="p-6 pt-4 flex-shrink-0 border-t border-gray-200">
+        <div class="flex justify-end gap-3">
+          <button id="saveLstarTxt" class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded" title="Download entered Patch % and L* as a .txt file">Save as .txt</button>
+          <button id="cancelLstar" class="px-4 py-2 text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded font-bold">Cancel</button>
+          <button id="generateFromLstar" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded">Generate Correction</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help Popup -->
+  <div id="helpPopup" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] p-6 relative">
+      <button id="closeHelpBtn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors" aria-label="Close">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+      </button>
+      <div class="flex items-center gap-3 mb-2">
+        <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 160 160" role="img">
+          <path d="M16 132H144" fill="none" stroke="#1A1A1A" stroke-width="8" stroke-linecap="round"/>
+          <rect x="20" y="90" width="20" height="40" rx="6" ry="6" fill="#00B5E2"/>
+          <rect x="52" y="70" width="20" height="60" rx="6" ry="6" fill="#FF2A8A"/>
+          <rect x="84" y="50" width="20" height="80" rx="6" ry="6" fill="#FFD400"/>
+          <rect x="116" y="22" width="20" height="110" rx="6" ry="6" fill="#1A1A1A"/>
+          <path d="M30 88 C 44 84, 50 72, 62 68 S 86 50, 94 48 S 118 28, 126 18" fill="none" stroke="#1A1A1A" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="30" cy="88" r="6" fill="white" stroke="#1A1A1A" stroke-width="2"/>
+          <circle cx="62" cy="68" r="6" fill="white" stroke="#1A1A1A" stroke-width="2"/>
+          <circle cx="94" cy="48" r="6" fill="white" stroke="#1A1A1A" stroke-width="2"/>
+          <circle cx="126" cy="18" r="6" fill="white" stroke="#1A1A1A" stroke-width="2"/>
+        </svg>
+        <h2 class="text-xl font-bold">quadGEN <span id="helpAppVersion" class="text-gray-400 text-base"></span></h2>
+      </div>
+      <div id="helpTabs" class="mb-2 border-b border-gray-200 flex items-center gap-2">
+        <button id="helpTabReadme" class="px-3 py-1 text-sm font-bold text-gray-800 border-b-2 border-slate-700">ReadMe</button>
+        <button id="helpTabGlossary" class="px-3 py-1 text-sm font-bold text-gray-500 hover:text-gray-700 border-b-2 border-transparent">Glossary</button>
+        <button id="helpTabWorkflow" class="px-3 py-1 text-sm font-bold text-gray-500 hover:text-gray-700 border-b-2 border-transparent">Detailed Workflow</button>
+        <button id="helpTabHistory" class="px-3 py-1 text-sm font-bold text-gray-500 hover:text-gray-700 border-b-2 border-transparent ml-auto">Version History</button>
+      </div>
+      <div id="helpContent" class="text-sm text-gray-700 space-y-4 max-h-[70vh] overflow-y-auto"></div>
+    </div>
+  </div>
+
+  <!-- Global Correction Help Popup -->
+  <div id="globalCorrectionHelpPopup" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] p-6 relative">
+      <button id="closeGlobalCorrectionHelpBtn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors" aria-label="Close">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+      </button>
+      <h2 class="text-xl font-bold mb-4">Global Correction Help</h2>
+      <div class="text-sm text-gray-700 space-y-6 max-h-[70vh] overflow-y-auto">
+        <div>
+          <p class="font-medium text-lg mb-2">Overview</p>
+          <p class="text-sm text-gray-600">Global corrections can be applied in two ways: directly via a curve/LUT file, or by computing a linearization from L* measurements. Both approaches update all channels uniformly.</p>
+        </div>
+        <div>
+          <p class="font-medium text-lg mb-2">Working Assumptions</p>
+          <ul class="list-disc list-inside text-sm text-gray-600">
+            <li>Positive space: X=0% is white → X=100% is black; Y=0% = no ink (white), Y=100% = max ink (black).</li>
+            <li>Endpoints anchored: Keep 0→0 and 100→100 fixed unless you have a specific reason to change them.</li>
+            <li>Monotonic, smooth curves: Avoid kinks or flat spots, especially near endpoints.</li>
+            <li>Digital negatives: Work in positive space; invert your image in the editor when making a digital negative.</li>
+          </ul>
+        </div>
+        <div>
+          <p class="text-xs text-gray-700 font-semibold">Applies Directly →</p>
+          <ul class="list-disc list-inside text-xs text-gray-600 mb-1">
+            <li>Photoshop Curves (.acv): Curve presets.</li>
+            <li>LUT (.cube): 1D or 3D LUT.</li>
+          </ul>
+        </div>
+        <div>
+          <p class="text-xs text-gray-700 font-semibold">Calculates Linearization ↕</p>
+          <ul class="list-disc list-inside text-xs text-gray-600 mb-1">
+            <li>LAB Data (.txt): L* measurements.</li>
+            <li>Manual L* Entry: L* measurements.</li>
+          </ul>
+        </div>
+        <div>
+          <p class="font-medium text-lg mb-2">Tonal Zones</p>
+          <ul class="list-disc list-inside text-sm text-gray-600">
+            <li><span class="font-medium">Highlights</span>: 0–25% (X)</li>
+            <li><span class="font-medium">Midtones</span>: 25–75% (X)</li>
+            <li><span class="font-medium">Shadows</span>: 75–100% (X)</li>
+          </ul>
+          <div class="text-xs text-gray-600 mt-2">Examples: Lighten shadows → reduce output in 75–95% and taper to 0 change by 100%. Lighten highlights → reduce output in 5–25% and taper to 0 by 0%.</div>
+        </div>
+        <div>
+          <p class="font-medium text-lg mb-2">Workflow Summary</p>
+          <ol class="list-decimal list-inside space-y-1 ml-2 text-sm">
+            <li>Choose your printer and set ink limits for each channel.</li>
+            <li>Export a test .quad and print a 0–100% step wedge.</li>
+            <li>Measure the positive result (inkjet print or alt‑process print).</li>
+            <li>Load data into quadGEN: LAB (.txt), EDN LUT (.cube/.acv), or Manual L*.</li>
+            <li>Review the graph and adjust channel limits if needed.</li>
+            <li>Export the corrected .quad and reprint to verify.</li>
+          </ol>
+          <div class="text-xs text-gray-600 ml-2 mt-2">Tip for digital negatives: work in positive space, then invert your image in your editor before printing the negative.</div>
+        </div>
+        <div>
+          <p class="font-medium text-lg mb-2">Auto endpoint rolloff</p>
+          <p class="text-sm text-gray-600 mb-1">Temporarily disabled while we retune the shoulder/toe detector. Existing projects keep previously baked knees, but quadGEN will not generate new auto rolloff adjustments until the retune ships.</p>
+          <div class="text-xs text-gray-600 mt-2">Historical behavior (for reference only): the black limit added a soft shoulder near End, and the white limit added a soft toe near 0. Those localized knees will return once the detector is dialed back in.</div>
+        </div>
+        <div>
+          <p class="font-medium text-lg mb-2">Sample Data</p>
+          <div class="flex gap-2">
+            <div class="flex-1">
+              <button id="helpLoadSampleLab" class="w-full px-2 py-1 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition-colors font-bold">Load LAB-Data-sample.txt</button>
+              <a id="helpDownloadSampleLab" href="#" class="block text-center text-xs text-blue-600 hover:text-blue-800 mt-1">↓ Download LAB-Data-sample.txt</a>
+            </div>
+            <div class="flex-1">
+              <button id="helpLoadSampleCube" class="w-full px-2 py-1 text-xs bg-purple-100 hover:bg-purple-200 text-purple-700 rounded transition-colors font-bold">Load Sample LUT.cube</button>
+              <a id="helpDownloadSampleCube" href="#" class="block text-center text-xs text-purple-600 hover:text-purple-800 mt-1">↓ Download LUT_sample.cube</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Intent Help Popup (Correction vs Intent) -->
+  <div id="intentHelpPopup" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] p-6 relative">
+      <button id="closeIntentHelpBtn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors" aria-label="Close">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+      </button>
+      <h2 class="text-xl font-bold mb-4">Global Correction & Intent</h2>
+      <div id="intentHelpContent" class="text-sm text-gray-700 space-y-6 max-h-[70vh] overflow-y-auto"></div>
+    </div>
+  </div>
+
+  <!-- Edit Mode Help Popup -->
+  <div id="editModeHelpPopup" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
+    <div class="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] p-6 relative">
+      <button id="closeEditModeHelpBtn" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors" aria-label="Close">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+        </svg>
+      </button>
+      <h2 class="text-xl font-bold mb-4">Edit Mode Help</h2>
+      <div class="text-sm text-gray-700 space-y-4 max-h-[70vh] overflow-y-auto">
+        <div>
+          <p class="font-medium">Overview</p>
+          <p class="text-sm text-gray-600">Edit Mode enables point-by-point curve editing on the selected channel. Your data is converted into Smart curves to allow edits. Other enabled channels dim for focus. Turn Edit Mode off to prevent accidental edits.</p>
+          <p class="text-sm text-gray-600 mt-2">If at any time you want to revert to the original data instead of the generated Smart curves, you can use the "Revert" buttons.</p>
+        </div>
+        <div>
+          <p class="font-medium">Calculate points</p>
+          <ul class="list-disc list-inside text-sm text-gray-600 space-y-1">
+            <li><strong>Max error %</strong>: Controls how closely the curve fits when generating points (lower = more points, tighter fit).</li>
+            <li><strong>Max Key Points</strong>: Limits the maximum number of key points generated (2-21).</li>
+            <li><strong>Recompute</strong>: Regenerates Smart curve key points from the current curve using the Max error % and Max Key Points settings.</li>
+          </ul>
+        </div>
+        <div>
+          <p class="font-medium">Key Point editing</p>
+          <ul class="list-disc list-inside text-sm text-gray-600 space-y-1">
+            <li>Selected channel draws on top; others dim to 50%.</li>
+            <li>Only the selected channel shows key point markers and numbered labels.</li>
+            <li>Click the chart to insert a key point at the curve under the cursor X.</li>
+            <li>Type "X,Y" in the field and press Enter to move the selected key point (0–100).</li>
+            <li>Use ◀ ▶ to change the selected key point; use △ ▽ ◁ ▷ or nudgers to adjust position.</li>
+            <li>Undo/Redo supports all edit actions.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Embedded README fallback for Help popup (used if fetch fails) -->
+
+</body>
+
+</html>

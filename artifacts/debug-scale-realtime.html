@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Real-Time Scale Debug</title>
+    <style>
+        body {
+            font-family: system-ui;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .debug-panel {
+            background: white;
+            border: 2px solid #333;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 10px 0;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .value {
+            font-weight: bold;
+            color: #0066cc;
+            font-size: 18px;
+        }
+        .mismatch {
+            background: #ffebee;
+            border-left: 4px solid #f44336;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        .match {
+            background: #e8f5e8;
+            border-left: 4px solid #4caf50;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        button {
+            background: #2196f3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        button:hover {
+            background: #1976d2;
+        }
+        #output {
+            font-family: monospace;
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 4px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔍 Real-Time Scale Debug Tool</h1>
+
+    <div class="debug-panel">
+        <h3>Instructions:</h3>
+        <ol>
+            <li>Open the main quadGEN app (index.html) in another browser tab</li>
+            <li>Come back to this tab and click "Start Monitoring"</li>
+            <li>Go back to the main app and adjust the scale input</li>
+            <li>Watch this tab for real-time value comparison</li>
+        </ol>
+
+        <button onclick="startMonitoring()">Start Monitoring</button>
+        <button onclick="stopMonitoring()">Stop Monitoring</button>
+        <button onclick="clearOutput()">Clear Output</button>
+    </div>
+
+    <div class="debug-panel">
+        <h3>Live Values:</h3>
+        <div id="liveValues">Click "Start Monitoring" to begin...</div>
+    </div>
+
+    <div class="debug-panel">
+        <h3>Debug Log:</h3>
+        <div id="output"></div>
+    </div>
+
+    <script>
+        let monitoringInterval = null;
+        let mainAppWindow = null;
+
+        function startMonitoring() {
+            // Try to find the main app window
+            if (!mainAppWindow || mainAppWindow.closed) {
+                mainAppWindow = window.open('index.html', 'quadgen-main');
+                setTimeout(() => {
+                    if (mainAppWindow) {
+                        actuallyStartMonitoring();
+                    }
+                }, 2000);
+            } else {
+                actuallyStartMonitoring();
+            }
+        }
+
+        function actuallyStartMonitoring() {
+            if (monitoringInterval) {
+                clearInterval(monitoringInterval);
+            }
+
+            log('🟢 Starting real-time monitoring...');
+
+            monitoringInterval = setInterval(() => {
+                if (!mainAppWindow || mainAppWindow.closed) {
+                    log('❌ Main app window closed. Stopping monitoring.');
+                    stopMonitoring();
+                    return;
+                }
+
+                try {
+                    const appDocument = mainAppWindow.document;
+                    const appWindow = mainAppWindow;
+
+                    const scaleInput = appDocument.getElementById('scaleAllInput');
+                    const mkRow = appDocument.querySelector('[data-channel="MK"]');
+                    const mkPercentInput = mkRow ? mkRow.querySelector('.percent-input') : null;
+                    const mkEndInput = mkRow ? mkRow.querySelector('.end-input') : null;
+
+                    if (!scaleInput || !mkPercentInput || !mkEndInput) {
+                        document.getElementById('liveValues').innerHTML = '⚠️ Could not find elements in main app';
+                        return;
+                    }
+
+                    const scaleValue = scaleInput.value;
+                    const mkPercent = mkPercentInput.value;
+                    const mkEndValue = parseFloat(mkEndInput.value || 0);
+
+                    // Get curve data from the main app
+                    let peakPercent = 'N/A';
+                    let chartPeak = 'N/A';
+
+                    if (appWindow.make256 && typeof appWindow.make256 === 'function') {
+                        const curveValues = appWindow.make256(mkEndValue, 'MK', false);
+                        if (curveValues && curveValues.length > 0) {
+                            const peakValue = Math.max(...curveValues);
+                            peakPercent = ((peakValue / 65535) * 100).toFixed(1);
+                        }
+                    }
+
+                    // Check for mismatches
+                    const scaleParsed = parseFloat(scaleValue);
+                    const peakParsed = parseFloat(peakPercent);
+                    const mismatch = Math.abs(scaleParsed - peakParsed) > 0.5;
+
+                    const statusClass = mismatch ? 'mismatch' : 'match';
+                    const statusIcon = mismatch ? '❌' : '✅';
+
+                    document.getElementById('liveValues').innerHTML = \`
+                        <div class="\${statusClass}">
+                            <strong>\${statusIcon} Scale Comparison</strong><br/>
+                            Scale Input: <span class="value">\${scaleValue}%</span><br/>
+                            MK Row %: <span class="value">\${mkPercent}%</span><br/>
+                            MK End Value: <span class="value">\${mkEndValue}</span><br/>
+                            Chart Peak %: <span class="value">\${peakPercent}%</span><br/>
+                            Status: <span class="value">\${mismatch ? 'MISMATCH DETECTED' : 'VALUES MATCH'}</span>
+                        </div>
+                    \`;
+
+                    if (mismatch) {
+                        log(\`⚠️ MISMATCH: Scale=\${scaleValue}%, Chart=\${peakPercent}%, Diff=\${Math.abs(scaleParsed - peakParsed).toFixed(1)}%\`);
+                    }
+
+                } catch (error) {
+                    document.getElementById('liveValues').innerHTML = \`❌ Error accessing main app: \${error.message}\`;
+                }
+            }, 200); // Check every 200ms
+        }
+
+        function stopMonitoring() {
+            if (monitoringInterval) {
+                clearInterval(monitoringInterval);
+                monitoringInterval = null;
+                log('🔴 Monitoring stopped');
+                document.getElementById('liveValues').innerHTML = 'Monitoring stopped. Click "Start Monitoring" to resume.';
+            }
+        }
+
+        function clearOutput() {
+            document.getElementById('output').textContent = '';
+        }
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const output = document.getElementById('output');
+            output.textContent += \`[\${timestamp}] \${message}\n\`;
+            output.scrollTop = output.scrollHeight;
+        }
+    </script>
+</body>
+</html>

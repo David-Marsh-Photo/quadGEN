@@ -1,0 +1,13 @@
+node_modules/
+test-*.js
+*.log
+.DS_Store
+data/
+data-samples/
+targets/
+.playwright-mcp/
+.claude*
+test-results/
+archives/
+githubtoken.md
+scripts/push-with-token.sh

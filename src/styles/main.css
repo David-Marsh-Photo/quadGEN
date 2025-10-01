@@ -1,0 +1,1067 @@
+    /* Theme tokens: light defaults */
+    :root {
+      color-scheme: light;            /* ensure light scrollbars/forms by default */
+      --bg: #f9fafb;                 /* page background */
+      --bg-elevated: #ffffff;        /* cards, panels */
+      --text: #111827;               /* primary text */
+      --muted: #374151;              /* secondary text */
+      --border: #e5e7eb;             /* borders, dividers */
+      --link: #374151;               /* link color (monochrome) */
+      --link-hover: #111827;         /* link hover (monochrome) */
+      --code-bg: #f3f4f6;            /* code/bg chips */
+      --code-text: #111827;
+      --accent: #374151;             /* primary accent (monochrome) */
+      --accent-contrast: #ffffff;
+      --tooltip-bg: #111111;         /* neutral tooltip background */
+      --tooltip-text: #ffffff;       /* tooltip text */
+      --scrollbar-track: var(--bg-elevated);
+      --scrollbar-thumb-border: var(--bg-elevated);
+      /* Console tokens */
+      --console-bg: #0a0a0a;         /* neutral console body */
+      --console-text: #f5f5f5;       /* console text */
+      --console-border: #262626;     /* neutral divider */
+      --console-resizer: rgba(115,115,115,0.35);     /* neutral-500 @35% */
+      --console-resizer-hover: rgba(163,163,163,0.55);/* neutral-400 @55% */
+      --console-grip: rgba(163,163,163,0.8);
+      --console-input-bg: #0a0a0a;
+      --console-input-border: #404040;
+      /* Chart tokens */
+      --chart-grid: #e5e7eb;
+      --chart-axis: #374151;
+      --chart-text: #000000;
+      --chart-helper-border: #9ca3af;
+      --chart-bg: transparent;
+    }
+
+    
+
+    /* Dark theme overrides */
+    [data-theme="dark"] {
+      color-scheme: dark;             /* enable dark-native scrollbars/forms */
+      --bg: #0a0a0a;                 /* neutral-950 (darkest shell) */
+      --bg-subtle: #111111;          /* intermediate surface level */
+      --bg-elevated: #171717;        /* neutral-900 (lighter panels) */
+      --bg-elevated-hover: #1f1f1f;  /* hover states for elevated surfaces */
+      --text: #e5e5e5;               /* neutral-200 */
+      --muted: #9ca3af;              /* gray-400 - better for secondary text */
+      --muted-subtle: #6b7280;       /* gray-500 - for very subtle text */
+      --border: #262626;             /* neutral-800 - standard borders */
+      --border-subtle: #1f1f1f;      /* barely visible borders */
+      --border-emphasis: #374151;    /* prominent borders */
+      --link: #60a5fa;               /* blue-400 - more visible links */
+      --link-hover: #93c5fd;         /* blue-300 - hover state */
+      --link-visited: #a78bfa;       /* violet-400 - visited links */
+      --code-bg: #0b1220;            /* near-bg, subtle */
+      --code-text: #e5e7eb;
+      --accent: #60a5fa;             /* blue-400 - more engaging */
+      --accent-contrast: #1e293b;    /* slate-800 - better contrast */
+      --accent-secondary: #8b5cf6;   /* violet-400 - secondary accent */
+      --interactive-hover: #1f2937;  /* gray-800 - subtle hover backgrounds */
+      --interactive-pressed: #111827; /* gray-900 - pressed state */
+      --focus-ring: #60a5fa;         /* blue-400 - focus indicators */
+      --success: #10b981;            /* emerald-500 */
+      --warning: #f59e0b;            /* amber-500 */
+      --error: #ef4444;              /* red-500 */
+      --tooltip-bg: #111111;
+      --tooltip-text: #ffffff;
+      --scrollbar-track: var(--bg-elevated);
+      --scrollbar-thumb-border: var(--bg-elevated);
+      --console-bg: #111111;        /* lighten console surfaces slightly */
+      --console-text: #e5e5e5;
+      --console-border: #262626;
+      --console-resizer: rgba(115,115,115,0.35);
+      --console-resizer-hover: rgba(163,163,163,0.55);
+      --console-grip: rgba(163,163,163,0.8);
+      --console-input-bg: #0a0a0a;
+      --console-input-border: #404040;
+      /* Dark-friendly chart with slightly lighter background */
+      --chart-grid: #404040;         /* neutral grid */
+      --chart-axis: #e5e5e5;         /* light axis lines */
+      --chart-text: #e5e5e5;         /* light labels */
+      --chart-helper-border: #525252;/* neutral helper borders */
+      --chart-bg: rgba(255,255,255,0.10); /* modest lightening */
+    }
+
+    /* Emphasize the Download .quad button in light mode */
+    #downloadBtn {
+      background: linear-gradient(135deg, #2563eb, #8b5cf6);
+      color: #ffffff;
+      border: 1px solid rgba(17,24,39,0.08);
+      box-shadow: 0 0 0 2px rgba(37,99,235,0.15), 0 8px 14px rgba(0,0,0,0.12);
+      text-shadow: 0 1px 0 rgba(0,0,0,0.15);
+    }
+    #downloadBtn:hover {
+      filter: brightness(1.05);
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.25), 0 10px 16px rgba(0,0,0,0.16);
+    }
+    #downloadBtn:active {
+      transform: translateY(0.5px);
+      filter: brightness(0.98);
+    }
+    #downloadBtn:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 4px rgba(37,99,235,0.35), 0 10px 18px rgba(0,0,0,0.18);
+    }
+
+    /* Emphasize the Download .quad button in dark mode */
+    [data-theme="dark"] #downloadBtn {
+      background: linear-gradient(135deg, var(--accent), var(--accent-secondary));
+      color: #ffffff;
+      border: 1px solid var(--border-emphasis);
+      box-shadow: 0 0 0 2px rgba(96,165,250,0.35), 0 8px 16px rgba(0,0,0,0.45);
+      text-shadow: 0 1px 0 rgba(0,0,0,0.25);
+    }
+    [data-theme="dark"] #downloadBtn:hover {
+      filter: brightness(1.06);
+      box-shadow: 0 0 0 3px rgba(96,165,250,0.45), 0 10px 18px rgba(0,0,0,0.55);
+    }
+    [data-theme="dark"] #downloadBtn:active {
+      transform: translateY(0.5px);
+      filter: brightness(0.98);
+    }
+    [data-theme="dark"] #downloadBtn:focus-visible {
+      outline: none;
+      box-shadow: 0 0 0 4px rgba(96,165,250,0.55), 0 10px 18px rgba(0,0,0,0.55);
+    }
+
+    /* Dark mode: match Help and Load .quad buttons to Undo styling */
+    [data-theme="dark"] #helpBtn,
+    [data-theme="dark"] #loadQuadBtn {
+      background-color: #475569 !important; /* slate-600 */
+      color: #ffffff !important;
+      border: 1px solid transparent !important;
+    }
+    [data-theme="dark"] #helpBtn:hover,
+    [data-theme="dark"] #loadQuadBtn:hover { background-color: #374151 !important; /* gray-700 */ }
+
+    /* Light-mode surfaces for Lab Tech, Preview, and Notes (not pure white) */
+    :root:not([data-theme="dark"]) #labTechConsole,
+    :root:not([data-theme="dark"]) #previewConsole {
+      background-color: #f7f7f9; /* default-light theme feel */
+      color: var(--text) !important;
+      border-color: #e5e7eb !important;
+    }
+    :root:not([data-theme="dark"]) #chatHistory {
+      color: var(--muted) !important;
+    }
+    :root:not([data-theme="dark"]) #aiInputCompact,
+    :root:not([data-theme="dark"]) #userNotes,
+    :root:not([data-theme="dark"]) #previewFull {
+      background-color: #fbfbfc;
+      color: var(--text) !important;
+      border-color: #d1d5db !important; /* gray-300 */
+    }
+    :root:not([data-theme="dark"]) #aiInputCompact:focus,
+    :root:not([data-theme="dark"]) #userNotes:focus {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(37,99,235,0.25);
+      border-color: #93c5fd !important; /* blue-300 */
+    }
+    :root:not([data-theme="dark"]) #aiInputCompact::placeholder,
+    :root:not([data-theme="dark"]) #userNotes::placeholder {
+      color: color-mix(in srgb, var(--muted) 60%, var(--bg-elevated));
+    }
+    :root:not([data-theme="dark"]) #labTechResizer {
+      background-color: #e5e7eb !important; /* gray-200 */
+    }
+    :root:not([data-theme="dark"]) #labTechResizer:hover {
+      background-color: #d1d5db !important; /* gray-300 */
+    }
+
+    /* Console section headers in light mode: soft gradient and bottom border */
+    :root:not([data-theme="dark"]) .console-header {
+      background: linear-gradient(to bottom, #fafafa, #f3f4f6);
+      color: #374151 !important; /* gray-700 */
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .chart-zoom-controls {
+      position: absolute;
+      bottom: -9px;
+      left: -9px;
+      display: inline-flex;
+      align-items: center;
+      border-radius: 0.75rem;
+      border: 1px solid rgba(17,24,39,0.12);
+      background: rgba(255,255,255,0.92);
+      z-index: 12;
+      padding: 0 2px;
+    }
+    .chart-zoom-btn {
+      appearance: none;
+      border: none;
+      background: transparent;
+      color: var(--text);
+      font-size: 1rem;
+      font-weight: 600;
+      line-height: 1;
+      padding: 0.35rem 0.55rem;
+      cursor: pointer;
+      border-radius: 0.6rem;
+      transition: background-color 0.15s ease, color 0.15s ease;
+    }
+    .chart-zoom-btn:hover:not(:disabled) {
+      background: rgba(37,99,235,0.08);
+    }
+    .chart-zoom-btn:active:not(:disabled) {
+      background: rgba(37,99,235,0.14);
+    }
+    .chart-zoom-btn:focus-visible {
+      outline: 2px solid var(--focus-ring, #2563eb);
+      outline-offset: 2px;
+    }
+    .chart-zoom-btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.45;
+    }
+    .chart-zoom-divider {
+      width: 1px;
+      height: 22px;
+      background: rgba(17,24,39,0.12);
+    }
+    [data-theme="dark"] .chart-zoom-controls {
+      background: rgba(17,24,39,0.78);
+      border-color: rgba(148,163,184,0.28);
+      box-shadow: 0 8px 16px rgba(0,0,0,0.45);
+    }
+    [data-theme="dark"] .chart-zoom-btn {
+      color: var(--text);
+    }
+    [data-theme="dark"] .chart-zoom-btn:hover:not(:disabled) {
+      background: rgba(148,163,184,0.16);
+    }
+    [data-theme="dark"] .chart-zoom-divider {
+      background: rgba(229,231,235,0.22);
+    }
+
+    /* Dark-mode wrappers for consoles to keep parity */
+    [data-theme="dark"] #labTechConsole, [data-theme="dark"] #previewConsole {
+      background-color: var(--console-bg) !important;
+      color: var(--console-text) !important;
+      border-color: var(--console-border) !important;
+    }
+    [data-theme="dark"] #aiInputCompact:focus,
+    [data-theme="dark"] #userNotes:focus {
+      outline: none;
+      box-shadow: 0 0 0 3px rgba(96,165,250,0.35);
+      border-color: var(--console-input-border) !important;
+    }
+
+    /* ===== .quad preview: lightweight syntax highlighting ===== */
+    /* Base tokens */
+    .quad-meta   { color: var(--link); font-weight: 600; }
+    .quad-comment{ color: #047857; }  /* emerald-800 for light */
+    [data-theme="dark"] .quad-comment { color: #34d399; } /* emerald-400 for dark */
+    .quad-number { color: var(--text); }
+    .quad-error  { color: #dc2626; font-weight: 700; }
+    .quad-emph   { font-weight: 700; }
+
+    /* Channel color in gutter provided via CSS variables set per line (--ln-bg, --ln-fg) */
+
+    /* Line numbers (visible, not copied) */
+    #previewFull { position: relative; counter-reset: quadline; --lnw: 3.2em; --lngap: 0.6em; }
+    #previewFull .quad-line { display: block; position: relative; padding-left: calc(var(--lnw) + var(--lngap)); }
+    #previewFull .quad-line::before {
+      counter-increment: quadline;
+      content: counter(quadline) " │ ";
+      position: absolute; left: 0; top: 0; bottom: 0;
+      width: var(--lnw); text-align: right;
+      color: var(--ln-fg, color-mix(in srgb, var(--muted) 35%, var(--bg)));
+      background: var(--ln-bg, transparent);
+      user-select: none; -webkit-user-select: none; pointer-events: none;
+      opacity: 0.55;
+      font-weight: 400;
+    }
+    #previewFull .quad-line[data-ch]::before { opacity: 1; }
+    [data-theme="dark"] #previewFull .quad-line::before {
+      color: var(--ln-fg, color-mix(in srgb, var(--muted) 45%, var(--bg)));
+      opacity: 0.5;
+    }
+    /* Ensure colored gutter stays fully opaque in dark mode */
+    [data-theme="dark"] #previewFull .quad-line[data-ch]::before { opacity: 1 !important; }
+
+    /* Lab Tech sample hint box: theme-aware, high-contrast */
+    :root:not([data-theme="dark"]) .labtech-sample {
+      background-color: #f3f4f6;         /* gray-100 */
+      border: 1px solid #e5e7eb;         /* gray-200 */
+      color: #374151 !important;         /* gray-700 */
+    }
+    :root:not([data-theme="dark"]) .labtech-sample strong { color: #111827; } /* gray-900 */
+    [data-theme="dark"] .labtech-sample {
+      background-color: #171717;         /* near console bg, slightly lifted */
+      border: 1px solid #262626;         /* neutral-800 */
+      color: #e5e5e5 !important;         /* light text */
+    }
+    [data-theme="dark"] .labtech-sample strong { color: #ffffff; }
+
+    /* Explicit light-mode scrollbar colors (WebKit) */
+    :root:not([data-theme="dark"]) #previewFull::-webkit-scrollbar-track,
+    :root:not([data-theme="dark"]) #chatHistory::-webkit-scrollbar-track,
+    :root:not([data-theme="dark"]) #helpContent::-webkit-scrollbar-track {
+      background: #f7f7f7;
+    }
+    :root:not([data-theme="dark"]) #previewFull::-webkit-scrollbar-thumb,
+    :root:not([data-theme="dark"]) #chatHistory::-webkit-scrollbar-thumb,
+    :root:not([data-theme="dark"]) #helpContent::-webkit-scrollbar-thumb {
+      background: #c7c7c7;
+      border-color: #ffffff;
+    }
+    /* Firefox scrollbar colors */
+    :root:not([data-theme="dark"]) #previewFull,
+    :root:not([data-theme="dark"]) #chatHistory,
+    :root:not([data-theme="dark"]) #helpContent { scrollbar-color: #c7c7c7 #f7f7f7; scrollbar-width: auto; }
+    [data-theme="dark"] #previewFull,
+    [data-theme="dark"] #chatHistory,
+    [data-theme="dark"] #helpContent { scrollbar-color: #4b5563 #111111; scrollbar-width: auto; }
+
+    /* Global color application (minimal override of Tailwind utility surfaces) */
+    body { background-color: var(--bg); color: var(--text); }
+    .bg-white { background-color: var(--bg-elevated) !important; }
+    .bg-gray-50 { background-color: var(--bg) !important; }
+    .bg-gray-100 { background-color: color-mix(in srgb, var(--bg-elevated) 92%, var(--text)) !important; }
+    
+    /* Override jarring light backgrounds in console headers for dark mode */
+    [data-theme="dark"] .bg-gray-100 { 
+      background-color: var(--console-border) !important; 
+      color: var(--console-text) !important; 
+    }
+    
+    /* Fix jarring console container backgrounds in dark mode */
+    [data-theme="dark"] .border.border-gray-200.rounded-xl { 
+      background-color: var(--console-bg) !important; 
+      border-color: var(--console-border) !important; 
+    }
+    .border-gray-200 { border-color: var(--border) !important; }
+    .border-gray-300 { border-color: var(--border) !important; }
+    .text-gray-700 { color: var(--muted) !important; }
+    .text-gray-600 { color: var(--muted) !important; }
+    .text-gray-500 { color: color-mix(in srgb, var(--muted) 80%, var(--bg)) !important; }
+    .text-gray-400 { color: color-mix(in srgb, var(--muted) 65%, var(--bg)) !important; }
+
+    /* Buttons using blue accents keep contrast in dark */
+    .bg-blue-600 { background-color: var(--accent) !important; color: var(--accent-contrast) !important; }
+    .hover\:bg-blue-700:hover { background-color: color-mix(in srgb, var(--accent) 85%, black) !important; }
+
+    /* Shell container: keep app frame darkest */
+    .app-shell { background-color: var(--bg) !important; border: 1px solid var(--border); }
+
+
+
+    /* Ensure critical layout utilities still work offline (Tailwind fallback) */
+    .space-y-4 > * + * { margin-top: 1rem; }
+    .space-y-3 > * + * { margin-top: 0.75rem; }
+    .space-y-2 > * + * { margin-top: 0.5rem; }
+    .flex { display: flex; }
+    .items-center { align-items: center; }
+    .gap-2 { gap: 0.5rem; }
+    .gap-3 { gap: 0.75rem; }
+    .gap-4 { gap: 1rem; }
+    .gap-6 { gap: 1.5rem; }
+    .rounded-xl { border-radius: 0.75rem; }
+    .rounded-lg { border-radius: 0.5rem; }
+    .px-4 { padding-left: 1rem; padding-right: 1rem; }
+    .py-4 { padding-top: 1rem; padding-bottom: 1rem; }
+    .p-2 { padding: 0.5rem; }
+    .p-3 { padding: 0.75rem; }
+    .p-4 { padding: 1rem; }
+    .mb-4 { margin-bottom: 1rem; }
+    .mb-2 { margin-bottom: 0.5rem; }
+    .mt-4 { margin-top: 1rem; }
+    .w-full { width: 100%; }
+    .main-container {
+      width: 100%;
+      max-width: none;
+      margin: 0 auto;
+      padding-left: 1.5rem;
+      padding-right: 1.5rem;
+    }
+    .mx-auto { margin-left: auto; margin-right: auto; }
+    .grid { display: grid; }
+    .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+    .gap-4 { gap: 1rem; }
+
+    /* Chart canvas should scale with container even without Tailwind */
+    .chart-canvas-wrapper {
+      width: 100%;
+      position: relative;
+      display: block;
+    }
+    .chart-canvas-wrapper[data-chart-responsive="true"] {
+      height: var(--chart-dynamic-height, 515px);
+    }
+    .chart-canvas-wrapper[data-chart-responsive="false"] {
+      height: var(--chart-fixed-height, 515px);
+    }
+    .chart-canvas-wrapper canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    /* Help/Markdown colors use theme tokens */
+    #helpContent h2 { font-size: 1.125rem; line-height: 1.5rem; font-weight: 600; margin-top: 0.75rem; margin-bottom: 0.5rem; color: var(--text); }
+    #helpContent h3 { font-size: 1rem; line-height: 1.5rem; font-weight: 600; margin-top: 0.5rem; margin-bottom: 0.25rem; color: var(--text); }
+    #helpContent p  { margin: 0.25rem 0 0.5rem 0; color: var(--muted); }
+    #helpContent hr { border: 0; border-top: 1px solid var(--border); margin: 0.75rem 0; }
+    #helpContent ul, #helpContent ol { margin: 0.25rem 0 0.5rem 1.25rem; color: var(--muted); }
+    #helpContent ul { list-style: disc; list-style-position: inside; }
+    #helpContent ol { list-style: decimal; list-style-position: inside; }
+    #helpContent li { margin: 0.125rem 0; }
+    #helpContent dl { margin: 0.25rem 0 0.75rem 0; }
+    #helpContent dt { font-weight: 700; margin-top: 0.75rem; color: var(--text); }
+    #helpContent dd { margin: 0.15rem 0 0.5rem 0.75rem; color: var(--muted); }
+    #helpContent code { background: var(--code-bg); color: var(--code-text); padding: 0 0.25rem; border-radius: 0.25rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+    #helpContent a { color: var(--link); text-decoration: underline; }
+    #helpContent a:hover { color: var(--link-hover); }
+
+    /* Help tabs: improve dark-mode selected contrast */
+    [data-theme="dark"] #helpTabs button { color: var(--muted) !important; border-bottom-color: transparent !important; }
+    [data-theme="dark"] #helpTabs button.text-gray-800 { color: #e5e7eb !important; }
+    [data-theme="dark"] #helpTabs button.border-slate-700 { border-bottom-color: #e5e7eb !important; }
+
+    /* Help popup: use same scrollbar style as chat/preview */
+    #helpContent::-webkit-scrollbar { width: 24px; }
+    #helpContent::-webkit-scrollbar-track { background: var(--scrollbar-track); border-radius: 10px; }
+    #helpContent::-webkit-scrollbar-thumb { background: #c7c7c7; border-radius: 10px; border: 3px solid var(--scrollbar-thumb-border); min-height: 60px; }
+    #helpContent::-webkit-scrollbar-thumb:hover { background: #b3b3b3; }
+    #helpContent::-webkit-scrollbar-thumb:active { background: #9a9a9a; }
+    [data-theme="dark"] #helpContent::-webkit-scrollbar-thumb { background: #4b5563; border-color: var(--console-bg); }
+    [data-theme="dark"] #helpContent::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+    [data-theme="dark"] #helpContent::-webkit-scrollbar-track { background: var(--console-bg); }
+
+    /* Help popup container contrast in dark mode */
+    [data-theme="dark"] #helpPopup > div {
+      background-color: var(--bg-elevated) !important;
+      border: 1px solid var(--border-emphasis) !important;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+    }
+
+    /* Help overlay: ensure translucent backdrop in dark mode */
+    [data-theme="dark"] #helpPopup { background-color: rgba(0,0,0,0.5) !important; }
+    [data-theme="dark"] #globalCorrectionHelpPopup { background-color: rgba(0,0,0,0.5) !important; }
+    [data-theme="dark"] #intentHelpPopup { background-color: rgba(0,0,0,0.5) !important; }
+
+    /* Help logo: apply dark-mode stroke/fill overrides like main logo */
+    [data-theme="dark"] #helpPopup svg [stroke="#1A1A1A"] { stroke: #e5e7eb !important; }
+    [data-theme="dark"] #helpPopup svg [fill="#1A1A1A"] { fill: #e5e5e5 !important; }
+    [data-theme="dark"] #intentHelpPopup > div {
+      background-color: var(--bg-elevated) !important;
+      border: 1px solid var(--border-emphasis) !important;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+    }
+
+    /* Reusable help callouts/badges */
+    .help-callout { background-color: #f9fafb; border: 1px solid #e5e7eb; border-radius: 0.75rem; padding: 0.75rem; }
+    [data-theme="dark"] .help-callout { background-color: #1f2937; border-color: #374151; color: #e5e7eb; }
+    .help-badge { display: inline-block; padding: 2px 8px; border-radius: 9999px; font-size: 0.75rem; border: 1px solid #e5e7eb; background: #f3f4f6; color: #374151; }
+    [data-theme="dark"] .help-badge { border-color: #374151; background: #111827; color: #e5e7eb; }
+
+    /* Intent modal: match Help popup styling in dark mode */
+    [data-theme="dark"] #intentModal > div {
+      background-color: var(--bg-elevated) !important;
+      border: 1px solid var(--border-emphasis) !important;
+      box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+    }
+    [data-theme="dark"] #intentModal { background-color: rgba(0,0,0,0.5) !important; }
+
+    /* Intent content: use the same scrollbar styling as Help */
+    #intentContent::-webkit-scrollbar { width: 24px; }
+    #intentContent::-webkit-scrollbar-track { background: var(--scrollbar-track); border-radius: 10px; }
+    #intentContent::-webkit-scrollbar-thumb { background: #c7c7c7; border-radius: 10px; border: 3px solid var(--scrollbar-thumb-border); min-height: 60px; }
+    #intentContent::-webkit-scrollbar-thumb:hover { background: #b3b3b3; }
+    #intentContent::-webkit-scrollbar-thumb:active { background: #9a9a9a; }
+    [data-theme="dark"] #intentContent::-webkit-scrollbar-thumb { background: #4b5563; border-color: var(--console-bg); }
+    [data-theme="dark"] #intentContent::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+    [data-theme="dark"] #intentContent::-webkit-scrollbar-track { background: var(--console-bg); }
+
+    /* Paste tab note: light by default, darker in dark mode */
+    [data-theme="dark"] #intentPasteNote {
+      background-color: #1f2937 !important; /* gray-800 */
+      color: #e5e7eb !important;            /* gray-200 */
+      border-color: #374151 !important;     /* gray-700 */
+    }
+
+    /* Dark mode: make the paste-parse success message a brighter green */
+    [data-theme="dark"] #intentPasteValidation.text-green-700 {
+      color: #34d399 !important; /* Tailwind green-400 */
+    }
+
+    /* Dark-mode UI polish for Lab Tech + Notes */
+    [data-theme="dark"] .border-gray-800 { border-color: var(--border-subtle) !important; }
+    /* Match Clear button to Undo button styling in dark mode */
+    [data-theme="dark"] #clearChatBtn { 
+      background-color: #475569 !important; /* slate-600 */
+      color: #ffffff !important; 
+      border: 1px solid transparent !important; 
+    }
+    [data-theme="dark"] #clearChatBtn:hover { background-color: #374151 !important; /* gray-700 */ }
+    /* Lighten generic bg-black containers in dark mode (console areas) */
+    [data-theme="dark"] .bg-black { background-color: var(--bg-elevated) !important; color: var(--text) !important; }
+
+    /* Improve logo contrast in dark: override black strokes/fills */
+    [data-theme="dark"] #quadgenLogo [stroke="#1A1A1A"] { stroke: #e5e7eb !important; }
+    [data-theme="dark"] #quadgenLogo [fill="#1A1A1A"] { fill: #e5e7eb !important; }
+
+    /* Always show number input arrows */
+    input[type="number"]::-webkit-outer-spin-button,
+    input[type="number"]::-webkit-inner-spin-button {
+      -webkit-appearance: inner-spin-button !important;
+      opacity: 1 !important;
+    }
+    
+    input[type="number"] {
+      -moz-appearance: number-input;
+    }
+
+    /* Slider toggle styles */
+    .slider-toggle {
+      position: relative;
+      display: inline-block;
+      width: 40px;
+      height: 20px;
+    }
+
+    .slider-toggle input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: .4s;
+      border-radius: 20px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 16px;
+      width: 16px;
+      left: 2px;
+      bottom: 2px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background-color: #10b981;
+    }
+
+    input:focus + .slider {
+      box-shadow: 0 0 1px #10b981;
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(20px);
+    }
+
+    input:disabled + .slider {
+      background-color: #e5e5e5;
+      cursor: not-allowed;
+    }
+
+    input:disabled + .slider:before {
+      background-color: #f5f5f5;
+    }
+
+    /* Dark mode overrides for toggle slider */
+    [data-theme="dark"] .slider {
+      background-color: var(--border) !important;         /* darker track when OFF */
+    }
+    [data-theme="dark"] input:checked + .slider {
+      background-color: var(--accent) !important;         /* muted accent when ON */
+    }
+    [data-theme="dark"] input:focus + .slider {
+      box-shadow: 0 0 0 2px #525252 !important;           /* soft gray focus ring */
+    }
+    [data-theme="dark"] .slider:before {
+      background-color: #e5e5e5 !important;               /* lighter knob for contrast */
+    }
+    [data-theme="dark"] input:disabled + .slider {
+      background-color: #1f1f1f !important;               /* dim disabled track */
+    }
+    [data-theme="dark"] input:disabled + .slider:before {
+      background-color: #3a3a3a !important;               /* dim disabled knob */
+    }
+
+
+    /* Custom scrollbar styling for file preview */
+    #previewFull::-webkit-scrollbar { width: 24px; }
+    #previewFull::-webkit-scrollbar-track { background: var(--scrollbar-track); border-radius: 10px; }
+    #previewFull::-webkit-scrollbar-thumb { background: #c7c7c7; border-radius: 10px; border: 3px solid var(--scrollbar-thumb-border); min-height: 60px; }
+    #previewFull::-webkit-scrollbar-thumb:hover { background: #b3b3b3; }
+    #previewFull::-webkit-scrollbar-thumb:active { background: #9a9a9a; }
+
+    /* Match Lab Tech console scrollbar to .quad File Preview */
+    #chatHistory::-webkit-scrollbar { width: 24px; }
+    #chatHistory::-webkit-scrollbar-track { background: var(--scrollbar-track); border-radius: 10px; }
+    #chatHistory::-webkit-scrollbar-thumb { background: #c7c7c7; border-radius: 10px; border: 3px solid var(--scrollbar-thumb-border); min-height: 60px; }
+    #chatHistory::-webkit-scrollbar-thumb:hover { background: #b3b3b3; }
+    #chatHistory::-webkit-scrollbar-thumb:active { background: #9a9a9a; }
+
+    /* Dark mode scrollbar tweaks: darker, less contrasty */
+    [data-theme="dark"] #previewFull::-webkit-scrollbar-thumb,
+    [data-theme="dark"] #chatHistory::-webkit-scrollbar-thumb { background: #4b5563; border-color: var(--console-bg); }
+    [data-theme="dark"] #previewFull::-webkit-scrollbar-thumb:hover,
+    [data-theme="dark"] #chatHistory::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+    [data-theme="dark"] #previewFull::-webkit-scrollbar-track,
+    [data-theme="dark"] #chatHistory::-webkit-scrollbar-track { background: var(--console-bg); }
+
+    /* Instant tooltip for linearization buttons */
+    .per-channel-btn, #globalLinearizationBtn {
+      position: relative;
+    }
+
+    .per-channel-btn:hover::after, #globalLinearizationBtn:hover::after {
+      content: attr(data-tooltip);
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      background-color: var(--tooltip-bg);
+      color: var(--tooltip-text);
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-size: 12px;
+      white-space: nowrap;
+      z-index: 1000;
+      margin-bottom: 4px;
+      pointer-events: none;
+    }
+
+    .per-channel-btn:hover::before, #globalLinearizationBtn:hover::before {
+      content: '';
+      position: absolute;
+      bottom: 100%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 0;
+      height: 0;
+      border-left: 4px solid transparent;
+      border-right: 4px solid transparent;
+      border-top: 4px solid var(--tooltip-bg);
+      z-index: 1000;
+      pointer-events: none;
+    }
+
+    /* Hide number input spinners */
+    .lstar-input::-webkit-outer-spin-button,
+    .lstar-input::-webkit-inner-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+    
+    .lstar-input[type=number] {
+      -moz-appearance: textfield;
+    }
+    /* Hide number input spinners for target inputs as well */
+    /* (Removed) .lstar-target-* styles – Manual L* no longer uses Target inputs */
+    
+    /* Standard dropdown styling — compact across the app */
+    .standard-dropdown {
+      width: 100%;
+      padding: 0.125rem 0.5rem;
+      border: 1px solid #d1d5db;
+      border-radius: 0.375rem;
+      font-size: 0.8125rem; /* ~13px */
+      line-height: 1.25;
+      height: 28px;
+      box-sizing: border-box;
+      background-color: white;
+      color: #374151;
+    }
+
+    /* Edit panel global disable (except main toggle button) */
+    #editPanelBody.edit-panel-disabled {
+      opacity: 0.6;
+      pointer-events: none;
+      filter: grayscale(10%);
+    }
+    
+    .standard-dropdown:disabled {
+      background-color: #f9fafb;
+      color: #9ca3af;
+      cursor: not-allowed;
+    }
+    
+    .standard-dropdown option {
+      font-size: 0.8125rem;
+      line-height: 1.25;
+      color: #374151;
+    }
+
+    /* All dropdowns use the same compact size via .standard-dropdown */
+
+    /* Custom Intent tab: make range sliders more prominent */
+    #intentTab-custom input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 8px;
+      border-radius: 9999px;
+      /* Light mode: uniform track (no filled portion) */
+      background: #e5e7eb; /* gray-200 */
+      outline: none;
+      transition: filter 120ms ease;
+    }
+    /* Dark mode: uniform darker track (no filled portion) */
+    [data-theme="dark"] #intentTab-custom input[type="range"] {
+      background: var(--console-input-bg);
+    }
+    #intentTab-custom input[type="range"]:hover { filter: brightness(1.02); }
+    #intentTab-custom input[type="range"]:focus { box-shadow: 0 0 0 3px rgba(59,130,246,0.25); }
+    /* WebKit thumb */
+    #intentTab-custom input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 16px; height: 16px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1; /* slate-300 */
+      border-radius: 9999px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+      margin-top: -4px; /* center on 8px track */
+    }
+    /* Firefox track + progress */
+    #intentTab-custom input[type="range"]::-moz-range-track {
+      height: 8px; border-radius: 9999px; background: #e5e7eb; /* gray-200 */
+    }
+    #intentTab-custom input[type="range"]::-moz-range-progress {
+      height: 8px; border-radius: 9999px; background: transparent; /* no filled portion */
+    }
+    #intentTab-custom input[type="range"]::-moz-range-thumb {
+      width: 16px; height: 16px; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 9999px; box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+    }
+
+    /* Use default system checkbox styling */
+    input[type="checkbox"] { accent-color: #ffffff; }
+
+    /* Nudge buttons styling */
+    .nudge-btn {
+      background-color: #475569; /* slate-600 */
+      color: #ffffff;
+      transition: transform 0.05s ease, background-color 0.1s ease;
+      user-select: none;
+    }
+    /* Unified disabled look in Edit panel: match Redo disabled */
+    #editPanelBody button:disabled,
+    #editPanelBody .nudge-btn:disabled {
+      background-color: #475569; /* slate-600 */
+      color: #ffffff;
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    #editPanelBody #editPointIndex.is-disabled {
+      background-color: #475569; /* slate-600 */
+      color: #ffffff;
+      opacity: 0.5;
+    }
+    .nudge-btn:hover { background-color: #374151; /* gray-700 (darker gray) */ }
+    .nudge-btn:active {
+      background-color: #000000; /* black */
+      transform: translateY(2px);
+    }
+
+    /* Global press effect for all buttons */
+    button {
+      transition: transform 0.05s ease;
+    }
+    button:active {
+      transform: translateY(2px);
+    }
+
+    /* Ultra-Compact Channel Styles */
+    .channel-row {
+      transition: all 0.2s ease-in-out;
+    }
+    
+    /* Hide disabled channels from table flow */
+    .channel-row[data-compact="true"] {
+      display: none;
+    }
+
+    /* Disabled state styling for Generate button */
+    #generateFromLstar:disabled {
+      background-color: #9ca3af; /* gray-400 */
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+    
+    /* Compact chip container */
+    .disabled-channels-compact {
+      background-color: var(--bg-elevated);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 8px 12px;
+      margin: 8px 0;
+      display: none; /* Hidden by default */
+    }
+    
+    .disabled-channels-compact.show {
+      display: block;
+    }
+    
+    .disabled-channels-compact .compact-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 6px;
+      display: block;
+    }
+    
+    .disabled-channels-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+    
+    /* Individual disabled channel chips */
+    .disabled-channel-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      background-color: var(--bg-elevated);
+      border-radius: 6px;
+      padding: 3px 8px;
+      font-size: 12px;
+      color: var(--muted);
+      cursor: pointer;
+      transition: all 0.15s ease-in-out;
+      user-select: none;
+    }
+    
+    .disabled-channel-chip:hover {
+      background-color: color-mix(in srgb, var(--bg-elevated) 85%, var(--text));
+      transform: translateY(-1px);
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    
+    .disabled-channel-chip.active {
+      background-color: color-mix(in srgb, var(--accent) 15%, var(--bg-elevated));
+      color: var(--accent);
+    }
+    
+    .disabled-channel-chip .channel-color {
+      width: 12px;
+      height: 12px;
+      border-radius: 2px;
+      border: 1px solid color-mix(in srgb, var(--border) 80%, var(--text));
+      flex-shrink: 0;
+      display: inline-block;
+    }
+    
+    .disabled-channel-chip .channel-checkbox {
+      width: 12px;
+      height: 12px;
+      margin: 0;
+      cursor: pointer;
+      accent-color: #ffffff;
+    }
+    
+    .disabled-channel-chip .channel-name {
+      font-weight: 600;
+      min-width: 20px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    /* Compact label styling */
+    .disabled-channels-compact .compact-label::after {
+      content: ':';
+      margin-left: 2px;
+    }
+
+    /* Smooth transitions for showing/hiding */
+    .disabled-channels-compact {
+      transition: all 0.3s ease-in-out;
+      transform-origin: top;
+    }
+
+    .disabled-channels-compact:not(.show) {
+      max-height: 0;
+      opacity: 0;
+      margin: 0;
+      padding: 0;
+      border: none;
+      overflow: hidden;
+    }
+
+    /* Terminal-style chat lines */
+    #chatHistory .chat-line { display: block; margin: 0 0 2px 0; white-space: pre-wrap; }
+    :root:not([data-theme="dark"]) #chatHistory .chat-line.assistant { color: #111827; }
+    :root:not([data-theme="dark"]) #chatHistory .chat-line.user { color: #065f46; font-weight: 600; }
+    :root:not([data-theme="dark"]) #chatHistory .chat-line.system { color: #6b7280; font-style: italic; }
+    [data-theme="dark"] #chatHistory .chat-line.assistant { color: #e5e5e5; }
+    [data-theme="dark"] #chatHistory .chat-line.user { color: #34d399; font-weight: 600; }
+    [data-theme="dark"] #chatHistory .chat-line.system { color: #9ca3af; font-style: italic; }
+    
+    #chatHistory a { color: var(--link); text-decoration: underline; font-weight: 600; }
+    #chatHistory a:hover { color: var(--link-hover); text-decoration: underline; }
+    #chatHistory a[target="_blank"]::after { content: ' ↗'; font-weight: 600; color: var(--muted); }
+    :root:not([data-theme="dark"]) #chatHistory .chat-line.user a { color: #15803d; }
+    :root:not([data-theme="dark"]) #chatHistory .chat-line.user a:hover { color: #16a34a; }
+
+    /* One Light-inspired theme for Lab Tech console (light mode) */
+    :root:not([data-theme="dark"]) #labTechConsole {
+      --onl-bg: #fafafa;        /* editor background */
+      --onl-fg: #383a42;        /* editor foreground */
+      --onl-muted: #a0a1a7;     /* comments/muted */
+      --onl-blue: #4078f2;      /* link/primary */
+      --onl-cyan: #0184bc;      /* info */
+      --onl-green: #50a14f;     /* success/user */
+      --onl-orange: #c18401;    /* warn */
+      --onl-pink: #a626a4;      /* accent */
+      --onl-red: #e45649;       /* error */
+      --onl-yellow: #986801;    /* emphasis */
+      background-color: var(--onl-bg) !important;
+      color: var(--onl-fg) !important;
+      border-color: #e6e6e6 !important;
+    }
+    :root:not([data-theme="dark"]) #labTechConsole #chatHistory .chat-line { color: var(--onl-fg); }
+    :root:not([data-theme="dark"]) #labTechConsole #chatHistory .chat-line.user { color: var(--onl-green); font-weight: 600; }
+    :root:not([data-theme="dark"]) #labTechConsole #chatHistory .chat-line.assistant { color: var(--onl-fg); }
+    :root:not([data-theme="dark"]) #labTechConsole #chatHistory .chat-line.system { color: var(--onl-muted); font-style: italic; }
+    :root:not([data-theme="dark"]) #labTechConsole #chatHistory .chat-line.system.error { color: var(--onl-red); font-style: normal; }
+    :root:not([data-theme="dark"]) #labTechConsole #chatHistory .chat-line.system.info { color: var(--onl-cyan); font-style: normal; }
+    :root:not([data-theme="dark"]) #labTechConsole #chatHistory a { color: var(--onl-blue); text-decoration: underline; font-weight: 600; }
+    :root:not([data-theme="dark"]) #labTechConsole #chatHistory a:hover { color: #6ea1ff; }
+
+    /* Input matches One Light */
+    :root:not([data-theme="dark"]) #labTechConsole #aiInputCompact {
+      background: var(--onl-bg) !important;
+      color: var(--onl-fg) !important;
+      border-color: #d0d0d0 !important;
+    }
+    :root:not([data-theme="dark"]) #labTechConsole #aiInputCompact::placeholder { color: var(--onl-muted); }
+    :root:not([data-theme="dark"]) #labTechConsole #aiInputCompact:focus {
+      outline: none !important;
+      box-shadow: 0 0 0 2px rgba(64,120,242,0.25) !important;
+      border-color: #4078f2 !important;
+    }
+    :root:not([data-theme="dark"]) #labTechConsole #clearChatBtn {
+      background: #efefef !important;
+      color: var(--onl-fg) !important;
+      border: 1px solid #e2e2e2 !important;
+    }
+    :root:not([data-theme="dark"]) #labTechConsole #clearChatBtn:hover { background: #e7e7e7 !important; }
+
+    /* Neutralize Lab Tech and .quad preview console hues in dark mode */
+    [data-theme="dark"] #chatHistory,
+    [data-theme="dark"] #previewFull,
+    [data-theme="dark"] #userNotes,
+    [data-theme="dark"] #aiInputCompact {
+      background-color: var(--console-bg) !important;
+      color: var(--console-text) !important;
+      border-color: var(--console-input-border) !important;
+    }
+    /* Slightly lighten preview background in dark mode for better K gutter contrast */
+    [data-theme="dark"] #previewFull {
+      background-color: var(--bg-elevated-hover) !important; /* slightly lighter for gutter contrast */
+    }
+    [data-theme="dark"] #labTechResizer {
+      background-color: var(--console-resizer) !important;
+    }
+    [data-theme="dark"] #labTechResizer:hover {
+      background-color: var(--console-resizer-hover) !important;
+    }
+    [data-theme="dark"] #labTechResizer span,
+    [data-theme="dark"] #previewResizer span {
+      background-color: var(--console-grip) !important;
+    }
+    [data-theme="dark"] #previewResizer {
+      background-color: var(--console-resizer) !important;
+    }
+    [data-theme="dark"] #previewResizer:hover {
+      background-color: var(--console-resizer-hover) !important;
+    }
+    [data-theme="dark"] #userNotes::placeholder,
+    [data-theme="dark"] #aiInputCompact::placeholder {
+      color: #9a9a9a;
+    }
+    [data-theme="dark"] #userNotes {
+      border-color: var(--console-input-border) !important;
+    }
+
+    /* Dark-mode readability for channel inputs (percent and end) */
+    [data-theme="dark"] .percent-input,
+    [data-theme="dark"] .end-input,
+    [data-theme="dark"] #scaleAllInput {
+      background-color: var(--console-input-bg) !important; /* darker field */
+      color: var(--text) !important;                         /* light text */
+      border-color: var(--console-input-border) !important;  /* neutral border */
+    }
+    [data-theme="dark"] .percent-input::placeholder,
+    [data-theme="dark"] .end-input::placeholder,
+    [data-theme="dark"] #scaleAllInput::placeholder {
+      color: #9a9a9a;                                       /* subtle placeholder */
+    }
+    [data-theme="dark"] .percent-input:focus,
+    [data-theme="dark"] .end-input:focus,
+    [data-theme="dark"] #scaleAllInput:focus {
+      outline: 2px solid #737373;                           /* soft gray focus */
+      outline-offset: 0;
+      box-shadow: none !important;
+      border-color: #737373 !important;
+    }
+
+    /* Extend dark-mode readability to other text inputs/selects */
+    [data-theme="dark"] #filenameInput,
+    [data-theme="dark"] .standard-dropdown,
+    [data-theme="dark"] .lstar-input,
+    [data-theme="dark"] #editXYInput,
+    [data-theme="dark"] #aiInput,
+    [data-theme="dark"] #editMaxError,
+    [data-theme="dark"] #editMaxPoints,
+    [data-theme="dark"] #perChannelDeltaSelect {
+      background-color: var(--console-input-bg) !important;
+      color: var(--text) !important;
+      border-color: var(--console-input-border) !important;
+    }
+    [data-theme="dark"] #filenameInput::placeholder,
+    [data-theme="dark"] .lstar-input::placeholder,
+    [data-theme="dark"] #editXYInput::placeholder,
+    [data-theme="dark"] #aiInput::placeholder {
+      color: #9a9a9a;
+    }
+    [data-theme="dark"] #filenameInput:focus,
+    [data-theme="dark"] .standard-dropdown:focus,
+    [data-theme="dark"] .lstar-input:focus,
+    [data-theme="dark"] #editXYInput:focus,
+    [data-theme="dark"] #aiInput:focus,
+    [data-theme="dark"] #editMaxError:focus,
+    [data-theme="dark"] #editMaxPoints:focus,
+    [data-theme="dark"] #perChannelDeltaSelect:focus {
+      outline: 2px solid #737373;
+      outline-offset: 0;
+      box-shadow: none !important;
+      border-color: #737373 !important;
+    }
+
+    /* (moved above) Help content readability via theme tokens */
+    @media (min-width: 1024px) {
+      .lg\:grid-cols-3 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      .lg\:col-span-2 {
+        grid-column: span 2 / span 2;
+      }
+    }
+
+    @media (min-width: 1024px) {
+      .lg\:grid-cols-3 {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      .lg\:col-span-2 {
+        grid-column: span 2 / span 2;
+      }
+    }

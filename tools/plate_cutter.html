@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plate Cut Calculator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-8">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold">Plate Cut Calculator</h1>
+            <div>
+                <button id="unit-toggle-btn" class="px-4 py-2 font-semibold text-sm bg-indigo-500 text-white rounded-md shadow-sm hover:bg-indigo-600">📏 Switch to Metric</button>
+            </div>
+        </div>
+
+        <div class="bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-xl font-semibold mb-4">Initial Plate Details</h2>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                    <label id="width-label" for="initial-width" class="block text-sm font-medium text-gray-700">Width (in)</label>
+                    <input type="number" id="initial-width" value="16.5" step="0.001" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                </div>
+                <div>
+                    <label id="height-label" for="initial-height" class="block text-sm font-medium text-gray-700">Height (in)</label>
+                    <input type="number" id="initial-height" value="23.375" step="0.001" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="initial-price" class="block text-sm font-medium text-gray-700">Price ($)</label>
+                    <input type="number" id="initial-price" value="51.00" step="0.01" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                </div>
+                <div>
+                    <label for="initial-a-size" class="block text-sm font-medium text-gray-700">A-Size (e.g., 2 for A2)</label>
+                    <input type="number" id="initial-a-size" value="2" class="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                </div>
+            </div>
+            <div class="mt-6">
+                <button id="calculate-btn" class="w-full bg-indigo-600 text-white py-2 px-4 rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">✂️ Calculate</button>
+            </div>
+        </div>
+
+        <div id="results-container" class="mt-8">
+            <!-- Results will be injected here -->
+        </div>
+    </div>
+
+    <script>
+        let unitSystem = 'imperial';
+        const IN_TO_CM = 2.54;
+
+        const unitToggleButton = document.getElementById('unit-toggle-btn');
+        const calculateButton = document.getElementById('calculate-btn');
+        const widthInput = document.getElementById('initial-width');
+        const heightInput = document.getElementById('initial-height');
+        const widthLabel = document.getElementById('width-label');
+        const heightLabel = document.getElementById('height-label');
+        const resultsContainer = document.getElementById('results-container');
+
+        unitToggleButton.addEventListener('click', () => {
+            const currentWidth = parseFloat(widthInput.value);
+            const currentHeight = parseFloat(heightInput.value);
+
+            if (unitSystem === 'imperial') {
+                // Switch to Metric
+                unitSystem = 'metric';
+                unitToggleButton.textContent = '📏 Switch to Imperial';
+                widthLabel.textContent = 'Width (cm)';
+                heightLabel.textContent = 'Height (cm)';
+                if (!isNaN(currentWidth)) widthInput.value = (currentWidth * IN_TO_CM).toFixed(2);
+                if (!isNaN(currentHeight)) heightInput.value = (currentHeight * IN_TO_CM).toFixed(2);
+            } else {
+                // Switch to Imperial
+                unitSystem = 'imperial';
+                unitToggleButton.textContent = '📏 Switch to Metric';
+                widthLabel.textContent = 'Width (in)';
+                heightLabel.textContent = 'Height (in)';
+                if (!isNaN(currentWidth)) widthInput.value = (currentWidth / IN_TO_CM).toFixed(3);
+                if (!isNaN(currentHeight)) heightInput.value = (currentHeight / IN_TO_CM).toFixed(3);
+            }
+            resultsContainer.innerHTML = ''; // Clear results on toggle
+        });
+
+        calculateButton.addEventListener('click', () => {
+            const initialWidth = parseFloat(widthInput.value);
+            const initialHeight = parseFloat(heightInput.value);
+            const initialPrice = parseFloat(document.getElementById('initial-price').value);
+            const initialASize = parseInt(document.getElementById('initial-a-size').value);
+
+            if (isNaN(initialWidth) || isNaN(initialHeight) || isNaN(initialPrice) || isNaN(initialASize)) {
+                alert('Please enter valid numbers in all fields.');
+                return;
+            }
+
+            resultsContainer.innerHTML = '<h2 class="text-xl font-semibold mb-4 text-center">Calculated Plate Sizes</h2>';
+            const table = document.createElement('table');
+            table.className = 'w-auto mx-auto bg-white rounded-lg shadow-md';
+            const dimUnit = unitSystem === 'imperial' ? 'in' : 'cm';
+            table.innerHTML = `
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">A-Size</th>
+                        <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Dimensions (${dimUnit})</th>
+                        <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-200">
+                </tbody>
+            `;
+            const tbody = table.querySelector('tbody');
+            
+            const calculations = [];
+            let currentWidth = initialWidth;
+            let currentHeight = initialHeight;
+            let currentPrice = initialPrice;
+            let currentASize = initialASize;
+
+            calculations.push([currentASize, currentWidth, currentHeight, currentPrice]);
+
+            while (currentASize < 5) {
+                if (currentWidth > currentHeight) {
+                    currentWidth /= 2;
+                } else {
+                    currentHeight /= 2;
+                }
+                currentPrice /= 2;
+                currentASize++;
+                calculations.push([currentASize, currentWidth, currentHeight, currentPrice]);
+            }
+
+            const roundDownToQuarter = (num) => Math.floor(num / 0.25) * 0.25;
+            const roundToNearestHalfCm = (num) => Math.round(num / 0.5) * 0.5;
+
+            const toImperial = (num) => {
+                const integer = Math.floor(num);
+                const decimal = num - integer;
+                let fraction = '';
+                if (decimal === 0.25) fraction = '¼';
+                else if (decimal === 0.5) fraction = '½';
+                else if (decimal === 0.75) fraction = '¾';
+                if (integer === 0 && fraction) return fraction;
+                if (integer > 0 && fraction) return `${integer} ${fraction}`;
+                if (integer > 0 && !fraction) return `${integer}`;
+                if (integer === 0 && !fraction) return '0';
+                return num;
+            };
+
+            calculations.forEach((calc, index) => {
+                let [aSize, width, height, price] = calc;
+                let displayWidth, displayHeight;
+
+                if (index > 0) { // Only round the dimensions for the *cut* pieces
+                    if (unitSystem === 'imperial') {
+                        width = roundDownToQuarter(width);
+                        height = roundDownToQuarter(height);
+                    } else { // metric
+                        width = roundToNearestHalfCm(width);
+                        height = roundToNearestHalfCm(height);
+                    }
+                }
+
+                const smallerDim = Math.min(width, height);
+                const largerDim = Math.max(width, height);
+
+                if (unitSystem === 'imperial') {
+                    displayWidth = toImperial(smallerDim);
+                    displayHeight = toImperial(largerDim);
+                } else {
+                    displayWidth = smallerDim.toFixed(1);
+                    displayHeight = largerDim.toFixed(1);
+                }
+
+                let row = tbody.insertRow();
+                row.innerHTML = `
+                    <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-center">A${aSize}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">${displayWidth} x ${displayHeight}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">${price.toFixed(2)}</td>
+                `;
+            });
+
+            resultsContainer.appendChild(table);
+        });
+    </script>
+
+</body>
+</html>

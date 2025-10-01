@@ -1,0 +1,37 @@
+{
+  "name": "quadgen",
+  "version": "1.0.0",
+  "description": "",
+  "main": "cloudflare-worker.js",
+  "type": "module",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "dev": "cp src/index.template.html index.html && vite --port 3000",
+    "build": "cp src/index.template.html index.html && vite build --watch",
+    "build:agent": "cp src/index.template.html index.html && vite build && cp dist/index.html ./index.html",
+    "preview": "vite preview --port 4180",
+    "test": "vitest",
+    "test:smoke": "playwright test tests/e2e/page-load-smoke.spec.ts",
+    "test:history": "playwright test tests/history/.*\\.spec\\.ts",
+    "test:e2e": "node scripts/test-tools/run-playwright-test.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.55.1",
+    "@tailwindcss/postcss": "^4.1.13",
+    "autoprefixer": "^10.4.21",
+    "dependency-cruiser": "^16.10.4",
+    "jsdom": "^27.0.0",
+    "playwright": "^1.55.1",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^4.1.13",
+    "vite": "^7.1.7",
+    "vite-plugin-singlefile": "^2.3.0",
+    "vitest": "^3.2.4"
+  }
+}
