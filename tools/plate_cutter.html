@@ -102,6 +102,7 @@
                     <tr>
                         <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">A-Size</th>
                         <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Dimensions (${dimUnit})</th>
+                        <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Max Pieces</th>
                         <th scope="col" class="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Price</th>
                     </tr>
                 </thead>
@@ -115,8 +116,9 @@
             let currentHeight = initialHeight;
             let currentPrice = initialPrice;
             let currentASize = initialASize;
+            let currentCount = 1;
 
-            calculations.push([currentASize, currentWidth, currentHeight, currentPrice]);
+            calculations.push([currentASize, currentWidth, currentHeight, currentPrice, currentCount]);
 
             while (currentASize < 5) {
                 if (currentWidth > currentHeight) {
@@ -126,7 +128,8 @@
                 }
                 currentPrice /= 2;
                 currentASize++;
-                calculations.push([currentASize, currentWidth, currentHeight, currentPrice]);
+                currentCount *= 2;
+                calculations.push([currentASize, currentWidth, currentHeight, currentPrice, currentCount]);
             }
 
             const roundDownToQuarter = (num) => Math.floor(num / 0.25) * 0.25;
@@ -147,7 +150,9 @@
             };
 
             calculations.forEach((calc, index) => {
-                let [aSize, width, height, price] = calc;
+                let [aSize, widthRaw, heightRaw, price, count] = calc;
+                let width = widthRaw;
+                let height = heightRaw;
                 let displayWidth, displayHeight;
 
                 if (index > 0) { // Only round the dimensions for the *cut* pieces
@@ -175,6 +180,7 @@
                 row.innerHTML = `
                     <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900 text-center">A${aSize}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">${displayWidth} x ${displayHeight}</td>
+                    <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">${count}</td>
                     <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">${price.toFixed(2)}</td>
                 `;
             });
