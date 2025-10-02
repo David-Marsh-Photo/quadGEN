@@ -14,6 +14,26 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Fixed
 - _Nothing yet._
 
+### Removed
+- _Nothing yet._
+
+### Docs
+- _Nothing yet._
+
+## [Beta 3.0.1] — 2025-10-02
+### Added
+- Added a Playwright regression that ensures the Intent dropdown enables after loading a .quad file.
+
+### Changed
+- _Nothing yet._
+
+### Fixed
+- Restored the PoPS Matte, PoPS Uncoated, and PoPS Uncoated (softer) contrast intent presets in the modular dropdown to match the legacy single-file build.
+- Intent dropdown now enables automatically once a .quad is loaded and no LAB/CGATS measurement is active.
+
+### Removed
+- Removed the legacy parity test suites and harnesses that depended on `quadgen.html` so the automated test suite reflects the modular app only.
+
 ### Docs
 - _Nothing yet._
 

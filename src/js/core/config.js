@@ -310,5 +310,83 @@ export const CONTRAST_INTENT_PRESETS = {
       [1, 1]
     ])(t),
     displayOrder: 9
+  },
+  'popsmatte': {
+    id: 'popsmatte',
+    label: 'PoPS Matte Curve',
+    description: 'Increases contrast. Prints on Paper Studios system matte curve with more aggressive shadow compression than gloss variant. Designed for matte paper characteristics.',
+    params: {
+      keyPoints: [
+        {x: 0, y: 0},
+        {x: 10/255, y: 3/255},
+        {x: 28/255, y: 14/255},
+        {x: 55/255, y: 37/255},
+        {x: 90/255, y: 79/255},
+        {x: 170/255, y: 174/255},
+        {x: 1, y: 1}
+      ]
+    },
+    curveFunction: (t) => compileIntentFromPoints([
+      [0, 0],
+      [10/255, 3/255],
+      [28/255, 14/255],
+      [55/255, 37/255],
+      [90/255, 79/255],
+      [170/255, 174/255],
+      [1, 1]
+    ])(t),
+    displayOrder: 10
+  },
+  'popsuncoated': {
+    id: 'popsuncoated',
+    label: 'PoPS Uncoated / Alt Process',
+    description: 'Increases contrast. Prints on Paper Studios system curve optimized for uncoated papers and alternative photographic processes. Features strong shadow compression with smooth highlight transitions.',
+    params: {
+      keyPoints: [
+        {x: 0, y: 0},
+        {x: 28/255, y: 9/255},
+        {x: 66/255, y: 44/255},
+        {x: 112/255, y: 100/255},
+        {x: 164/255, y: 168/255},
+        {x: 221/255, y: 223/255},
+        {x: 1, y: 1}
+      ]
+    },
+    curveFunction: (t) => compileIntentFromPoints([
+      [0, 0],
+      [28/255, 9/255],
+      [66/255, 44/255],
+      [112/255, 100/255],
+      [164/255, 168/255],
+      [221/255, 223/255],
+      [1, 1]
+    ])(t),
+    displayOrder: 11
+  },
+  'popsuncoatedsofter': {
+    id: 'popsuncoatedsofter',
+    label: 'PoPS Uncoated / Alt Process (softer)',
+    description: 'Increases contrast. Prints on Paper Studios system softer variant for uncoated papers and alternative processes. Less aggressive shadow compression than the standard uncoated curve.',
+    params: {
+      keyPoints: [
+        {x: 0, y: 0},
+        {x: 28/255, y: 12/255},
+        {x: 66/255, y: 47/255},
+        {x: 112/255, y: 100/255},
+        {x: 164/255, y: 168/255},
+        {x: 221/255, y: 223/255},
+        {x: 1, y: 1}
+      ]
+    },
+    curveFunction: (t) => compileIntentFromPoints([
+      [0, 0],
+      [28/255, 12/255],
+      [66/255, 47/255],
+      [112/255, 100/255],
+      [164/255, 168/255],
+      [221/255, 223/255],
+      [1, 1]
+    ])(t),
+    displayOrder: 12
   }
 };

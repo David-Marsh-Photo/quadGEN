@@ -95,19 +95,33 @@ export function hasAnyLinearization() {
  */
 export function canApplyIntentRemap() {
   try {
-    const delegate = legacyBridge.getRemapDelegate();
-    if (delegate && delegate !== canApplyIntentRemap) {
-      return delegate();
-    }
+    const legacyFlags = legacyBridge.getLegacyLinearizationFlags?.() || { hasGlobal: false, hasPerEnabled: false };
 
-    const hasQuad = legacyBridge.hasLegacyQuadLoaded() || !!(getLoadedQuadData()?.curves);
+    const hasQuad = legacyBridge.hasLegacyQuadLoaded?.() || !!(getLoadedQuadData()?.curves);
     const globalData = LinearizationState?.getGlobalData ? LinearizationState.getGlobalData() : null;
     const globalApplied = LinearizationState ? !!LinearizationState.globalApplied : false;
-    const legacyFlags = legacyBridge.getLegacyLinearizationFlags();
-    const hasLegacyMeasurement = legacyFlags.hasGlobal;
+    const hasLegacyMeasurement = !!legacyFlags?.hasGlobal;
     const measurementActive = (!!globalData && globalApplied) || hasLegacyMeasurement;
+    const fallbackDecision = hasQuad && !measurementActive;
 
-    return hasQuad && !measurementActive;
+    const delegate = legacyBridge.getRemapDelegate?.();
+    if (delegate && delegate !== canApplyIntentRemap) {
+      try {
+        const legacyDecision = delegate();
+        if (legacyDecision === true) {
+          return true;
+        }
+        if (legacyDecision === false || legacyDecision === undefined || legacyDecision === null) {
+          return fallbackDecision;
+        }
+        return !!legacyDecision;
+      } catch (err) {
+        console.warn('Legacy remap delegate threw error, falling back to modular decision:', err);
+        return fallbackDecision;
+      }
+    }
+
+    return fallbackDecision;
   } catch (err) {
     console.warn('Error checking intent remap capability:', err);
     return false;

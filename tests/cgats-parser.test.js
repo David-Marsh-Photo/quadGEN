@@ -167,18 +167,5 @@ END_DATA
     }
   });
 
-  it('legacy LAB-only CGATS falls back to evenly spaced inputs', () => {
-    const samplePath = path.resolve(__dirname, '..', 'sample_lab_only.cgats');
-    const contents = fs.readFileSync(samplePath, 'utf8');
-
-    const parsed = parseCGATS17(contents, samplePath);
-
-    expect(parsed.format).toBe('CGATS.17 (LAB)');
-    expect(parsed.originalData.length).toBe(5);
-    const expected = [0, 25, 50, 75, 100];
-    parsed.originalData.forEach((point, idx) => {
-      expect(Math.abs(point.input - expected[idx]) < 1e-6, `expected input ${expected[idx]} at index ${idx}, saw ${point.input}`).toBeTruthy();
-    });
-    expect(parsed.measurementSet.patches.length).toBe(5);
-  });
+  // legacy parity test removed (legacy quadgen.html no longer bundled)
 });

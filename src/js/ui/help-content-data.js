@@ -16,6 +16,30 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '3.0.1': {
+    date: '2025-10-02',
+    title: 'Intent remap parity',
+    sections: {
+      ADDED: [
+        'Added a Playwright regression to confirm the Intent dropdown enables after loading a .quad file.'
+      ],
+      CHANGED: [],
+      FIXED: [
+        'Restored PoPS Matte, PoPS Uncoated, and PoPS Uncoated (softer) intent presets so the modular dropdown matches the legacy single-file build.',
+        'Intent dropdown now enables automatically after loading a .quad whenever no LAB/CGATS measurement is active.'
+      ],
+      REMOVED: [
+        'Removed the legacy parity harnesses that relied on `quadgen.html`; automated tests now target modular quadGEN only.'
+      ],
+      DOCS: []
+    },
+    aboutDialog: [
+      { label: 'Contrast Intent Parity', desc: 'PoPS Matte/Uncoated presets return to the modular dropdown, matching the legacy quadGEN lineup.' },
+      { label: 'Intent Remap', desc: 'Intent dropdown now enables automatically after you load a .quad when no LAB/CGATS data is active.' },
+      { label: 'Regression Coverage', desc: 'New Playwright regression verifies the Intent controls stay enabled after loading .quad files.' },
+      { label: 'Test Suite Cleanup', desc: 'Legacy parity harnesses tied to quadgen.html were retired so automated checks focus on the modular build.' }
+    ]
+  },
   '3.0.0': {
     date: '2025-10-01',
     title: 'Modular milestone',
