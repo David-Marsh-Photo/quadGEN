@@ -186,8 +186,9 @@ EDN `.acv` files and LUTs can seed corrections or intents once a baseline is est
 ## 13. Reference & Further Reading
 - `docs/quadgen_workflow.md` — concise 8-step workflow overview.
 - `docs/LAB_LINEARIZATION_WORKFLOW.md` — deep dive into measurement math.
-- `docs/Auto_White_Black_Limit_Rolloff.md` — background on rolloff design and parity with POPS.
-- `docs/contrast_intents.md` — intent philosophy and metaphors.
+- `docs/features/auto-limit-rolloff.md` — background on rolloff detection, shaping, and POPS parity.
+- `docs/features/contrast-intents.md` — intent math, presets, and customization workflow.
+- `docs/features/correction-vs-intent.md` — quick reference explaining tuning vs. creative interpretation.
 - `docs/File_Specs/` — format specs for `.quad`, `.acv`, `.cube`, and LAB `.txt` files.
 - `docs/POPS_vs_quadGEN_report.md` — comparative analysis vs the POPS profiler.
 

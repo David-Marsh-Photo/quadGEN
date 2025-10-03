@@ -94,14 +94,16 @@ src/
    ```bash
    git add index.html
    git commit -m "🔨 Update quadGEN build"
-   git push origin main
+   bash scripts/push-with-token.sh
    ```
 
 ### Quick Build & Deploy Script
 ```bash
 # Build and deploy in one go
-npm run build && cp dist/index.html . && git add index.html && git commit -m "🔨 Update quadGEN build" && git push
+npm run build && cp dist/index.html . && git add index.html && git commit -m "🔨 Update quadGEN build" && bash scripts/push-with-token.sh
 ```
+
+> **Token setup:** `scripts/push-with-token.sh` reads `githubtoken.md` (username on line 1, personal access token on line 2). The script force-pushes to `main`, so confirm your local branch is ready before running it.
 
 > **Template note:** The build scripts automatically copy `index.template.html` to `index.html` before invoking Vite. Treat `index.html` as generated output—edit the template and source files in `src/` instead.
 
