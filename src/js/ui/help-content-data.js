@@ -16,6 +16,27 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '3.0.3': {
+    date: '2025-10-03',
+    title: 'Smart scaling polish',
+    sections: {
+      ADDED: [
+        'Added a Playwright regression that verifies inserting a Smart point with MK limited to 50% lands on the plotted curve.',
+        'Added a Playwright regression that exercises global Scale with Edit Mode enabled so Smart curves stay aligned after ink-limit changes.'
+      ],
+      CHANGED: [],
+      FIXED: [
+        'Smart point insertion and recompute now respect per-channel ink limits, eliminating the double-scaled plots and missing markers introduced after the scaling tweaks.',
+        'Global scale now preserves Smart curve positioning by skipping the redundant relative-output rescale, preventing the 0.8^2 shrink when scaling after edits, and per-channel edits reapply the active Scale so you can’t bypass the multiplier.'
+      ],
+      REMOVED: [],
+      DOCS: []
+    },
+    aboutDialog: [
+      { label: 'Smart Points', desc: 'Editing Smart curves with reduced ink limits no longer double scales the plot or drops control points.' },
+      { label: 'Regression Suite', desc: 'New Playwright coverage keeps Smart-point insertion and global Scale interactions stable.' }
+    ]
+  },
   '3.0.2': {
     date: '2025-10-03',
     title: 'Global + Nudge polish',

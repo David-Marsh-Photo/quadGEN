@@ -20,6 +20,24 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Docs
 - _Nothing yet._
 
+## [Beta 3.0.3] — 2025-10-03
+### Added
+- Added a Playwright regression that verifies inserting a Smart point with MK limited to 50% lands on the plotted curve.
+- Added a Playwright regression that exercises global Scale with Edit Mode enabled so Smart curves stay aligned after ink-limit changes.
+
+### Changed
+- _Nothing yet._
+
+### Fixed
+- Smart point insertion and recompute now respect per-channel ink limits, eliminating the double-scaled plots and missing markers introduced after the scaling tweaks.
+- Global scale now preserves Smart curve positioning by skipping the redundant relative-output rescale, preventing the 0.8^2 shrink when scaling after edits; manual channel edits immediately reapply the active global Scale so per-channel overrides no longer bypass the multiplier.
+
+### Removed
+- _Nothing yet._
+
+### Docs
+- _Nothing yet._
+
 ## [Beta 3.0.2] — 2025-10-03
 ### Added
 - Added a Playwright regression that deletes an interior Smart key point through the Edit Mode button to guard against regressions.
