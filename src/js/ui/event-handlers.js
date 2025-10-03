@@ -13,7 +13,7 @@ import { updateCompactChannelsList, updateChannelCompactState, updateNoChannelsM
 import { registerChannelRow, getChannelRow } from './channel-registry.js';
 import { updateProcessingDetail, updateSessionStatus } from './graph-status.js';
 import { LinearizationState, normalizeLinearizationEntry, getEditedDisplayName, getBasePointCountLabel } from '../data/linearization-utils.js';
-import { ControlPoints, extractAdaptiveKeyPointsFromValues, KP_SIMPLIFY, isSmartCurve } from '../curves/smart-curves.js';
+import { ControlPoints, extractAdaptiveKeyPointsFromValues, KP_SIMPLIFY, isSmartCurve, rescaleSmartCurveForInkLimit } from '../curves/smart-curves.js';
 import { isEditModeEnabled, setEditMode, populateChannelDropdown, refreshSmartCurvesFromMeasurements, reinitializeChannelSmartCurves, persistSmartPoints } from './edit-mode.js';
 import { getTargetRelAt } from '../data/lab-parser.js';
 import { updatePreview } from './quad-preview.js';
@@ -518,6 +518,15 @@ function handlePercentInput(input) {
         console.log(`[INPUT DEBUG] handlePercentInput called for ${channelName}, value: ${validatedPercent}`);
     }
 
+    let previousPercent = null;
+    let previousEnd = null;
+    if (row) {
+        const currentEndInput = row.querySelector('.end-input');
+        if (currentEndInput) {
+            previousEnd = InputValidator.clampEnd(currentEndInput.value);
+        }
+    }
+
     let manager = null;
     if (channelName) {
         try {
@@ -526,6 +535,10 @@ function handlePercentInput(input) {
                 console.log(`[INPUT DEBUG] State manager exists: ${!!manager}`);
             }
             if (manager) {
+                const storedPercent = manager.get(`printer.channelValues.${channelName}.percentage`);
+                if (Number.isFinite(storedPercent)) {
+                    previousPercent = storedPercent;
+                }
                 manager.setChannelValue(channelName, 'percentage', validatedPercent);
             }
         } catch (err) {
@@ -534,16 +547,17 @@ function handlePercentInput(input) {
     }
 
     // Find corresponding end input and update it
+    let newEndValue = null;
     if (row) {
         const endInput = row.querySelector('.end-input');
         if (endInput) {
-            const endValue = InputValidator.computeEndFromPercent(validatedPercent);
-            endInput.value = endValue;
+            newEndValue = InputValidator.computeEndFromPercent(validatedPercent);
+            endInput.value = newEndValue;
             InputValidator.clearValidationStyling(endInput);
 
             if (channelName && manager) {
                 try {
-                    manager.setChannelValue(channelName, 'endValue', endValue);
+                    manager.setChannelValue(channelName, 'endValue', newEndValue);
                 } catch (err) {
                     console.warn('Failed to sync end value with state manager:', err);
                 }
@@ -551,9 +565,9 @@ function handlePercentInput(input) {
         }
 
         // Update scale baseline for global scale integration
-        const channelName = row.getAttribute('data-channel');
-        if (channelName) {
-            updateScaleBaselineForChannelCore(channelName);
+        const rowChannelName = row.getAttribute('data-channel');
+        if (rowChannelName) {
+            updateScaleBaselineForChannelCore(rowChannelName);
         }
 
         // Call the row's refreshDisplay function (critical for scaling display logic)
@@ -568,6 +582,19 @@ function handlePercentInput(input) {
         } catch (err) {
             console.warn('Failed to sync channel enabled state with state manager:', err);
         }
+    }
+
+    const previousPercentForRescale = Number.isFinite(previousPercent)
+        ? previousPercent
+        : (previousEnd !== null ? InputValidator.computePercentFromEnd(previousEnd) : null);
+    if (
+        channelName &&
+        Number.isFinite(previousPercentForRescale) &&
+        previousPercentForRescale > 0 &&
+        validatedPercent > 0 &&
+        Math.abs(previousPercentForRescale - validatedPercent) > 1e-6
+    ) {
+        rescaleSmartCurveForInkLimit(channelName, previousPercentForRescale, validatedPercent);
     }
 
     // Trigger preview update and chart update
@@ -597,11 +624,33 @@ function handleEndInput(input) {
 
     const row = input.closest('tr');
     const channelName = row?.getAttribute('data-channel');
+
+    let previousPercent = null;
+    let previousEnd = null;
+    if (row) {
+        const percentInput = row.querySelector('.percent-input');
+        if (percentInput) {
+            previousPercent = InputValidator.clampPercent(percentInput.value);
+        }
+        const endInput = row.querySelector('.end-input');
+        if (endInput) {
+            previousEnd = InputValidator.clampEnd(endInput.value);
+        }
+    }
+
     let manager = null;
     if (channelName) {
         try {
             manager = getStateManager?.() ?? null;
             if (manager) {
+                const storedPercent = manager.get(`printer.channelValues.${channelName}.percentage`);
+                if (Number.isFinite(storedPercent)) {
+                    previousPercent = storedPercent;
+                }
+                const storedEnd = manager.get(`printer.channelValues.${channelName}.endValue`);
+                if (Number.isFinite(storedEnd)) {
+                    previousEnd = storedEnd;
+                }
                 manager.setChannelValue(channelName, 'endValue', validatedEnd);
             }
         } catch (err) {
@@ -609,17 +658,19 @@ function handleEndInput(input) {
         }
     }
 
+    let newPercentValue = null;
+
     // Find corresponding percent input and update it
     if (row) {
         const percentInput = row.querySelector('.percent-input');
         if (percentInput) {
-            const percentage = InputValidator.computePercentFromEnd(validatedEnd);
-            percentInput.value = percentage.toFixed(1);
+            newPercentValue = InputValidator.computePercentFromEnd(validatedEnd);
+            percentInput.value = newPercentValue.toFixed(1);
             InputValidator.clearValidationStyling(percentInput);
 
             if (channelName && manager) {
                 try {
-                    manager.setChannelValue(channelName, 'percentage', Number(percentage));
+                    manager.setChannelValue(channelName, 'percentage', Number(newPercentValue));
                 } catch (err) {
                     console.warn('Failed to sync percentage with state manager:', err);
                 }
@@ -627,9 +678,9 @@ function handleEndInput(input) {
         }
 
         // Update scale baseline for global scale integration
-        const channelName = row.getAttribute('data-channel');
-        if (channelName) {
-            updateScaleBaselineForChannelCore(channelName);
+        const rowChannelName = row.getAttribute('data-channel');
+        if (rowChannelName) {
+            updateScaleBaselineForChannelCore(rowChannelName);
         }
 
         // Call the row's refreshDisplay function (critical for scaling display logic)
@@ -644,6 +695,20 @@ function handleEndInput(input) {
         } catch (err) {
             console.warn('Failed to sync channel enabled state with state manager (end input):', err);
         }
+    }
+
+    const previousPercentForRescale = Number.isFinite(previousPercent)
+        ? previousPercent
+        : (previousEnd !== null ? InputValidator.computePercentFromEnd(previousEnd) : null);
+    if (
+        channelName &&
+        Number.isFinite(previousPercentForRescale) &&
+        previousPercentForRescale > 0 &&
+        Number.isFinite(newPercentValue) &&
+        newPercentValue > 0 &&
+        Math.abs(previousPercentForRescale - newPercentValue) > 1e-6
+    ) {
+        rescaleSmartCurveForInkLimit(channelName, previousPercentForRescale, newPercentValue);
     }
 
     // Trigger preview update and chart update
@@ -867,6 +932,89 @@ function initializeFileHandlers() {
             console.warn('globalLinearizationBtn element not found');
         }
 
+        const applyGlobalLinearizationToggle = (enabled) => {
+            const globalData = LinearizationState.getGlobalData();
+            if (!globalData) {
+                if (elements.globalLinearizationToggle) {
+                    elements.globalLinearizationToggle.checked = false;
+                    elements.globalLinearizationToggle.setAttribute('aria-checked', 'false');
+                }
+                showStatus('Load a global correction before enabling the toggle.');
+                return;
+            }
+
+            const applied = !!enabled;
+            LinearizationState.globalApplied = applied;
+            globalData.applied = applied;
+
+            if (isBrowser) {
+                globalScope.linearizationApplied = applied;
+                globalScope.linearizationData = { ...globalData };
+            }
+
+            try {
+                const manager = getStateManager?.();
+                if (manager) {
+                    manager.set('linearization.global.applied', applied);
+                    manager.set('linearization.global.enabled', applied);
+                    manager.set('linearization.global.data', globalData);
+                }
+            } catch (err) {
+                console.warn('Failed to sync global linearization state manager flags:', err);
+            }
+
+            try {
+                updateAppState({
+                    linearizationApplied: applied,
+                    linearizationData: { ...globalData }
+                });
+            } catch (err) {
+                console.warn('Failed to update app state for global linearization:', err);
+            }
+
+            if (elements.globalLinearizationToggle) {
+                elements.globalLinearizationToggle.checked = applied;
+                elements.globalLinearizationToggle.setAttribute('aria-checked', String(applied));
+            }
+
+            if (applied && isEditModeEnabled()) {
+                try {
+                    refreshSmartCurvesFromMeasurements();
+                } catch (err) {
+                    console.warn('Failed to refresh Smart curves after global toggle:', err);
+                }
+            }
+
+            try {
+                updateInkChart();
+                if (typeof updatePreview !== 'undefined') {
+                    updatePreview();
+                }
+
+                const printer = getCurrentPrinter();
+                const channels = printer?.channels || [];
+                channels.forEach((ch) => {
+                    try {
+                        updateProcessingDetail(ch);
+                    } catch (err) {
+                        console.warn(`Failed to refresh processing detail for ${ch}:`, err);
+                    }
+                });
+
+                updateSessionStatus();
+            } catch (err) {
+                console.warn('Failed to refresh UI after global toggle:', err);
+            }
+
+            try {
+                updateRevertButtonsState();
+            } catch (err) {
+                console.warn('Failed to update revert buttons after global toggle:', err);
+            }
+
+            showStatus(applied ? 'Global correction enabled' : 'Global correction disabled');
+        };
+
         // Global linearization file input change handler
         if (elements.linearizationFile) {
             elements.linearizationFile.addEventListener('change', async (e) => {
@@ -968,6 +1116,8 @@ function initializeFileHandlers() {
                         const countLabel = getBasePointCountLabel(normalized);
                         showStatus(`Loaded global correction: ${file.name} (${countLabel})`);
 
+                        applyGlobalLinearizationToggle(true);
+
                     } else {
                         throw new Error('Failed to parse linearization data');
                     }
@@ -982,6 +1132,19 @@ function initializeFileHandlers() {
             });
         } else {
             console.warn('linearizationFile element not found');
+        }
+
+        if (elements.globalLinearizationToggle) {
+            const toggle = elements.globalLinearizationToggle;
+            toggle.addEventListener('change', () => {
+                applyGlobalLinearizationToggle(toggle.checked);
+            });
+
+            const initialApplied = !!(LinearizationState.getGlobalData() && LinearizationState.globalApplied);
+            toggle.checked = initialApplied;
+            toggle.setAttribute('aria-checked', String(initialApplied));
+        } else {
+            console.warn('globalLinearizationToggle element not found');
         }
 
         // Global Revert Button Handler

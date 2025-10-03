@@ -89,7 +89,10 @@ test.describe('Edit Mode channel navigation', () => {
     await page.waitForTimeout(250);
     const afterUndo = await page.evaluate(() => window.EDIT?.selectedChannel ?? null);
     expect(afterUndo).toBe(before.selectedChannel);
-    await page.waitForFunction(() => Array.isArray((window as any).__chartDrawMeta) && (window as any).__chartDrawMeta.some((entry: any) => entry.isSelected));
+    await page.waitForFunction((expected) => {
+      const meta = (window as any).__chartDrawMeta as Array<{ channelName: string; alpha: number; isSelected: boolean }> | undefined;
+      return Array.isArray(meta) && meta.some(entry => entry.channelName === expected && entry.isSelected);
+    }, afterUndo ?? undefined);
     let meta = await page.evaluate(() => (window as any).__chartDrawMeta as Array<{ channelName: string; alpha: number; isSelected: boolean }>);
     let selectedEntry = meta.find(entry => entry.isSelected);
     expect(selectedEntry?.channelName).toBe(afterUndo ?? undefined);
@@ -98,7 +101,10 @@ test.describe('Edit Mode channel navigation', () => {
     await page.waitForTimeout(250);
     const afterRedo = await page.evaluate(() => window.EDIT?.selectedChannel ?? null);
     expect(afterRedo).toBe(expectedNext);
-    await page.waitForFunction(() => Array.isArray((window as any).__chartDrawMeta) && (window as any).__chartDrawMeta.some((entry: any) => entry.isSelected));
+    await page.waitForFunction((expected) => {
+      const meta = (window as any).__chartDrawMeta as Array<{ channelName: string; alpha: number; isSelected: boolean }> | undefined;
+      return Array.isArray(meta) && meta.some(entry => entry.channelName === expected && entry.isSelected);
+    }, expectedNext);
     meta = await page.evaluate(() => (window as any).__chartDrawMeta as Array<{ channelName: string; alpha: number; isSelected: boolean }>);
     selectedEntry = meta.find(entry => entry.isSelected);
     expect(selectedEntry?.channelName).toBe(expectedNext);

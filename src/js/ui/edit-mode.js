@@ -197,15 +197,8 @@ function applyNudgeToSelectedPoint(deltaInput, deltaOutput, event) {
     }
 
     if (deltaOutput !== 0) {
-        const row = getChannelRow(channelName);
-        const endInput = row?.querySelector('.end-input');
-        const endValue = endInput ? InputValidator.clampEnd(endInput.value || 0) : 0;
-        const endPercent = InputValidator.computePercentFromEnd(endValue);
-        const scale = endPercent > 0 ? endPercent / 100 : 1;
-        const currentAbsolute = scale > 0 ? point.output * scale : point.output;
-        const nextAbsolute = Math.max(0, Math.min(100, currentAbsolute + deltaOutput * step));
-        const nextRelative = scale > 0 ? nextAbsolute / scale : nextAbsolute;
-        params.outputPercent = Math.max(0, Math.min(100, nextRelative));
+        const nextOutput = Math.max(0, Math.min(100, point.output + deltaOutput * step));
+        params.outputPercent = nextOutput;
     }
 
     if (isBrowser) {

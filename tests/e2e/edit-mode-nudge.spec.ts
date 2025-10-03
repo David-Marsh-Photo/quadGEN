@@ -62,7 +62,75 @@ test.describe('Edit Mode nudges', () => {
     expect(after.ordinal).toBe(before.ordinal);
     expect(after.output).not.toBeCloseTo(before.output ?? Number.NaN, 3);
     // Expected behaviour: input stays fixed when Y is nudged.
-    // This assertion currently fails due to the bug where the point slides along the plotted curve.
     expect(after.input).toBeCloseTo(before.input ?? Number.NaN, 3);
+  });
+
+  test('vertical nudge respects 1% step even when channel end < 100 and zoomed', async ({ page }) => {
+    const indexUrl = pathToFileURL(resolve('index.html')).href;
+    await page.goto(indexUrl);
+
+    await page.waitForSelector('#globalLinearizationBtn');
+
+    const quadPath = resolve('data/P800_K37_C26_LK25_V1.quad');
+    await page.setInputFiles('input#quadFile', quadPath);
+    await page.waitForFunction(
+      () => window.loadedQuadData?.channels?.includes?.('LK'),
+      undefined,
+      { timeout: 15000 },
+    );
+
+    await page.locator('#editModeToggleBtn').click();
+    await page.waitForFunction(() => window.isEditModeEnabled?.(), undefined, { timeout: 10000 });
+
+    await page.selectOption('#editChannelSelect', 'LK');
+    await page.waitForFunction(
+      () => window.ControlPoints?.get('LK')?.points?.length >= 3,
+      undefined,
+      { timeout: 10000 },
+    );
+
+    // Move to an interior point to avoid endpoint locks
+    await page.locator('#editPointRight').click();
+    await page.waitForTimeout(150);
+
+    // Zoom in to mirror the user scenario where scaling was amplified
+    await page.locator('#chartZoomInBtn').click();
+    await page.waitForTimeout(150);
+
+    const before = await page.evaluate(() => {
+      const channel = window.EDIT?.selectedChannel ?? null;
+      const ordinal = window.EDIT?.selectedOrdinal ?? 1;
+      const points = window.ControlPoints?.get(channel)?.points || [];
+      const point = points[ordinal - 1] || null;
+      return {
+        channel,
+        ordinal,
+        output: point?.output,
+      };
+    });
+
+    await page.locator('#editNudgeYUp').click();
+    await page.waitForTimeout(250);
+
+    const after = await page.evaluate(() => {
+      const channel = window.EDIT?.selectedChannel ?? null;
+      const ordinal = window.EDIT?.selectedOrdinal ?? 1;
+      const points = window.ControlPoints?.get(channel)?.points || [];
+      const point = points[ordinal - 1] || null;
+      return {
+        channel,
+        ordinal,
+        output: point?.output,
+      };
+    });
+
+    const beforeOutput = before.output ?? Number.NaN;
+    const afterOutput = after.output ?? Number.NaN;
+    const delta = afterOutput - beforeOutput;
+
+    expect(after.channel).toBe(before.channel);
+    expect(after.ordinal).toBe(before.ordinal);
+    expect(delta).toBeGreaterThan(0.9);
+    expect(delta).toBeLessThan(1.1);
   });
 });

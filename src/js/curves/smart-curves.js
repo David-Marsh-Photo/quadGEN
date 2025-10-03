@@ -366,7 +366,14 @@ export function rescaleSmartCurveForInkLimit(channelName, fromPercent, toPercent
         output: Math.min(100, p.output * scaleFactor)
     }));
 
-    const result = setSmartKeyPoints(channelName, rescaledPoints, interpolation);
+    const result = setSmartKeyPoints(channelName, rescaledPoints, interpolation, {
+        allowWhenEditModeOff: true,
+        skipUiRefresh: false,
+        historyExtras: {
+            rescaledFromPercent: fromPercent,
+            rescaledToPercent: toPercent
+        }
+    });
     return !!result.success;
 }
 
@@ -741,10 +748,10 @@ export function deleteSmartKeyPointByIndex(channelName, ordinal, options = {}) {
     // Remove the point and apply updated set
     points.splice(idx, 1);
 
-    const nextOrdinalAfterDelete = Math.max(1, Math.min(rawOrdinal, points.length));
+    const nextOrdinalAfterDelete = Math.max(1, Math.min(ordinal, points.length));
     const result = setSmartKeyPoints(channelName, points, interpType, {
         historyExtras: {
-            deletedOrdinal: rawOrdinal,
+            deletedOrdinal: ordinal,
             deletedPoint,
             selectedOrdinalAfter: nextOrdinalAfterDelete
         }

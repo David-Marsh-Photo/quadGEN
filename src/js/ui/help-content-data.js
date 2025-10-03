@@ -16,6 +16,32 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '3.0.2': {
+    date: '2025-10-03',
+    title: 'Global + Nudge polish',
+    sections: {
+      ADDED: [
+        'Added a Playwright regression to confirm the Edit Mode Delete button removes an interior Smart key point as expected.',
+        'Added a Playwright regression that covers LK ink-limit edits after toggling Edit Mode so the state stays in sync.',
+        'Added a Playwright regression that flips the global correction toggle to ensure LAB data can be disabled and re-enabled.',
+        'Added a Playwright regression that verifies Edit Mode nudges stay at a 1% step even with zoom and reduced ink limits.'
+      ],
+      CHANGED: [],
+      FIXED: [
+        'Edit Mode Delete button removes the selected Smart key point again instead of doing nothing.',
+        'LK per-channel scaling now increases the ink limit when you raise the percentage after leaving Edit Mode.',
+        'Global correction toggle now actually disables the loaded LAB correction until you turn it back on.',
+        'Edit Mode nudges now move points by exactly 1% in chart space; zoom and reduced ink limits no longer amplify the step.'
+      ],
+      REMOVED: [],
+      DOCS: []
+    },
+    aboutDialog: [
+      { label: 'Smart Point Nudges', desc: 'Edit Mode nudges now move Smart points by exactly 1% even after you zoom the chart or limit channel ink.' },
+      { label: 'LAB Toggle', desc: 'Global LAB/LUT corrections truly disable when you flip the toggle off, matching the legacy behaviour.' },
+      { label: 'Regression Coverage', desc: 'Playwright tests cover Delete button, LK scaling, global toggle, and Smart-point nudges.' }
+    ]
+  },
   '3.0.1': {
     date: '2025-10-02',
     title: 'Intent remap parity',

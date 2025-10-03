@@ -16,7 +16,10 @@ test.describe('Printer switching', () => {
     const indexUrl = pathToFileURL(resolve('index.html')).href;
     await page.goto(indexUrl);
 
-    await page.waitForSelector('#rows tr[data-channel]');
+    await page.waitForFunction(
+      (expectedLength) => document.querySelectorAll('#rows tr[data-channel]').length === expectedLength,
+      INITIAL_CHANNELS.length,
+    );
 
     const initialChannels = await getChannelOrder(page);
     expect(initialChannels).toEqual(INITIAL_CHANNELS);

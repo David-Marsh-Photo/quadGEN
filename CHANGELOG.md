@@ -20,6 +20,28 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Docs
 - _Nothing yet._
 
+## [Beta 3.0.2] — 2025-10-03
+### Added
+- Added a Playwright regression that deletes an interior Smart key point through the Edit Mode button to guard against regressions.
+- Added a Playwright regression that verifies LK ink limits increase correctly after toggling Edit Mode.
+- Added a Playwright regression that toggles global LAB corrections on/off to ensure the enable switch reflects state.
+- Added a Playwright regression that checks Edit Mode nudges move points by the expected 1% even with non-100% ink limits and zoom.
+
+### Changed
+- _Nothing yet._
+
+### Fixed
+- Fixed the Edit Mode Delete button so it removes the selected Smart key point instead of failing silently.
+- Fixed LK per-channel scaling so increasing the percentage after exiting Edit Mode raises the ink limit instead of reusing the older, lower value.
+- Fixed the global correction toggle so disabling it actually removes the LAB correction until re-enabled.
+- Fixed Edit Mode nudges so each click adjusts the Smart point by the intended 1% in chart space regardless of channel ink limits or zoom.
+
+### Removed
+- _Nothing yet._
+
+### Docs
+- _Nothing yet._
+
 ## [Beta 3.0.1] — 2025-10-02
 ### Added
 - Added a Playwright regression that ensures the Intent dropdown enables after loading a .quad file.
