@@ -6,6 +6,7 @@ import { LAB_TUNING } from '../core/config.js';
 import { LinearizationState, normalizeLinearizationEntry, getBasePointCountLabel } from '../data/linearization-utils.js';
 import { DataSpace } from '../data/processing-utils.js';
 import { updatePreview } from './quad-preview.js';
+import { postLinearizationSummary } from './labtech-summaries.js';
 import { updateFilename, downloadFile } from '../files/file-operations.js';
 import { createPCHIPSpline } from '../math/interpolation.js';
 import { triggerRevertButtonsUpdate } from './ui-hooks.js';
@@ -334,6 +335,14 @@ function applyManualLinearization(validation) {
 
   updatePreview();
   updateFilename();
+
+  try {
+    postLinearizationSummary();
+  } catch (summaryErr) {
+    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+      console.warn('[LabTechSummary] Failed to post summary after manual L* apply:', summaryErr);
+    }
+  }
 
   hideModal();
 

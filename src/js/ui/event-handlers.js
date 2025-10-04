@@ -8,7 +8,7 @@ import { generateFilename, downloadFile, readFileAsText } from '../files/file-op
 import { InputValidator } from '../core/validation.js';
 import { parseQuadFile, parseLinearizationFile } from '../parsers/file-parsers.js';
 import { updateInkChart, stepChartZoom } from './chart-manager.js';
-import { getCurrentScale, updateScaleBaselineForChannel as updateScaleBaselineForChannelCore, applyGlobalScale as applyGlobalScaleCore } from '../core/scaling-utils.js';
+import { getCurrentScale, updateScaleBaselineForChannel as updateScaleBaselineForChannelCore, applyGlobalScale as applyGlobalScaleCore, scaleChannelEndsByPercent as scaleChannelEndsByPercentCore } from '../core/scaling-utils.js';
 import { updateCompactChannelsList, updateChannelCompactState, updateNoChannelsMessage } from './compact-channels.js';
 import { registerChannelRow, getChannelRow } from './channel-registry.js';
 import { updateProcessingDetail, updateSessionStatus } from './graph-status.js';
@@ -16,6 +16,7 @@ import { LinearizationState, normalizeLinearizationEntry, getEditedDisplayName, 
 import { ControlPoints, extractAdaptiveKeyPointsFromValues, KP_SIMPLIFY, isSmartCurve, rescaleSmartCurveForInkLimit } from '../curves/smart-curves.js';
 import { isEditModeEnabled, setEditMode, populateChannelDropdown, refreshSmartCurvesFromMeasurements, reinitializeChannelSmartCurves, persistSmartPoints } from './edit-mode.js';
 import { getTargetRelAt } from '../data/lab-parser.js';
+import { postLinearizationSummary } from './labtech-summaries.js';
 import { updatePreview } from './quad-preview.js';
 import { getPreset, canApplyIntentRemap, updateIntentDropdownState } from './intent-system.js';
 import { getHistoryManager } from '../core/history-manager.js';
@@ -496,6 +497,16 @@ function initializeChannelRowHandlers() {
         }
     });
 
+    elements.rows.addEventListener('change', (e) => {
+        const target = e.target;
+
+        if (target.classList.contains('percent-input')) {
+            handlePercentInput(target);
+        } else if (target.classList.contains('end-input')) {
+            handleEndInput(target);
+        }
+    });
+
     // Custom event for when channels are changed
     elements.rows.addEventListener('channelsChanged', () => {
         if (typeof updatePreview !== 'undefined') {
@@ -594,7 +605,21 @@ function handlePercentInput(input) {
         validatedPercent > 0 &&
         Math.abs(previousPercentForRescale - validatedPercent) > 1e-6
     ) {
-        rescaleSmartCurveForInkLimit(channelName, previousPercentForRescale, validatedPercent);
+        rescaleSmartCurveForInkLimit(channelName, previousPercentForRescale, validatedPercent, {
+            mode: 'preserveRelative',
+            historyExtras: { triggeredBy: 'percentInput' }
+        });
+    }
+
+    const currentScalePercent = typeof getCurrentScale === 'function' ? getCurrentScale() : 100;
+    if (Number.isFinite(currentScalePercent) && Math.abs(currentScalePercent - 100) > 1e-6) {
+        setTimeout(() => {
+            try {
+                scaleChannelEndsByPercentCore(currentScalePercent, { skipHistory: true });
+            } catch (err) {
+                console.warn('[SCALE] Reapply after percent edit failed:', err);
+            }
+        }, 0);
     }
 
     // Trigger preview update and chart update
@@ -708,7 +733,21 @@ function handleEndInput(input) {
         newPercentValue > 0 &&
         Math.abs(previousPercentForRescale - newPercentValue) > 1e-6
     ) {
-        rescaleSmartCurveForInkLimit(channelName, previousPercentForRescale, newPercentValue);
+        rescaleSmartCurveForInkLimit(channelName, previousPercentForRescale, newPercentValue, {
+            mode: 'preserveRelative',
+            historyExtras: { triggeredBy: 'endInput' }
+        });
+    }
+
+    const currentScalePercent = typeof getCurrentScale === 'function' ? getCurrentScale() : 100;
+    if (Number.isFinite(currentScalePercent) && Math.abs(currentScalePercent - 100) > 1e-6) {
+        setTimeout(() => {
+            try {
+                scaleChannelEndsByPercentCore(currentScalePercent, { skipHistory: true });
+            } catch (err) {
+                console.warn('[SCALE] Reapply after end edit failed:', err);
+            }
+        }, 0);
     }
 
     // Trigger preview update and chart update
@@ -1109,6 +1148,14 @@ function initializeFileHandlers() {
                         // Update session status to show the loaded file
                         if (typeof updateSessionStatus === 'function') {
                             updateSessionStatus();
+                        }
+
+                        try {
+                            postLinearizationSummary();
+                        } catch (summaryErr) {
+                            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                                console.warn('[LabTechSummary] Failed to post summary after global load:', summaryErr);
+                            }
                         }
 
                         console.log('✅ Global linearization applied successfully');

@@ -79,6 +79,8 @@ import {
     initializeIntentSystem
 } from './js/ui/intent-system.js';
 
+import './js/ui/labtech-summaries.js';
+
 import {
     drawChartAxes,
     drawCurve,
