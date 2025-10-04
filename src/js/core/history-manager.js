@@ -895,12 +895,30 @@ export class HistoryManager {
             const globalLin = snapshot.linearization?.global || {};
             LinearizationState.globalData = globalLin.data || null;
             LinearizationState.globalApplied = !!globalLin.applied;
+            LinearizationState.globalBakedMeta = globalLin.baked || null;
 
             const perData = snapshot.linearization?.perChannel?.data || {};
             const perEnabled = snapshot.linearization?.perChannel?.enabled || {};
 
             LinearizationState.perChannelData = JSON.parse(JSON.stringify(perData));
             LinearizationState.perChannelEnabled = { ...perEnabled };
+
+            const bakedMeta = globalLin.baked || null;
+            try {
+                if (this.stateManager) {
+                    this.stateManager.set('linearization.global.baked', bakedMeta, { skipHistory: true });
+                }
+            } catch (err) {
+                console.warn('HistoryManager: failed to restore baked meta in state manager:', err);
+            }
+
+            if (isBrowser && typeof globalScope.__quadSetGlobalBakedState === 'function') {
+                try {
+                    globalScope.__quadSetGlobalBakedState(bakedMeta, { skipHistory: true });
+                } catch (err) {
+                    console.warn('HistoryManager: failed to apply baked UI state during restore:', err);
+                }
+            }
 
             const perFilenames = snapshot.ui?.filenames?.perChannelLinearization || {};
             updateAppState({

@@ -146,6 +146,11 @@ export class GraphStatus {
                         globalName = appState.linearizationData.filename || 'data';
                     }
                 }
+                const bakedMeta = LinearizationState?.getGlobalBakedMeta?.();
+                if (bakedMeta) {
+                    const bakedLabel = bakedMeta.filename || globalName || 'correction';
+                    globalName = `*BAKED* ${bakedLabel}`;
+                }
             } catch (err) {}
 
             // Build intent label (only show when non-linear)
@@ -260,6 +265,12 @@ export class GraphStatus {
             const curves = loadedData.curves || {};
             const originalCurves = loadedData.originalCurves || {};
             const sources = loadedData.sources || {};
+            const keyPointsMeta = (loadedData.keyPointsMeta || {})[channelName] || {};
+            const bakedMetaState = typeof LinearizationState.getGlobalBakedMeta === 'function'
+                ? LinearizationState.getGlobalBakedMeta()
+                : null;
+            const isBakedGlobal = !!(keyPointsMeta.bakedGlobal || bakedMetaState);
+            const bakedFilename = keyPointsMeta.bakedFilename || bakedMetaState?.filename || null;
 
             const perInfo = resolvePerChannelLinearization(channelName);
             const globalInfo = resolveGlobalLinearization();
@@ -278,13 +289,23 @@ export class GraphStatus {
                 }
             }
 
+            const smartPointSet = ControlPoints.get(channelName)?.points || null;
+            const smartCount = Array.isArray(smartPointSet) ? smartPointSet.length : null;
+
             const perDisabled = perInfo.data && !perInfo.enabled;
             if (hasSmartCurve && perInfo.data && perDisabled) {
-                const smartPoints = ControlPoints.get(channelName).points;
-                const smartCount = Array.isArray(smartPoints) ? smartPoints.length : null;
                 const displayName = getEditedDisplayName(perInfo.filename || perInfo.data.filename || 'unknown file', perInfo.edited);
                 const countLabel = smartCount ? `${smartCount} key points` : getBasePointCountLabel(perInfo.data);
-                const text = `${displayName} (${countLabel})`;
+                const segments = [];
+                if (isBakedGlobal) {
+                    const bakedName = bakedFilename || perInfo.data?.filename || displayName || 'correction';
+                    const bakedSegment = smartCount
+                        ? `*BAKED* ${bakedName} (${smartCount} key points)`
+                        : `*BAKED* ${bakedName}`;
+                    segments.push(bakedSegment);
+                }
+                segments.push(`${displayName} (${countLabel})`);
+                const text = segments.join(' • ');
                 processingLabel.textContent = text;
                 processingLabel.setAttribute('title', text);
                 return;
@@ -292,9 +313,11 @@ export class GraphStatus {
 
             if (hasCurve) {
                 if (hasSmartCurve) {
-                    const smartPoints = ControlPoints.get(channelName).points;
-                    const count = Array.isArray(smartPoints) ? smartPoints.length : 0;
-                    const suffix = count > 0 ? ` (${count} key points)` : '';
+                    if (isBakedGlobal) {
+                        const bakedName = bakedFilename || globalInfo.data?.filename || 'correction';
+                        segmentsApplied.push(`*BAKED* ${bakedName}`);
+                    }
+                    const suffix = smartCount && smartCount > 0 ? ` (${smartCount} key points)` : '';
                     segmentsApplied.push(`Smart Curve${suffix}`);
                 } else {
                     const baseFile = loadedData.filename || 'loaded .quad';
@@ -330,6 +353,10 @@ export class GraphStatus {
             const tooltip = segmentsApplied.join(' | ');
             if (segmentsApplied.length > 1) {
                 segmentsApplied[0] = `${segmentsApplied[0]} ↴`;
+            }
+
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.log('[status] processing segments', channelName, segmentsApplied);
             }
 
             const html = segmentsApplied

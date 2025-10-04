@@ -254,6 +254,9 @@ export class QuadGenActions {
             const message = statusMessage || `Applied global correction (${pointSummary})`;
 
             LinearizationState.setGlobalData(normalized, true);
+            if (typeof window !== 'undefined' && typeof window.__quadSetGlobalBakedState === 'function') {
+                window.__quadSetGlobalBakedState(null, { skipHistory: true });
+            }
             updateAppState({
                 linearizationData: normalized,
                 linearizationApplied: true
@@ -857,7 +860,14 @@ export class QuadGenActions {
     revertGlobalToMeasurement() {
         try {
             const revertState = computeGlobalRevertState();
-            const { isMeasurement, hasSmartEdits, wasEdited, globalData } = revertState;
+            const { isMeasurement, hasSmartEdits, wasEdited, isBaked, globalData } = revertState;
+
+            if (isBaked) {
+                return {
+                    success: false,
+                    message: 'Global measurement already baked into Smart curves. Use undo to restore.'
+                };
+            }
 
             if (!isMeasurement || !(hasSmartEdits || wasEdited)) {
                 return {
@@ -882,6 +892,9 @@ export class QuadGenActions {
             if (globalData) {
                 globalData.edited = false;
                 LinearizationState.setGlobalData(globalData, true);
+                if (typeof window !== 'undefined' && typeof window.__quadSetGlobalBakedState === 'function') {
+                    window.__quadSetGlobalBakedState(null, { skipHistory: true });
+                }
                 updateAppState({ linearizationData: globalData, linearizationApplied: true });
                 if (isBrowser) {
                     globalScope.linearizationData = globalData;

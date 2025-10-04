@@ -10,6 +10,7 @@ import {
     normalizeDisplayMax
 } from './chart-utils.js';
 import { registerDebugNamespace } from '../utils/debug-registry.js';
+import { toAbsoluteOutput } from '../curves/smart-curves.js';
 import { getLegacyScope } from '../legacy/legacy-helpers.js';
 
 let lastSmartOverlayDetails = null;
@@ -327,7 +328,8 @@ export function drawSmartKeyPointOverlays(ctx, geom, colors, channelName, keyPoi
             const xNorm = Math.max(0, Math.min(1, (pt.input || 0) / 100));
             const x = geom.leftPadding + xNorm * geom.chartWidth;
 
-            let outputPercent = Math.max(0, Math.min(100, pt.output || 0));
+            const absoluteOutput = toAbsoluteOutput(channelName, pt.output || 0);
+            let outputPercent = Math.max(0, Math.min(100, absoluteOutput));
 
             // When we have the processed curve samples, use them only as a sanity check.
             // If the stored Smart point deviates wildly from the plotted curve (e.g. >10%),

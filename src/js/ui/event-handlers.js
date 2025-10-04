@@ -14,7 +14,7 @@ import { registerChannelRow, getChannelRow } from './channel-registry.js';
 import { updateProcessingDetail, updateSessionStatus } from './graph-status.js';
 import { LinearizationState, normalizeLinearizationEntry, getEditedDisplayName, getBasePointCountLabel } from '../data/linearization-utils.js';
 import { ControlPoints, extractAdaptiveKeyPointsFromValues, KP_SIMPLIFY, isSmartCurve, rescaleSmartCurveForInkLimit } from '../curves/smart-curves.js';
-import { isEditModeEnabled, setEditMode, populateChannelDropdown, refreshSmartCurvesFromMeasurements, reinitializeChannelSmartCurves, persistSmartPoints } from './edit-mode.js';
+import { isEditModeEnabled, setEditMode, populateChannelDropdown, refreshSmartCurvesFromMeasurements, reinitializeChannelSmartCurves, persistSmartPoints, setGlobalBakedState } from './edit-mode.js';
 import { getTargetRelAt } from '../data/lab-parser.js';
 import { postLinearizationSummary } from './labtech-summaries.js';
 import { updatePreview } from './quad-preview.js';
@@ -982,6 +982,15 @@ function initializeFileHandlers() {
                 return;
             }
 
+            if (LinearizationState.isGlobalBaked?.() && !enabled) {
+                if (elements.globalLinearizationToggle) {
+                    elements.globalLinearizationToggle.checked = true;
+                    elements.globalLinearizationToggle.setAttribute('aria-checked', 'true');
+                }
+                showStatus('Global correction is baked into Smart curves. Undo or revert to disable.');
+                return;
+            }
+
             const applied = !!enabled;
             LinearizationState.globalApplied = applied;
             globalData.applied = applied;
@@ -1084,6 +1093,7 @@ function initializeFileHandlers() {
 
                         // Use LinearizationState for modular system
                         LinearizationState.setGlobalData(normalized, true);
+                        setGlobalBakedState(null, { skipHistory: true });
                         updateAppState({ linearizationData: normalized, linearizationApplied: true });
 
                         if (isEditModeEnabled()) {
@@ -1200,17 +1210,20 @@ function initializeFileHandlers() {
                 // Guard: only perform revert when there's something to revert (Smart Curves exist OR data was edited)
                 try {
                     const revertState = computeGlobalRevertState();
-                    const { isMeasurement, hasSmartEdits, wasEdited, globalData } = revertState;
+                    const { isMeasurement, hasSmartEdits, wasEdited, isBaked, globalData } = revertState;
                     const fmt = String(globalData?.format || '').toUpperCase();
                     const hasOriginal = Array.isArray(globalData?.originalData);
                     const isEnabled = LinearizationState.isGlobalEnabled();
-                    const shouldRevert = isMeasurement && (hasSmartEdits || wasEdited);
+                    const shouldRevert = !isBaked && isMeasurement && (hasSmartEdits || wasEdited);
 
                     if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-                        console.log(`[DEBUG REVERT] Button clicked: fmt="${fmt}", hasData=${!!globalData}, applied=${isEnabled}, hasOriginal=${hasOriginal}, isMeasurement=${isMeasurement}, hasSmartEdits=${hasSmartEdits}, wasEdited=${wasEdited}, shouldRevert=${shouldRevert}`);
+                        console.log(`[DEBUG REVERT] Button clicked: fmt="${fmt}", hasData=${!!globalData}, applied=${isEnabled}, hasOriginal=${hasOriginal}, isMeasurement=${isMeasurement}, hasSmartEdits=${hasSmartEdits}, wasEdited=${wasEdited}, isBaked=${isBaked}, shouldRevert=${shouldRevert}`);
                     }
 
                     if (!shouldRevert) {
+                        if (isBaked) {
+                            showStatus('Global correction already baked into Smart curves. Use undo to restore measurement.');
+                        }
                         if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
                             console.log('[DEBUG REVERT] Guard check failed - nothing to revert');
                         }
@@ -1265,6 +1278,7 @@ function initializeFileHandlers() {
                         globalScope.linearizationData = globalData;
                         globalScope.linearizationApplied = true;
                     }
+                    setGlobalBakedState(null);
                 }
 
                 try {
@@ -1297,7 +1311,7 @@ function initializeFileHandlers() {
 
                     try {
                         const finalState = computeGlobalRevertState();
-                        const shouldEnableFinal = finalState.isMeasurement && (finalState.hasSmartEdits || finalState.wasEdited);
+                        const shouldEnableFinal = !finalState.isBaked && finalState.isMeasurement && (finalState.hasSmartEdits || finalState.wasEdited);
                         if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
                             console.log('[DEBUG REVERT] Final global revert state', finalState);
                         }

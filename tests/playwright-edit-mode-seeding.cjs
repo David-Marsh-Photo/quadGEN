@@ -5,7 +5,7 @@ const { captureFailure } = require('./helpers/screenshot.cjs');
 (async () => {
   const rootDir = path.resolve(__dirname, '..');
   const indexPath = path.join(rootDir, 'index.html');
-  const dataPath = path.join(rootDir, 'Color-Muse-Data.txt');
+  const dataPath = path.join(rootDir, 'data', 'Color-Muse-Data.txt');
 
   async function launchBrowser() {
     const launchers = [

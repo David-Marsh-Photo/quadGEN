@@ -82,7 +82,17 @@ class ParityTestRunner {
         }
 
         // Check for LAB test data
-        const labFiles = fs.readdirSync('.').filter(f => f.endsWith('.txt') && f.includes('Color-Muse'));
+        const labSearchDirs = ['.', path.join('.', 'data')];
+        const labFiles = labSearchDirs.flatMap(dir => {
+            try {
+                return fs.readdirSync(dir)
+                    .filter(f => f.endsWith('.txt') && f.includes('Color-Muse'))
+                    .map(f => path.join(dir, f));
+            } catch (err) {
+                return [];
+            }
+        });
+
         if (labFiles.length === 0) {
             console.log('  ⚠️  No LAB test files found (Color-Muse-Data.txt)');
             console.log('     Some tests will require manual data loading');

@@ -91,11 +91,52 @@ export function resetChannelSmartPointsToMeasurement(channelName, options = {}) 
 
   if (measurementSeed && Array.isArray(measurementSeed.points) && measurementSeed.points.length >= 2) {
     try {
-      persistSmartPoints(channelName, measurementSeed.points, interpolation, {
+      const hasOriginal = Array.isArray(measurementSeed.originalPoints) && measurementSeed.originalPoints.length >= 2;
+      let sourcePoints;
+      let pointsAreRelative = true;
+
+      if (hasOriginal) {
+        const row = elements.rows
+          ? Array.from(elements.rows.children).find(tr => tr.getAttribute('data-channel') === channelName)
+          : null;
+        const percentValue = row ? parseFloat(row.querySelector('.percent-input')?.value || '0') : 0;
+        const channelPercent = Number.isFinite(percentValue) && percentValue > 0 ? percentValue : 100;
+        sourcePoints = measurementSeed.originalPoints.map((point) => {
+          const absolute = Number(point.output);
+          const relative = channelPercent > 0 ? (absolute / channelPercent) * 100 : absolute;
+          return {
+            input: Number(point.input),
+            output: Math.max(0, Math.min(100, relative))
+          };
+        });
+      } else {
+        sourcePoints = measurementSeed.points.map((point) => ({
+          input: Number(point.input),
+          output: Number(point.output)
+        }));
+      }
+
+      if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+        console.log('[revert-controls] attempting seed restore', {
+          channelName,
+          hasOriginal,
+          sourceCount: Array.isArray(sourcePoints) ? sourcePoints.length : null
+        });
+      }
+
+      persistSmartPoints(channelName, sourcePoints, interpolation, {
         measurementSeed,
         smartTouched: false,
-        skipUiRefresh
+        skipUiRefresh,
+        includeBakedFlags: false,
+        pointsAreRelative
       });
+      if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+        console.log('[revert-controls] restoredFromSeed', channelName, {
+          hasOriginal,
+          sourceCount: Array.isArray(sourcePoints) ? sourcePoints.length : null
+        });
+      }
       if (skipUiRefresh) {
         try {
           triggerInkChartUpdate();
@@ -154,8 +195,13 @@ export function resetSmartPointsForChannels(channelNames, options = {}) {
 export function computeGlobalRevertState() {
   const loadedData = getLoadedQuadData();
   const globalData = LinearizationState.getGlobalData();
+  const measurementAvailable = isMeasurementData(globalData);
+  const bakedMeta = typeof LinearizationState.getGlobalBakedMeta === 'function'
+    ? LinearizationState.getGlobalBakedMeta()
+    : null;
+  const isGlobalBaked = !!bakedMeta;
   const globalApplied = !!LinearizationState.globalApplied;
-  const isMeasurement = globalApplied && isMeasurementData(globalData);
+  const isMeasurement = measurementAvailable && globalApplied && !isGlobalBaked;
   const wasEdited = !!globalData?.edited;
   const channels = getCurrentPrinter()?.channels || [];
   const metaMap = loadedData?.keyPointsMeta || {};
@@ -178,7 +224,9 @@ export function computeGlobalRevertState() {
     wasEdited,
     hasSmartEdits,
     channelStates,
-    globalData
+    globalData,
+    isBaked: isGlobalBaked,
+    bakedMeta
   };
 }
 
@@ -186,16 +234,17 @@ export function updateRevertButtonsState() {
   let channelStates = null;
   try {
     const globalState = computeGlobalRevertState();
-    const { isMeasurement, wasEdited, hasSmartEdits, channelStates: stateMap } = globalState;
+    const { isMeasurement, wasEdited, hasSmartEdits, isBaked, channelStates: stateMap } = globalState;
     channelStates = stateMap;
     const globalBtn = document.getElementById('revertGlobalToMeasurementBtn');
     if (globalBtn) {
-      const shouldEnable = isMeasurement && (hasSmartEdits || wasEdited);
+      const shouldEnable = !isBaked && isMeasurement && (hasSmartEdits || wasEdited);
       if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
         console.log('[REVERT CONTROLS] Global button state', JSON.stringify({
           isMeasurement,
           wasEdited,
           hasSmartEdits,
+          isBaked,
           shouldEnable,
           smartTouchedMap: channelStates
         }));

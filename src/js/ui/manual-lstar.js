@@ -302,6 +302,9 @@ function applyManualLinearization(validation) {
   const normalized = normalizeLinearizationEntry(correctionData, DataSpace.SPACE.PRINTER);
 
   LinearizationState.setGlobalData(normalized, true);
+  if (typeof window !== 'undefined' && typeof window.__quadSetGlobalBakedState === 'function') {
+    window.__quadSetGlobalBakedState(null, { skipHistory: true });
+  }
   updateAppState({ linearizationData: normalized, linearizationApplied: true });
   legacyLinearizationBridge.setGlobalState(normalized, true);
 

@@ -1,0 +1,378 @@
+import { test, expect } from '@playwright/test';
+import { existsSync, mkdirSync } from 'fs';
+import { resolve } from 'path';
+import { pathToFileURL } from 'url';
+
+test.describe('Edit Mode key point scaling', () => {
+  test('inserting a Smart point follows the plotted curve after scaling', async ({ page }) => {
+    const indexUrl = pathToFileURL(resolve('index.html')).href;
+    await page.goto(indexUrl);
+
+    await page.waitForSelector('#globalLinearizationBtn', { timeout: 15000 });
+
+    const mkPercent = page.locator('tr[data-channel="MK"] input.percent-input');
+    await mkPercent.click();
+    await mkPercent.fill('50');
+    await mkPercent.press('Enter');
+    await expect(mkPercent).toHaveValue('50');
+
+    const zoomIn = page.locator('#chartZoomInBtn');
+    await expect(zoomIn).toBeEnabled();
+    for (let i = 0; i < 4; i += 1) {
+      await zoomIn.click();
+      await page.waitForTimeout(150);
+    }
+
+    await page.locator('#editModeToggleBtn').click();
+    await expect(page.locator('#editModeLabel')).toHaveText(/ON/);
+
+    await page.waitForFunction(() => {
+      const control = window.ControlPoints?.get?.('MK');
+      return Array.isArray(control?.points) && control.points.length >= 2;
+    });
+
+    const rect = await page.evaluate(() => {
+      const canvas = document.querySelector('canvas#inkChart');
+      if (!canvas) {
+        throw new Error('ink chart canvas not found');
+      }
+      const r = canvas.getBoundingClientRect();
+      return { left: r.left, top: r.top, width: r.width, height: r.height };
+    });
+
+    const clickX = rect.left + rect.width * 0.5;
+    const clickY = rect.top + rect.height * 0.5;
+    await page.mouse.click(clickX, clickY);
+    await page.waitForTimeout(400);
+
+    const analysis = await page.evaluate(() => {
+      const row = document.querySelector('tr[data-channel="MK"]');
+      const endInput = row?.querySelector('.end-input');
+      const endValue = window.InputValidator?.clampEnd?.(endInput?.value ?? 0) ?? 0;
+      const channelPercent = parseFloat(row?.querySelector('.percent-input')?.value ?? '100') || 100;
+      const control = window.ControlPoints?.get?.('MK');
+      const points = control?.points ?? [];
+      const inserted = points.reduce((best, point) => {
+        if (!best) return point;
+        return Math.abs(point.input - 50) < Math.abs(best.input - 50) ? point : best;
+      }, points[0] ?? null);
+
+      const curve = typeof window.make256 === 'function'
+        ? window.make256(endValue, 'MK', window.LinearizationState?.globalApplied ?? false)
+        : null;
+
+      let samplePercent: number | null = null;
+      if (curve && inserted) {
+        const idx = Math.round((inserted.input / 100) * (curve.length - 1));
+        samplePercent = (curve[idx] / 65535) * 100;
+      }
+
+      const tooltip = document.querySelector('#chartCursorTooltip');
+
+      const insertedAbsolute = inserted
+        ? {
+            input: inserted.input,
+            output: (inserted.output / 100) * channelPercent,
+          }
+        : null;
+
+      return {
+        insertedRelative: inserted,
+        inserted: insertedAbsolute,
+        samplePercent,
+        delta:
+          insertedAbsolute && samplePercent !== null
+            ? samplePercent - insertedAbsolute.output
+            : null,
+        tooltipText: tooltip?.textContent?.trim() ?? null,
+      };
+    });
+
+    expect(analysis.inserted).toBeTruthy();
+    expect(analysis.samplePercent).not.toBeNull();
+    expect(Math.abs((analysis.delta ?? Number.NaN))).toBeLessThanOrEqual(0.5);
+    expect(analysis.tooltipText).toBeTruthy();
+  });
+
+  test('recompute regenerates Smart points without double-scaling', async ({ page }) => {
+    const indexUrl = pathToFileURL(resolve('index.html')).href;
+    await page.goto(indexUrl);
+
+    await page.waitForSelector('#globalLinearizationBtn', { timeout: 15000 });
+
+    const quadPath = resolve('testdata/humped_shadow_dip.quad');
+    await page.setInputFiles('input#quadFile', quadPath);
+
+    await page.waitForFunction(() => window.getLoadedQuadData?.()?.curves?.K, undefined, { timeout: 20000 });
+
+    await page.locator('#editModeToggleBtn').click();
+    await page.waitForFunction(() => window.ControlPoints?.get?.('K')?.points?.length >= 3, undefined, { timeout: 20000 });
+
+    const beforeSnapshot = await page.evaluate(() => JSON.stringify(window.ControlPoints?.get?.('K')?.points || []));
+
+    await page.locator('#editRecomputeBtn').click();
+    await page.waitForFunction((previous) => {
+      const points = window.ControlPoints?.get?.('K')?.points || [];
+      return points.length > 0 && JSON.stringify(points) !== previous;
+    }, beforeSnapshot, { timeout: 20000, polling: 100 });
+
+    const analysis = await page.evaluate(() => {
+      const row = document.querySelector('tr[data-channel="K"]');
+      const percentInput = row?.querySelector('.percent-input');
+      const channelPercent = parseFloat(percentInput?.value ?? '100') || 100;
+      const control = window.ControlPoints?.get?.('K');
+      const points = control?.points ?? [];
+      const endInput = row?.querySelector('.end-input');
+      const endValue = window.InputValidator?.clampEnd?.(endInput?.value ?? 0) ?? 0;
+      const curve = typeof window.make256 === 'function'
+        ? window.make256(endValue, 'K', window.LinearizationState?.globalApplied ?? false)
+        : null;
+
+      const comparisons = points.map((point) => {
+        const absolute = (point.output / 100) * channelPercent;
+        if (!curve || curve.length === 0) {
+          return { input: point.input, relative: point.output, absolute, delta: null };
+        }
+        const idx = Math.round((point.input / 100) * (curve.length - 1));
+        const samplePercent = (curve[idx] / 65535) * 100;
+        return {
+          input: point.input,
+          relative: point.output,
+          absolute,
+          samplePercent,
+          delta: samplePercent - absolute
+        };
+      });
+
+      return {
+        channelPercent,
+        comparisons
+      };
+    });
+
+    expect(analysis.comparisons.length).toBeGreaterThanOrEqual(3);
+    for (const comparison of analysis.comparisons.slice(1, -1)) {
+      expect(comparison.relative).toBeGreaterThanOrEqual(0);
+      expect(comparison.relative).toBeLessThanOrEqual(100);
+      if (comparison.delta !== null) {
+        expect(Math.abs(comparison.delta)).toBeLessThanOrEqual(0.75);
+      }
+    }
+  });
+
+  test('global scale preserves Smart curve absolute outputs', async ({ page }) => {
+    const indexUrl = pathToFileURL(resolve('index.html')).href;
+    await page.goto(indexUrl);
+
+    await page.waitForSelector('#globalLinearizationBtn', { timeout: 15000 });
+
+    await page.locator('#editModeToggleBtn').click();
+    await expect(page.locator('#editModeLabel')).toHaveText(/ON/);
+
+    await page.waitForFunction(() => {
+      const control = window.ControlPoints?.get?.('MK');
+      return Array.isArray(control?.points) && control.points.length >= 2;
+    }, undefined, { timeout: 15000 });
+
+    await page.evaluate(() => window.applyGlobalScale?.(80));
+
+    await expect(page.locator('tr[data-channel="MK"] input.percent-input')).toHaveValue(/80/);
+
+    const artifactsDir = resolve('artifacts');
+    if (!existsSync(artifactsDir)) {
+      mkdirSync(artifactsDir, { recursive: true });
+    }
+    await page.screenshot({ path: resolve('artifacts', 'global-scale-smart.png') });
+
+    const analysis = await page.evaluate(() => {
+      const row = document.querySelector('tr[data-channel="MK"]');
+      const percentInput = row?.querySelector('.percent-input');
+      const channelPercent = parseFloat(percentInput?.value ?? '0') || 0;
+      const control = window.ControlPoints?.get?.('MK');
+      const points = control?.points ?? [];
+      const lastPoint = points.length > 0 ? points[points.length - 1] : null;
+
+      const endInput = row?.querySelector('.end-input');
+      const endValue = window.InputValidator?.clampEnd?.(endInput?.value ?? 0) ?? 0;
+      const curve = typeof window.make256 === 'function'
+        ? window.make256(endValue, 'MK', window.LinearizationState?.globalApplied ?? false)
+        : null;
+
+      let lastSamplePercent: number | null = null;
+      if (curve && curve.length > 0) {
+        const denominator = curve.length - 1;
+        const lastValue = curve[denominator];
+        lastSamplePercent = (lastValue / 65535) * 100;
+      }
+
+      return {
+        channelPercent,
+        lastSamplePercent,
+        lastPointOutput: lastPoint?.output ?? null,
+        pointCount: points.length
+      };
+    });
+
+    expect(analysis.pointCount).toBeGreaterThanOrEqual(2);
+    expect(analysis.lastPointOutput).not.toBeNull();
+    expect(Math.abs((analysis.lastPointOutput ?? 0) - 100)).toBeLessThan(0.05);
+    expect(analysis.channelPercent).toBeGreaterThan(0);
+    expect(analysis.lastSamplePercent).not.toBeNull();
+    expect(Math.abs((analysis.lastSamplePercent ?? 0) - analysis.channelPercent)).toBeLessThan(0.5);
+
+    const mkPercent = page.locator('tr[data-channel="MK"] input.percent-input');
+    await mkPercent.click({ clickCount: 3 });
+    await mkPercent.type('100');
+    await mkPercent.press('Enter');
+    await expect(mkPercent).toHaveValue(/80/);
+
+    const postAdjustment = await page.evaluate(() => {
+      const row = document.querySelector('tr[data-channel="MK"]');
+      const percentInput = row?.querySelector('.percent-input');
+      const channelPercent = parseFloat(percentInput?.value ?? '0') || 0;
+      const endInput = row?.querySelector('.end-input');
+      const endValue = window.InputValidator?.clampEnd?.(endInput?.value ?? 0) ?? 0;
+      const curve = typeof window.make256 === 'function'
+        ? window.make256(endValue, 'MK', window.LinearizationState?.globalApplied ?? false)
+        : null;
+
+      let lastSamplePercent: number | null = null;
+      if (curve && curve.length > 0) {
+        const lastValue = curve[curve.length - 1];
+        lastSamplePercent = (lastValue / 65535) * 100;
+      }
+
+      return {
+        channelPercent,
+        lastSamplePercent
+      };
+    });
+
+    expect(postAdjustment.channelPercent).toBeCloseTo(80, 1);
+    expect(postAdjustment.lastSamplePercent).not.toBeNull();
+    expect(Math.abs((postAdjustment.lastSamplePercent ?? 0) - postAdjustment.channelPercent)).toBeLessThan(0.5);
+  });
+
+  test('entering edit mode preserves global correction curve shape', async ({ page }) => {
+    const indexUrl = pathToFileURL(resolve('index.html')).href;
+    await page.goto(indexUrl);
+
+    await page.waitForSelector('#globalLinearizationBtn', { timeout: 15000 });
+
+    const quadPath = resolve('data/P800_K37_C26_LK25_V1.quad');
+    await page.setInputFiles('input#quadFile', quadPath);
+    await page.waitForFunction(
+      () => window.getLoadedQuadData?.()?.curves?.K,
+      undefined,
+      { timeout: 20000 }
+    );
+
+    const correctionPath = resolve('data/P800_K37_C26_LK25_V1_correction.txt');
+    await page.setInputFiles('input#linearizationFile', correctionPath);
+    await page.waitForFunction(
+      () => window.LinearizationState?.isGlobalEnabled?.(),
+      undefined,
+      { timeout: 20000 }
+    );
+
+    const beforeSamples = await page.evaluate(() => {
+      const row = document.querySelector('tr[data-channel="K"]');
+      const endInput = row?.querySelector('.end-input');
+      const endValue = window.InputValidator?.clampEnd?.(endInput?.value ?? 0) ?? 0;
+      const values = typeof window.make256 === 'function'
+        ? window.make256(endValue, 'K', window.LinearizationState?.globalApplied ?? false)
+        : null;
+      return values ? Array.from(values) : null;
+    });
+
+    expect(beforeSamples).not.toBeNull();
+
+    await page.locator('#editModeToggleBtn').click();
+    await page.waitForFunction(
+      () => window.ControlPoints?.get?.('K')?.points?.length >= 2,
+      undefined,
+      { timeout: 20000 }
+    );
+
+    const pointCount = await page.evaluate(() => window.ControlPoints?.get?.('K')?.points?.length ?? 0);
+    expect(pointCount).toBeGreaterThan(0);
+    expect(pointCount).toBeLessThanOrEqual(50);
+
+    const bakedUiState = await page.evaluate(() => {
+      const toggle = document.getElementById('globalLinearizationToggle');
+      const label = document.getElementById('globalLinearizationFilename');
+      const meta = window.LinearizationState?.getGlobalBakedMeta?.() || null;
+      return {
+        toggleDisabled: toggle?.disabled ?? null,
+        ariaDisabled: toggle?.getAttribute('aria-disabled') || null,
+        labelText: label?.textContent?.trim() || null,
+        bakedFilename: meta?.filename || null
+      };
+    });
+
+    expect(bakedUiState.toggleDisabled).toBe(true);
+    expect(bakedUiState.ariaDisabled).toBe('true');
+    expect(bakedUiState.labelText || '').toMatch(/^\*BAKED\*/);
+
+    const afterSamples = await page.evaluate(() => {
+      const row = document.querySelector('tr[data-channel="K"]');
+      const endInput = row?.querySelector('.end-input');
+      const endValue = window.InputValidator?.clampEnd?.(endInput?.value ?? 0) ?? 0;
+      const values = typeof window.make256 === 'function'
+        ? window.make256(endValue, 'K', window.LinearizationState?.globalApplied ?? false)
+        : null;
+      return values ? Array.from(values) : null;
+    });
+
+    expect(afterSamples).not.toBeNull();
+
+    const before = beforeSamples ?? [];
+    const after = afterSamples ?? [];
+
+    expect(after.length).toBe(before.length);
+
+    let maxDelta = 0;
+    for (let i = 0; i < before.length; i += 1) {
+      const delta = Math.abs((after[i] ?? 0) - (before[i] ?? 0));
+      if (delta > maxDelta) {
+        maxDelta = delta;
+      }
+    }
+
+    expect(maxDelta).toBeLessThanOrEqual(20);
+
+    const undoBtn = page.locator('#undoBtn');
+    for (let i = 0; i < 6; i += 1) {
+      if (!(await undoBtn.isEnabled())) {
+        break;
+      }
+      await undoBtn.click();
+      const bakedMeta = await page.evaluate(() => window.LinearizationState?.getGlobalBakedMeta?.() || null);
+      if (!bakedMeta) {
+        break;
+      }
+      await page.waitForTimeout(100);
+    }
+
+    await page.waitForFunction(
+      () => !window.LinearizationState?.getGlobalBakedMeta?.(),
+      undefined,
+      { timeout: 20000 }
+    );
+
+    const postUndoState = await page.evaluate(() => {
+      const toggle = document.getElementById('globalLinearizationToggle');
+      const label = document.getElementById('globalLinearizationFilename');
+      const meta = window.LinearizationState?.getGlobalBakedMeta?.() || null;
+      return {
+        toggleDisabled: toggle?.disabled ?? null,
+        labelText: label?.textContent?.trim() || null,
+        bakedMeta: meta
+      };
+    });
+
+    expect(postUndoState.bakedMeta).toBeNull();
+    expect(postUndoState.toggleDisabled).toBe(false);
+    expect(postUndoState.labelText || '').not.toMatch(/^\*BAKED\*/);
+  });
+});

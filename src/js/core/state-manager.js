@@ -69,7 +69,8 @@ export class QuadGenStateManager {
                     data: null,
                     applied: false,
                     filename: '',
-                    enabled: false
+                    enabled: false,
+                    baked: null
                 },
                 perChannel: {
                     data: {}, // Per-channel linearization data

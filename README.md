@@ -17,9 +17,16 @@ npm install
 npm run dev        # copies src/index.template.html to index.html and launches Vite dev server
 npm run build:agent  # builds production bundle and writes dist/index.html + root index.html
 npm run test:smoke   # headless Playwright smoke test (ensures bundle loads without console errors)
+# push to GitHub     # see Publishing below for credentials/script setup
 ```
 
 The production bundle lives at `dist/index.html` and is copied to the project root for single-file distribution.
+
+### Publishing
+
+- Ensure `githubtoken.md` contains your GitHub username on line 1 and a personal access token on line 2 (no trailing spaces).
+- After running the smoke test, push updates with `bash scripts/push-with-token.sh`. The script handles authenticated pushes to `main`.
+- The script force-pushes; confirm the local state is ready before invoking it.
 
 ## Documentation
 Key references live under `docs/`:

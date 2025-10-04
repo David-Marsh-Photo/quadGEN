@@ -52,7 +52,10 @@ export function updateScaleBaselineForChannel(channelName) {
  * @param {number} percent - Scale percentage (100 = no change)
  * @returns {Object} Result object with success/message/details
  */
-export function scaleChannelEndsByPercent(percent) {
+export function scaleChannelEndsByPercent(percent, options = {}) {
+    const opts = typeof options === 'object' && options !== null ? options : {};
+    const skipHistory = !!opts.skipHistory;
+
     console.log(`🔍 [SCALE CORE DEBUG] scaleChannelEndsByPercent called:`, {
         percent,
         timestamp: Date.now(),
@@ -161,7 +164,10 @@ export function scaleChannelEndsByPercent(percent) {
                     InputValidator.clearValidationStyling(percentInput);
                 }
 
-                const rescaled = rescaleSmartCurveForInkLimit(channelName, prevPercent, newPercent);
+                const rescaled = rescaleSmartCurveForInkLimit(channelName, prevPercent, newPercent, {
+                    mode: 'preserveRelative',
+                    historyExtras: { triggeredBy: 'globalScale' }
+                });
                 updates.push({ channelName, row, newEnd, baseEnd, rescaled });
 
                 stateManager.set(`printer.channelValues.${channelName}.percentage`, newPercent, { skipHistory: true });
@@ -215,7 +221,7 @@ export function scaleChannelEndsByPercent(percent) {
             elements.scaleAllInput.value = formatScalePercent(scaleAllPercent);
         }
 
-        if (history && batchActions.length > 0) {
+        if (!skipHistory && history && batchActions.length > 0) {
             history.recordBatchAction(`Scale channels to ${formatScalePercent(appliedPercent)}%`, batchActions);
         }
 

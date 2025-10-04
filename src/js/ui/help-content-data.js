@@ -16,6 +16,24 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '3.0.4': {
+    date: '2025-10-04',
+    title: 'Smart baking guard',
+    sections: {
+      ADDED: [],
+      CHANGED: [],
+      FIXED: [
+        'Smart curve baking now reseeds the full LAB measurement set and marks the graph status as *BAKED* on first enable, avoiding the two-point collapse regression.',
+        'Global revert button disables once LAB data is baked into Smart curves so you aren’t led to a silent no-op; undo remains available for rollbacks.'
+      ],
+      REMOVED: [],
+      DOCS: []
+    },
+    aboutDialog: [
+      { label: 'Smart Baking', desc: 'LAB corrections converted into Smart curves keep every measurement point and display the *BAKED* tag immediately.' },
+      { label: 'Revert Guard', desc: 'Once a correction is baked, the global revert control deactivates—undo is the path back to raw measurements.' }
+    ]
+  },
   '3.0.3': {
     date: '2025-10-03',
     title: 'Smart scaling polish',

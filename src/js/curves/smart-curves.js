@@ -68,6 +68,33 @@ function getChannelRow(channelName) {
     }
 }
 
+function getChannelPercent(channelName) {
+    if (typeof document === 'undefined') return 100;
+    const row = getChannelRow(channelName);
+    const percentInput = row?.querySelector('.percent-input');
+    if (!percentInput) return 100;
+    const percent = InputValidator.clampPercent(percentInput.value);
+    return Number.isFinite(percent) && percent > 0 ? percent : 100;
+}
+
+function toAbsoluteOutput(channelName, relativeOutput) {
+    const channelPercent = getChannelPercent(channelName);
+    if (!Number.isFinite(channelPercent) || channelPercent <= 0) {
+        return ControlPolicy.clampY(relativeOutput);
+    }
+    const absolute = (relativeOutput / 100) * channelPercent;
+    return ControlPolicy.clampY(absolute);
+}
+
+function toRelativeOutput(channelName, absoluteOutput) {
+    const channelPercent = getChannelPercent(channelName);
+    if (!Number.isFinite(channelPercent) || channelPercent <= 0) {
+        return ControlPolicy.clampY(absoluteOutput);
+    }
+    const relative = channelPercent === 0 ? 0 : (absoluteOutput / channelPercent) * 100;
+    return ControlPolicy.clampY(relative);
+}
+
 /**
  * Control Points management facade for Smart Curves
  */
@@ -295,8 +322,10 @@ function rdpSimplify(points, eps) {
  * @returns {Array<{input:number, output:number}>} Simplified key points
  */
 export function extractAdaptiveKeyPointsFromValues(values, options = {}) {
-    const maxErrorPercent = Math.max(0.05, Math.min(5, options.maxErrorPercent || KP_SIMPLIFY.maxErrorPercent || 1.0));
-    const maxPoints = Math.max(2, Math.min(21, options.maxPoints || KP_SIMPLIFY.maxPoints || 21));
+    const minError = typeof options.minErrorPercent === 'number' ? Math.max(0.0005, options.minErrorPercent) : 0.0005;
+    const maxErrorPercent = Math.max(minError, Math.min(5, options.maxErrorPercent || KP_SIMPLIFY.maxErrorPercent || 1.0));
+    const maxPoints = Math.max(2, Math.min(64, options.maxPoints || KP_SIMPLIFY.maxPoints || 21));
+
     const scaleMax = Math.max(1, options.scaleMax || TOTAL);
 
     if (!Array.isArray(values) || values.length < 2) {
@@ -341,7 +370,27 @@ export function extractAdaptiveKeyPointsFromValues(values, options = {}) {
         guard += 1;
     }
 
-    const keyPoints = simplified.map((p) => ({ input: p.x, output: p.y }));
+    let keyPoints = simplified.map((p) => ({ input: p.x, output: p.y }));
+
+    if (keyPoints.length > maxPoints) {
+        const lastIndex = keyPoints.length - 1;
+        const samples = [];
+        const step = lastIndex / (maxPoints - 1);
+        const seen = new Set();
+        for (let i = 0; i < maxPoints; i += 1) {
+            const rawIndex = Math.round(i * step);
+            const clampedIndex = Math.max(0, Math.min(lastIndex, rawIndex));
+            if (!seen.has(clampedIndex)) {
+                samples.push(keyPoints[clampedIndex]);
+                seen.add(clampedIndex);
+            }
+        }
+        if (samples.length < 2) {
+            samples.push(keyPoints[lastIndex]);
+        }
+        keyPoints = samples;
+    }
+
     return ControlPoints.normalize(keyPoints);
 }
 
@@ -352,7 +401,7 @@ export function extractAdaptiveKeyPointsFromValues(values, options = {}) {
  * @param {number} toPercent - New ink limit percentage
  * @returns {boolean} True if rescaling was applied
  */
-export function rescaleSmartCurveForInkLimit(channelName, fromPercent, toPercent) {
+export function rescaleSmartCurveForInkLimit(channelName, fromPercent, toPercent, options = {}) {
     if (!isSmartCurve(channelName) || fromPercent <= 0 || toPercent <= 0) {
         return false;
     }
@@ -360,20 +409,33 @@ export function rescaleSmartCurveForInkLimit(channelName, fromPercent, toPercent
     const { points, interpolation } = ControlPoints.get(channelName);
     if (!points || points.length === 0) return false;
 
+    const mode = options.mode === 'preserveRelative' ? 'preserveRelative' : 'preserveAbsolute';
+    const basePoints = points.map((p) => ({ input: p.input, output: p.output }));
+
+    const applyOptions = {
+        allowWhenEditModeOff: true,
+        skipUiRefresh: !!options.skipUiRefresh,
+        skipHistory: !!options.skipHistory,
+        historyExtras: {
+            rescaledFromPercent: fromPercent,
+            rescaledToPercent: toPercent,
+            rescaleMode: mode,
+            ...(options.historyExtras || {})
+        }
+    };
+
+    if (mode === 'preserveRelative') {
+        const result = setSmartKeyPoints(channelName, basePoints, interpolation, applyOptions);
+        return !!result.success;
+    }
+
     const scaleFactor = toPercent / fromPercent;
-    const rescaledPoints = points.map((p) => ({
+    const rescaledPoints = basePoints.map((p) => ({
         input: p.input,
         output: Math.min(100, p.output * scaleFactor)
     }));
 
-    const result = setSmartKeyPoints(channelName, rescaledPoints, interpolation, {
-        allowWhenEditModeOff: true,
-        skipUiRefresh: false,
-        historyExtras: {
-            rescaledFromPercent: fromPercent,
-            rescaledToPercent: toPercent
-        }
-    });
+    const result = setSmartKeyPoints(channelName, rescaledPoints, interpolation, applyOptions);
     return !!result.success;
 }
 
@@ -548,9 +610,11 @@ export function adjustSmartKeyPointByIndex(channelName, ordinal, params = {}) {
     const idx = ordinal - 1;
     const target = points[idx];
 
+    const currentAbsolute = toAbsoluteOutput(channelName, target.output);
+
     // Compute new values
     let newInput = target.input;
-    let newOutput = target.output;
+    let newAbsoluteOutput = currentAbsolute;
 
     if (typeof params.inputPercent === 'number') {
         newInput = params.inputPercent;
@@ -559,14 +623,15 @@ export function adjustSmartKeyPointByIndex(channelName, ordinal, params = {}) {
         newInput += params.deltaInput;
     }
     if (typeof params.outputPercent === 'number') {
-        newOutput = params.outputPercent;
+        newAbsoluteOutput = params.outputPercent;
     }
     if (typeof params.deltaOutput === 'number') {
-        newOutput += params.deltaOutput;
+        newAbsoluteOutput += params.deltaOutput;
     }
 
     // Clamp values
-    newOutput = ControlPolicy.clampY(newOutput);
+    newAbsoluteOutput = ControlPolicy.clampY(newAbsoluteOutput);
+    const newOutput = toRelativeOutput(channelName, newAbsoluteOutput);
 
     // Bounds for input to maintain order
     const gap = ControlPolicy.minGap;
@@ -596,12 +661,14 @@ export function adjustSmartKeyPointByIndex(channelName, ordinal, params = {}) {
     const data = ensureLoadedQuadData(() => ({ curves: {}, sources: {}, keyPoints: {}, keyPointsMeta: {} }));
     if (!data.curves) data.curves = {};
 
+    const channelPercent = getChannelPercent(channelName);
     const samples = new Array(CURVE_RESOLUTION);
     for (let i = 0; i < CURVE_RESOLUTION; i++) {
         const xi = (i / DENOM) * 100;
         const percent = ControlPoints.sampleY(normalizedPoints, interpType, xi);
         const clamped = Math.max(0, Math.min(100, percent));
-        samples[i] = Math.round((clamped / 100) * TOTAL);
+        const absolutePercent = (clamped / 100) * channelPercent;
+        samples[i] = Math.round((absolutePercent / 100) * TOTAL);
     }
     data.curves[channelName] = samples;
 
@@ -622,7 +689,7 @@ export function adjustSmartKeyPointByIndex(channelName, ordinal, params = {}) {
         message: `Adjusted key point ${ordinal} for ${channelName}`,
         channelName,
         ordinal,
-        newPoint: { input: newInput, output: newOutput }
+        newPoint: { input: newInput, output: newAbsoluteOutput }
     };
 }
 
@@ -660,12 +727,16 @@ export function insertSmartKeyPointAt(channelName, inputPercent, outputPercent =
     points.sort((a, b) => a.input - b.input);
 
     // Determine output value
-    let y = outputPercent;
-    if (y === null || y === undefined) {
-        // Sample current curve at x
-        y = ControlPoints.sampleY(points, interpType, x);
+    let absoluteOutput;
+    if (outputPercent === null || outputPercent === undefined) {
+        const sampledRelative = ControlPoints.sampleY(points, interpType, x);
+        absoluteOutput = ControlPolicy.clampY(toAbsoluteOutput(channelName, sampledRelative));
+    } else {
+        absoluteOutput = ControlPolicy.clampY(outputPercent);
     }
-    y = ControlPolicy.clampY(y);
+
+    const relativeOutput = toRelativeOutput(channelName, absoluteOutput);
+    const y = ControlPolicy.clampY(relativeOutput);
 
     // Find insertion position
     let insertIndex = 0;
@@ -690,7 +761,7 @@ export function insertSmartKeyPointAt(channelName, inputPercent, outputPercent =
 
     const result = setSmartKeyPoints(channelName, points, interpType, {
         historyExtras: {
-            insertedPoint: { input: x, output: y },
+            insertedPoint: { input: x, outputAbsolute: absoluteOutput, outputRelative: y },
             insertedIndex: insertIndex + 1,
             selectedOrdinalAfter: insertIndex + 1
         }
@@ -705,7 +776,7 @@ export function insertSmartKeyPointAt(channelName, inputPercent, outputPercent =
         message: `Inserted key point at ${x}% for ${channelName}`,
         channelName,
         insertIndex: insertIndex + 1,
-        newPoint: { input: x, output: y }
+        newPoint: { input: x, output: absoluteOutput }
     };
 }
 
@@ -814,7 +885,19 @@ export function simplifySmartKeyPointsFromCurve(channelName, options = {}) {
             return { success: false, message: 'Failed to generate sufficient key points' };
         }
 
-        const result = applySmartKeyPointsInternal(channelName, keyPoints, 'smooth');
+        const relativeKeyPoints = keyPoints.map((point) => ({
+            input: Number(point.input),
+            output: toRelativeOutput(channelName, Number(point.output))
+        }));
+
+        const result = applySmartKeyPointsInternal(channelName, relativeKeyPoints, 'smooth', {
+            historyExtras: {
+                recomputeAbsolutePoints: keyPoints.map((point) => ({
+                    input: Number(point.input),
+                    output: Number(point.output)
+                }))
+            }
+        });
         if (!result.success) {
             return result;
         }
@@ -939,14 +1022,23 @@ function applySmartKeyPointsInternal(channelName, keyPoints, interpolationType =
     ControlPoints.persist(channelName, normalized, interp);
 
     data.keyPoints[channelName] = normalized.map((p) => ({ input: p.input, output: p.output }));
-    const bakedFlags = options.bakedFlags || {};
+    const includeBakedFlags = options.includeBakedFlags !== false;
+    const bakedFlags = includeBakedFlags ? (options.bakedFlags || {}) : {};
     const existingMeta = data.keyPointsMeta[channelName] || {};
     const smartTouched = options.smartTouched !== undefined ? options.smartTouched : true;
     const nextMeta = {
         ...existingMeta,
-        interpolationType: interp,
-        ...bakedFlags
+        interpolationType: interp
     };
+    if (includeBakedFlags) {
+        Object.assign(nextMeta, bakedFlags);
+    } else {
+        delete nextMeta.bakedGlobal;
+        delete nextMeta.bakedFilename;
+        delete nextMeta.bakedAutoLimit;
+        delete nextMeta.bakedAutoWhite;
+        delete nextMeta.bakedAutoBlack;
+    }
     if (smartTouched) {
         nextMeta.smartTouched = true;
     } else if ('smartTouched' in nextMeta) {
@@ -954,12 +1046,14 @@ function applySmartKeyPointsInternal(channelName, keyPoints, interpolationType =
     }
     data.keyPointsMeta[channelName] = nextMeta;
 
+    const channelPercent = getChannelPercent(channelName);
     const samples = new Array(CURVE_RESOLUTION);
     for (let i = 0; i < CURVE_RESOLUTION; i++) {
         const x = (i / DENOM) * 100;
         const percent = ControlPoints.sampleY(normalized, interp, x);
         const clamped = Math.max(0, Math.min(100, percent));
-        samples[i] = Math.round((clamped / 100) * TOTAL);
+        const absolutePercent = (clamped / 100) * channelPercent;
+        samples[i] = Math.round((absolutePercent / 100) * TOTAL);
     }
 
     data.curves[channelName] = samples.slice();
@@ -1091,3 +1185,5 @@ if (isBrowser) {
     globalScope.setSmartKeyPoints = setSmartKeyPoints;
     globalScope.rescaleSmartCurveForInkLimit = rescaleSmartCurveForInkLimit;
 }
+
+export { toRelativeOutput, toAbsoluteOutput };

@@ -11,12 +11,15 @@ import {
     ControlPoints,
     setSmartKeyPoints,
     createDefaultKeyPoints,
-    extractAdaptiveKeyPointsFromValues
+    extractAdaptiveKeyPointsFromValues,
+    toRelativeOutput,
+    toAbsoluteOutput
 } from '../curves/smart-curves.js';
 import { LinearizationState } from '../data/linearization-utils.js';
 import { getChannelRow } from './channel-registry.js';
 import { getStateManager } from '../core/state-manager.js';
 import { triggerInkChartUpdate, triggerProcessingDetail, triggerRevertButtonsUpdate, triggerPreviewUpdate } from './ui-hooks.js';
+import { updateSessionStatus } from './graph-status.js';
 import { registerDebugNamespace, getDebugRegistry } from '../utils/debug-registry.js';
 import { showStatus } from './status-service.js';
 import { getLegacyHelper, invokeLegacyHelper } from '../legacy/legacy-helpers.js';
@@ -45,6 +48,149 @@ function getStateManagerSafe() {
         }
     }
     return cachedStateManager;
+}
+
+function getCurrentGlobalFilename() {
+    const globalData = LinearizationState.getGlobalData?.();
+    if (globalData?.filename) return globalData.filename;
+    if (elements.globalLinearizationFilename?.dataset?.originalFilename) {
+        return elements.globalLinearizationFilename.dataset.originalFilename;
+    }
+    const existing = elements.globalLinearizationFilename?.textContent?.trim();
+    return existing || '';
+}
+
+function formatBakedLabel(filename) {
+    const name = filename || 'correction';
+    return `*BAKED* ${name}`;
+}
+
+function metasEqual(a, b) {
+    if (!a && !b) return true;
+    if (!a || !b) return false;
+    return a.filename === b.filename;
+}
+
+export function setGlobalBakedState(meta, options = {}) {
+    const previousMeta = LinearizationState.getGlobalBakedMeta?.() || null;
+    if (metasEqual(previousMeta, meta || null)) {
+        return;
+    }
+
+    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+        console.log('[EDIT MODE] setGlobalBakedState', { previousMeta, meta, options });
+    }
+
+    if (meta && isBrowser && typeof globalScope.CurveHistory?.captureState === 'function') {
+        try {
+            globalScope.CurveHistory.captureState('Before: Bake global correction');
+        } catch (err) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[EDIT MODE] Failed to capture history before baking global correction:', err);
+            }
+        }
+    }
+
+    LinearizationState.setGlobalBakedMeta?.(meta || null);
+
+    const manager = getStateManagerSafe();
+    if (manager) {
+        manager.set('linearization.global.baked', meta || null, options);
+        if (meta) {
+            manager.set('linearization.global.applied', false, { skipHistory: true });
+            manager.set('linearization.global.enabled', false, { skipHistory: true });
+        }
+    }
+
+    // Persist original filename for restoration
+    if (elements.globalLinearizationFilename && LinearizationState.getGlobalData?.()?.filename) {
+        elements.globalLinearizationFilename.dataset.originalFilename = LinearizationState.getGlobalData().filename;
+    }
+
+    const hasBaked = !!meta;
+    const filename = hasBaked
+        ? (meta?.filename || getCurrentGlobalFilename())
+        : getCurrentGlobalFilename();
+
+    if (elements.globalLinearizationFilename) {
+        elements.globalLinearizationFilename.textContent = hasBaked
+            ? formatBakedLabel(filename)
+            : filename || '';
+    }
+
+    if (elements.globalLinearizationToggle) {
+        const toggle = elements.globalLinearizationToggle;
+        if (hasBaked) {
+            toggle.disabled = true;
+            toggle.setAttribute('aria-disabled', 'true');
+            toggle.dataset.baked = 'true';
+            toggle.checked = true;
+            toggle.setAttribute('aria-checked', 'true');
+            toggle.title = 'Global correction baked into Smart curves. Undo or revert to modify.';
+            LinearizationState.globalApplied = false;
+            if (LinearizationState.globalData) {
+                LinearizationState.globalData.applied = false;
+            }
+        } else {
+            const hasGlobal = !!LinearizationState.getGlobalData?.();
+            toggle.disabled = !hasGlobal;
+            toggle.removeAttribute('aria-disabled');
+            delete toggle.dataset.baked;
+            toggle.title = '';
+            if (!hasGlobal) {
+                toggle.checked = false;
+                toggle.setAttribute('aria-checked', 'false');
+            }
+            LinearizationState.globalApplied = hasGlobal;
+            if (LinearizationState.globalData) {
+                LinearizationState.globalData.applied = hasGlobal;
+            }
+        }
+    }
+
+    if (hasBaked && (!previousMeta || previousMeta.filename !== filename)) {
+        showStatus(`Global correction baked into Smart curves (${filename || 'correction'}). Use undo or revert to edit.`);
+    }
+
+    try {
+        updateSessionStatus();
+    } catch (err) {
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.warn('[EDIT MODE] Failed to update session status after baked state change:', err);
+        }
+    }
+
+    try {
+        const rows = Array.from(document.querySelectorAll('tr[data-channel]'));
+        const graph = globalScope?.graphStatus;
+        rows.forEach((row) => {
+            const channelName = row.getAttribute('data-channel');
+            if (!channelName) return;
+            setTimeout(() => {
+                if (graph && typeof graph.updateProcessingDetail === 'function') {
+                    graph.updateProcessingDetail(channelName);
+                } else {
+                    triggerProcessingDetail(channelName);
+                }
+            }, 0);
+        });
+    } catch (err) {
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.warn('[EDIT MODE] Failed to refresh processing detail after baked state change:', err);
+        }
+    }
+
+    try {
+        triggerRevertButtonsUpdate();
+    } catch (err) {
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.warn('[EDIT MODE] Failed to refresh revert buttons after baked state change:', err);
+        }
+    }
+}
+
+if (isBrowser) {
+    globalScope.__quadSetGlobalBakedState = setGlobalBakedState;
 }
 
 function persistEditModeFlag(enabled) {
@@ -197,8 +343,9 @@ function applyNudgeToSelectedPoint(deltaInput, deltaOutput, event) {
     }
 
     if (deltaOutput !== 0) {
-        const nextOutput = Math.max(0, Math.min(100, point.output + deltaOutput * step));
-        params.outputPercent = nextOutput;
+        const currentAbsolute = toAbsoluteOutput(channelName, point.output);
+        const nextAbsolute = Math.max(0, Math.min(100, currentAbsolute + deltaOutput * step));
+        params.outputPercent = nextAbsolute;
     }
 
     if (isBrowser) {
@@ -260,39 +407,107 @@ export function persistSmartPoints(channelName, points, interpolation = 'smooth'
     const {
         measurementSeed,
         smartTouched = false,
-        skipUiRefresh = true
+        skipUiRefresh = true,
+        pointsAreRelative = false,
+        channelPercentOverride = null,
+        includeBakedFlags = true
     } = options || {};
 
-    const autoWhiteOn = !!elements?.autoWhiteLimitToggle?.checked;
-    const autoBlackOn = !!elements?.autoBlackLimitToggle?.checked;
-    const bakedFlags = {
-        bakedAutoLimit: autoWhiteOn || autoBlackOn,
-        bakedAutoWhite: autoWhiteOn,
-        bakedAutoBlack: autoBlackOn
-    };
-
-    if (LinearizationState.globalApplied && LinearizationState.getGlobalData()) {
-        bakedFlags.bakedGlobal = true;
+    if (typeof globalScope !== 'undefined') {
+        globalScope.__PERSIST_TRIPPED = (globalScope.__PERSIST_TRIPPED || 0) + 1;
     }
 
-    const result = setSmartKeyPoints(channelName, points, interpolation, {
+    let bakedFlags = {};
+    if (includeBakedFlags) {
+        const autoWhiteOn = !!elements?.autoWhiteLimitToggle?.checked;
+        const autoBlackOn = !!elements?.autoBlackLimitToggle?.checked;
+        bakedFlags = {
+            bakedAutoLimit: autoWhiteOn || autoBlackOn,
+            bakedAutoWhite: autoWhiteOn,
+            bakedAutoBlack: autoBlackOn
+        };
+
+        const globalData = LinearizationState.getGlobalData?.();
+        const globalApplied = !!(LinearizationState.globalApplied && globalData);
+        const bakedMeta = typeof LinearizationState.getGlobalBakedMeta === 'function'
+            ? LinearizationState.getGlobalBakedMeta()
+            : null;
+
+        if (globalApplied || bakedMeta) {
+            bakedFlags.bakedGlobal = true;
+            const bakedLabel = bakedMeta?.filename || globalData?.filename || getCurrentGlobalFilename();
+            if (bakedLabel) {
+                bakedFlags.bakedFilename = bakedLabel;
+            }
+        }
+    }
+
+    const channelPercent = Number.isFinite(channelPercentOverride)
+        ? channelPercentOverride
+        : getChannelPercent(channelName);
+
+    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+        console.log('[EDIT MODE] persistSmartPoints channel percent', channelName, {
+            override: channelPercentOverride,
+            resolved: channelPercent
+        });
+    }
+
+    const relativePoints = points.map((p) => {
+        const input = Number(p.input);
+        const outputAbsolute = Number(p.output);
+        let output;
+        if (pointsAreRelative) {
+            output = outputAbsolute;
+        } else {
+            const percent = Number.isFinite(channelPercent) && channelPercent > 0
+                ? (outputAbsolute / channelPercent) * 100
+                : outputAbsolute;
+            output = Math.max(0, Math.min(100, percent));
+        }
+        return { input, output };
+    });
+
+    if (typeof globalScope !== 'undefined') {
+        globalScope.__PERSIST_DEBUG = globalScope.__PERSIST_DEBUG || [];
+        globalScope.__PERSIST_DEBUG.push({
+            channelName,
+            channelPercent,
+            override: channelPercentOverride,
+            sample: relativePoints.slice(0, 5)
+        });
+    }
+
+    const result = setSmartKeyPoints(channelName, relativePoints, interpolation, {
         skipHistory: true,
         skipMarkEdited: true,
         skipUiRefresh,
         bakedFlags,
+        includeBakedFlags,
         allowWhenEditModeOff: true,
         smartTouched
     });
 
+    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+        console.log('[EDIT MODE] persistSmartPoints setSmartKeyPoints result', channelName, result);
+    }
+
     if (!result?.success) {
-        ControlPoints.persist(channelName, points, interpolation);
+        ControlPoints.persist(channelName, relativePoints, interpolation);
         const data = ensureLoadedQuadData(() => ({ keyPointsMeta: {} }));
         data.keyPointsMeta = data.keyPointsMeta || {};
         const fallbackMeta = {
             ...(data.keyPointsMeta[channelName] || {}),
             interpolationType: interpolation,
-            ...bakedFlags
+            ...(includeBakedFlags ? bakedFlags : {})
         };
+        if (!includeBakedFlags) {
+            delete fallbackMeta.bakedGlobal;
+            delete fallbackMeta.bakedFilename;
+            delete fallbackMeta.bakedAutoLimit;
+            delete fallbackMeta.bakedAutoWhite;
+            delete fallbackMeta.bakedAutoBlack;
+        }
         if ('smartTouched' in fallbackMeta) {
             delete fallbackMeta.smartTouched;
         }
@@ -318,6 +533,16 @@ export function persistSmartPoints(channelName, points, interpolation = 'smooth'
             }))
         };
         updateMeasurementSeedMeta(channelName, measurementSeedMeta);
+    }
+
+    if (!skipUiRefresh) {
+        try {
+            triggerProcessingDetail(channelName);
+        } catch (err) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[EDIT MODE] Failed to refresh processing detail after persistSmartPoints:', err);
+            }
+        }
     }
 }
 
@@ -390,7 +615,12 @@ function measurementSeedMatches(seed, context, existingLength) {
     if (seed.format !== context.format) return false;
     if (typeof context.count === 'number' && context.count > 0) {
         if (seed.count !== context.count) return false;
-        if (typeof existingLength === 'number' && existingLength > 0 && existingLength !== context.count) return false;
+        const expectedLength = Array.isArray(seed.points) && seed.points.length > 0
+            ? seed.points.length
+            : context.count;
+        if (typeof existingLength === 'number' && existingLength > 0 && existingLength !== expectedLength) {
+            return false;
+        }
     }
     return true;
 }
@@ -422,6 +652,8 @@ export function setEditMode(on, opts = {}) {
     updateEditModeButtonVisuals(target);
 
     // On first enable, initialize edit mode for applicable channels
+    const wasPrimed = editModePrimed;
+
     if (target && !editModePrimed) {
         try {
             initializeEditModeForChannels();
@@ -433,7 +665,7 @@ export function setEditMode(on, opts = {}) {
 
     // On subsequent enables, check if LAB data was loaded while edit mode was off
     // and reinitialize Smart Curves to incorporate measurement data
-    if (target && editModePrimed) {
+    if (target && editModePrimed && wasPrimed) {
         try {
             const hasMeasurementData = LinearizationState.hasAnyLinearization();
             if (hasMeasurementData) {
@@ -554,7 +786,12 @@ function ensureSmartKeyPointsForChannel(channelName) {
     // If no points exist, create default linear ramp
     if (!points || points.length === 0) {
         const defaultPoints = createDefaultKeyPoints(0, 100);
-        const result = setSmartKeyPoints(channelName, defaultPoints, 'smooth');
+        const result = setSmartKeyPoints(channelName, defaultPoints, 'smooth', {
+            smartTouched: false,
+            skipHistory: true,
+            skipMarkEdited: true,
+            allowWhenEditModeOff: true
+        });
 
         if (result.success) {
             console.log(`[EDIT MODE] Created default key points for ${channelName}`);
@@ -620,8 +857,11 @@ export function reinitializeChannelSmartCurves(channelName, options = {}) {
 
     if (!elements.rows) return;
 
+    const existing = ControlPoints.get(channelName);
+    const existingPoints = existing?.points || null;
     const existingMeta = getLoadedQuadData()?.keyPointsMeta?.[channelName] || {};
-    if (existingMeta.smartTouched) {
+    const isDefaultRamp = isDefaultRampPoints(existingPoints);
+    if (existingMeta.smartTouched && !isDefaultRamp) {
         console.log(`[EDIT MODE] Skip reinitializing ${channelName} - Smart curve already edited`);
         return;
     }
@@ -649,9 +889,10 @@ export function reinitializeChannelSmartCurves(channelName, options = {}) {
     const globalEntry = hasMeasurementData ? LinearizationState.getGlobalData() : null;
     const globalFormat = (globalEntry?.format || '').toUpperCase();
 
-    try {
-        let keyPoints = null;
-        let seedMeta = null;
+        try {
+            let keyPoints = null;
+            let seedMeta = null;
+            let bakedMetaPending = null;
 
         if (hasMeasurementData && LinearizationState.isPerChannelEnabled(channelName)) {
             const perChannelData = LinearizationState.getPerChannelData(channelName);
@@ -857,7 +1098,27 @@ export function reinitializeChannelSmartCurves(channelName, options = {}) {
         }
 
         if (keyPoints && keyPoints.length >= 2) {
-            persistSmartPoints(channelName, keyPoints, 'smooth', seedMeta);
+            const channelPercent = Number.isFinite(percent) && percent > 0 ? percent : null;
+            const relativePoints = keyPoints.map((point) => {
+                const absolute = Number(point.output);
+                const relative = channelPercent && channelPercent > 0
+                    ? (absolute / channelPercent) * 100
+                    : absolute;
+                return {
+                    input: Number(point.input),
+                    output: Math.max(0, Math.min(100, relative))
+                };
+            });
+            const persistOptions = {
+                ...(seedMeta || {}),
+                channelPercentOverride: channelPercent,
+                pointsAreRelative: true,
+                skipUiRefresh: false
+            };
+            persistSmartPoints(channelName, relativePoints, 'smooth', persistOptions);
+            if (bakedMetaPending) {
+                setGlobalBakedState(bakedMetaPending);
+            }
             console.log(`[EDIT MODE] ✅ Reinitialized ${keyPoints.length} Smart key points for ${channelName}`);
             triggerInkChartUpdate();
         } else {
@@ -913,17 +1174,18 @@ function initializeEditModeForChannels() {
     enabledChannels.forEach(channelName => {
         const existing = ControlPoints.get(channelName);
         const existingPoints = existing.points;
+        const hasDefaultRamp = isDefaultRampPoints(existingPoints);
         const existingMeta = getLoadedQuadData()?.keyPointsMeta?.[channelName] || {};
         const measurementContext = getMeasurementContext(channelName);
         const measurementSeedOk = measurementSeedMatches(existingMeta.measurementSeed, measurementContext, existingPoints?.length);
 
         let needsSeed = false;
-        if (existingMeta.smartTouched) {
+        if (existingMeta.smartTouched && !hasDefaultRamp) {
             needsSeed = false;
         } else if (!existingPoints || existingPoints.length < 2) {
             needsSeed = true;
         } else if (measurementContext) {
-            needsSeed = !measurementSeedOk || isDefaultRampPoints(existingPoints);
+            needsSeed = !measurementSeedOk || hasDefaultRamp;
         }
 
         console.log(`[EDIT MODE] Channel ${channelName}: existing=${existingPoints?.length || 0}, measurementContext=${measurementContext ? `${measurementContext.scope}:${measurementContext.format}:${measurementContext.count}` : 'none'}, needsSeed=${needsSeed}`);
@@ -933,19 +1195,21 @@ function initializeEditModeForChannels() {
             try {
                 let keyPoints = null;
                 let seedMeta = null;
+                let bakedMetaPending = null;
+
+                const channelRow = Array.from(elements.rows.children).find(tr =>
+                    tr.getAttribute('data-channel') === channelName
+                );
+                const percentInputEl = channelRow?.querySelector('.percent-input');
+                const endInputEl = channelRow?.querySelector('.end-input');
+                const channelPercent = parseFloat(percentInputEl?.value || '0');
+                const endValue = parseInt(endInputEl?.value || '0', 10);
 
                 // If measurement data exists, create key points at regular measurement-like intervals
                 if (hasMeasurementData && LinearizationState.isPerChannelEnabled(channelName)) {
                     const perChannelData = LinearizationState.getPerChannelData(channelName);
                     const perFormat = (perChannelData?.format || '').toUpperCase();
                     console.log(`[EDIT MODE] Creating measurement-like key points for ${channelName}`);
-
-                    // Get the measurement-corrected curve values
-                    const channelRow = Array.from(elements.rows.children).find(tr =>
-                        tr.getAttribute('data-channel') === channelName
-                    );
-                    const endInput = channelRow?.querySelector('.end-input');
-                    const endValue = parseInt(endInput?.value || '0', 10);
 
                     const values = sampleLinearizedCurve(channelName, endValue, true);
 
@@ -992,52 +1256,126 @@ function initializeEditModeForChannels() {
                         console.log(`[EDIT MODE] ✅ Created ${keyPoints.length} adaptive key points for ${channelName} from measurement curve`);
                     }
                 }
-                } else if (hasMeasurementData && LinearizationState.globalApplied) {
-                    // Check if global linearization has original measurement data for direct seeding
-                    const DIRECT_SEED_MAX_POINTS = 25;  // Legacy quadgen.html constant
+            } else if (hasMeasurementData && LinearizationState.globalApplied) {
+                // Check if global linearization has original measurement data for direct seeding
+                const DIRECT_SEED_MAX_POINTS = 25; // Legacy quadgen.html constant
 
-            if (globalData && Array.isArray(globalData.originalData) &&
-                globalData.originalData.length > 0 &&
-                globalData.originalData.length <= DIRECT_SEED_MAX_POINTS) {
+                if (globalData && Array.isArray(globalData.originalData) &&
+                    globalData.originalData.length > 0 &&
+                    globalData.originalData.length <= DIRECT_SEED_MAX_POINTS) {
 
-                console.log(`[EDIT MODE] 🎯 Direct seeding ${channelName} from ${globalData.originalData.length} global measurement points`);
-                console.log(`[EDIT MODE] 💡 This replicates legacy quadgen.html LAB → Smart Curves workflow`);
+                    console.log(`[EDIT MODE] 🎯 Direct seeding ${channelName} from ${globalData.originalData.length} global measurement points`);
+                    console.log('[EDIT MODE] 💡 This replicates legacy quadgen.html LAB → Smart Curves workflow');
 
-                const channelRow = Array.from(elements.rows.children).find(tr =>
-                    tr.getAttribute('data-channel') === channelName
-                );
-                const endInput = channelRow?.querySelector('.end-input');
-                const endValue = parseInt(endInput?.value || '0', 10);
-                const TOTAL = 65535;
+                    const TOTAL = 65535;
 
-                const normalizedSamples = Array.isArray(globalData.samples) ? globalData.samples : null;
+                    const curveValues = sampleLinearizedCurve(channelName, endValue, true);
+                    const normalizedSamples = Array.isArray(globalData.samples) ? globalData.samples : null;
 
-                if (normalizedSamples && normalizedSamples.length === 256) {
-                    const Nvals = normalizedSamples.length - 1;
-                    keyPoints = globalData.originalData.map(d => {
-                        const inputPercent = Math.max(0, Math.min(100, Number(d.input ?? d.GRAY ?? d.gray ?? 0)));
-                        const t = (inputPercent / 100) * Nvals;
-                        const i0 = Math.floor(t);
-                        const i1 = Math.min(Nvals, Math.ceil(t));
-                        const a = t - i0;
-                        const vNorm = (1 - a) * normalizedSamples[i0] + a * normalizedSamples[i1];
-                        const outputValue = vNorm * endValue;
-                        const outputPercent = Math.max(0, Math.min(100, (outputValue / TOTAL) * 100));
-                        return { input: inputPercent, output: outputPercent };
-                    });
+                    if (curveValues && curveValues.length === 256) {
+                        const curveArray = Array.from(curveValues);
+                        const lastIndex = curveArray.length - 1;
 
-                    seedMeta = {
-                        measurementSeed: {
-                            scope: 'global',
-                            format: globalFormat,
-                            count: globalData.originalData.length || 0
+                        const sampleCurvePercent = (inputPercent) => {
+                            const clampedInput = Math.max(0, Math.min(100, inputPercent));
+                            const t = (clampedInput / 100) * lastIndex;
+                            const i0 = Math.floor(t);
+                            const i1 = Math.min(lastIndex, Math.ceil(t));
+                            const alpha = t - i0;
+                            const curveValue = (1 - alpha) * curveArray[i0] + alpha * curveArray[i1];
+                            const absolutePercent = TOTAL > 0 ? (curveValue / TOTAL) * 100 : 0;
+                            return Math.max(0, Math.min(100, absolutePercent));
+                        };
+
+                        const adaptiveOptions = {
+                            maxErrorPercent: 0.0005,
+                            maxPoints: Math.max(32, Math.min(50, Math.ceil(curveArray.length / 4))),
+                            scaleMax: TOTAL
+                        };
+
+                        const measurementPoints = Array.isArray(globalData.originalData)
+                            ? globalData.originalData.map((d) => {
+                                const inputPercent = Math.max(0, Math.min(100, Number(d.input ?? d.GRAY ?? d.gray ?? 0)));
+                                const clampedPercent = sampleCurvePercent(inputPercent);
+                                const entry = {
+                                    input: inputPercent,
+                                    output: clampedPercent
+                                };
+
+                                if (typeof d.LAB_L === 'number') {
+                                    entry.labL = d.LAB_L;
+                                }
+
+                                return entry;
+                            })
+                            : [];
+
+                        keyPoints = extractAdaptiveKeyPointsFromValues(curveArray, adaptiveOptions).map((point) => {
+                            const input = Number(point.input);
+                            const output = Math.max(0, Math.min(100, sampleCurvePercent(input)));
+                            return { input, output };
+                        });
+
+                        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                            console.log('[EDIT MODE] Global adaptive key points count', keyPoints.length, channelName);
                         }
-                    };
 
-                    console.log(`[EDIT MODE] ✅ Generated ${keyPoints.length} key points for ${channelName} directly from measurement data`);
+                        const bakedMeta = {
+                            scope: 'global',
+                            filename: globalData?.filename || getCurrentGlobalFilename(),
+                            pointCount: keyPoints.length,
+                            timestamp: Date.now()
+                        };
+                        bakedMetaPending = bakedMeta;
+
+                        seedMeta = {
+                            measurementSeed: {
+                                scope: 'global',
+                                format: globalFormat,
+                                count: globalData.originalData.length || 0,
+                                originalPoints: measurementPoints
+                            }
+                        };
+
+                        console.log(`[EDIT MODE] ✅ Extracted ${keyPoints.length} Smart key points for ${channelName} from corrected curve samples`);
+                    } else if (normalizedSamples && normalizedSamples.length === 256) {
+                        const Nvals = normalizedSamples.length - 1;
+                        keyPoints = globalData.originalData.map(d => {
+                            const inputPercent = Math.max(0, Math.min(100, Number(d.input ?? d.GRAY ?? d.gray ?? 0)));
+                            const t = (inputPercent / 100) * Nvals;
+                            const i0 = Math.floor(t);
+                            const i1 = Math.min(Nvals, Math.ceil(t));
+                            const a = t - i0;
+                            const vNorm = (1 - a) * normalizedSamples[i0] + a * normalizedSamples[i1];
+                            const outputValue = vNorm * endValue;
+                            const outputPercent = Math.max(0, Math.min(100, (outputValue / TOTAL) * 100));
+                            return { input: inputPercent, output: outputPercent };
+                        });
+
+                        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                            console.log('[EDIT MODE] Global normalized key points count', keyPoints.length, channelName);
+                        }
+
+                        const bakedMeta = {
+                            scope: 'global',
+                            filename: globalData?.filename || getCurrentGlobalFilename(),
+                            pointCount: keyPoints.length,
+                            timestamp: Date.now()
+                        };
+                        bakedMetaPending = bakedMeta;
+
+                        seedMeta = {
+                            measurementSeed: {
+                                scope: 'global',
+                                format: globalFormat,
+                                count: globalData.originalData.length || 0
+                            }
+                        };
+
+                        console.log(`[EDIT MODE] ✅ Generated ${keyPoints.length} key points for ${channelName} using normalized measurement fallback`);
+                    }
                 }
-            }
-                } else {
+            } else {
                     // Fallback: extract key points from curve using algorithm
                     const channelRow = Array.from(elements.rows.children).find(tr =>
                         tr.getAttribute('data-channel') === channelName
@@ -1058,20 +1396,89 @@ function initializeEditModeForChannels() {
 
                 // Apply the key points if we have them
                 if (keyPoints && keyPoints.length >= 2) {
-                    persistSmartPoints(channelName, keyPoints, 'smooth', seedMeta);
+                    const channelPercentValid = Number.isFinite(channelPercent) && channelPercent > 0 ? channelPercent : null;
+                    const relativePoints = keyPoints.map((point) => {
+                        const absolute = Number(point.output);
+                        const relative = channelPercentValid
+                            ? (absolute / channelPercentValid) * 100
+                            : absolute;
+                        return {
+                            input: Number(point.input),
+                            output: Math.max(0, Math.min(100, relative))
+                        };
+                    });
+                    const persistOptions = {
+                        ...(seedMeta || {}),
+                        channelPercentOverride: channelPercentValid,
+                        pointsAreRelative: true,
+                        skipUiRefresh: false
+                    };
+                    persistSmartPoints(channelName, relativePoints, 'smooth', persistOptions);
+                    if (bakedMetaPending) {
+                        setGlobalBakedState(bakedMetaPending);
+                    }
                 } else {
                     // Final fallback: create simple linear points
                     const linearPoints = createDefaultKeyPoints();
-                    persistSmartPoints(channelName, linearPoints, 'smooth');
+                    const channelPercentValid = Number.isFinite(channelPercent) && channelPercent > 0 ? channelPercent : null;
+                    const relativeLinear = linearPoints.map((point) => {
+                        const absolute = Number(point.output);
+                        const relative = channelPercentValid
+                            ? (absolute / channelPercentValid) * 100
+                            : absolute;
+                        return {
+                            input: Number(point.input),
+                            output: Math.max(0, Math.min(100, relative))
+                        };
+                    });
+                    const fallbackOptions = {
+                        channelPercentOverride: channelPercentValid,
+                        pointsAreRelative: true,
+                        smartTouched: false,
+                        skipUiRefresh: false
+                    };
+                    persistSmartPoints(channelName, relativeLinear, 'smooth', fallbackOptions);
                     console.log(`[EDIT MODE] ✅ Created default linear points for ${channelName}`);
                 }
             } catch (err) {
                 console.warn(`[EDIT MODE] Failed to create Smart key points for ${channelName}:`, err);
             }
         } else {
-            console.log(`[EDIT MODE] ${channelName} already has ${existing.points.length} Smart key points`);
+            console.log(`[EDIT MODE] ${channelName} already has ${existingPoints.length} Smart key points`);
         }
     });
+
+    if (LinearizationState.isGlobalEnabled?.()) {
+        const bakedMeta = LinearizationState.getGlobalBakedMeta?.();
+        const globalDataCurrent = LinearizationState.getGlobalData?.();
+        if (globalDataCurrent && !bakedMeta) {
+            const representativeChannel = enabledChannels[0] || null;
+            const representativePoints = representativeChannel
+                ? ControlPoints.get(representativeChannel)?.points || null
+                : null;
+            const meta = {
+                scope: 'global',
+                filename: globalDataCurrent.filename || getCurrentGlobalFilename(),
+                pointCount: Array.isArray(representativePoints) ? representativePoints.length : null,
+                timestamp: Date.now()
+            };
+            setGlobalBakedState(meta);
+        }
+
+        enabledChannels.forEach((channelName) => {
+            try {
+                simplifySmartKeyPointsFromCurve(channelName, {
+                    maxErrorPercent: 0.05,
+                    maxPoints: 50,
+                    skipUiRefresh: true
+                });
+            } catch (err) {
+                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                    console.warn('[EDIT MODE] Failed to resimplify Smart points after baking for', channelName, err);
+                }
+            }
+        });
+    }
 
     // Set first enabled channel as selected if none is selected
     if (enabledChannels.length > 0 && !EDIT_STATE.selectedChannel) {
@@ -1600,7 +2007,8 @@ function updatePointDisplay() {
     // Update X,Y input field
     const xyInput = document.getElementById('editXYInput');
     if (xyInput) {
-        xyInput.value = `${point.input.toFixed(1)},${point.output.toFixed(1)}`;
+        const absoluteOutput = toAbsoluteOutput(channelName, point.output);
+        xyInput.value = `${point.input.toFixed(1)},${absoluteOutput.toFixed(1)}`;
         xyInput.disabled = false;
     }
 }

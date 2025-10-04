@@ -430,30 +430,17 @@ export function buildBaseCurve(endValue, channelName, smartCurveDetected = false
             }
 
             if (treatAsSmart) {
-                const curveMax = Math.max(...loadedCurve);
-                const tolerance = Math.max(1, Math.round(Math.max(curveMax, endValue) * 0.01));
-                const matchesEnd = Math.abs(curveMax - endValue) <= tolerance;
                 if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-                    console.log('[buildBaseCurve] treat as Smart', {
+                    console.log('[buildBaseCurve] treat as Smart (using stored Smart samples)', {
                         channelName,
                         endValue,
-                        curveMax,
-                        matchesEnd,
-                        scale: endValue / TOTAL
+                        curveMax: Math.max(...loadedCurve)
                     });
                 }
 
-                if (matchesEnd) {
-                    return {
-                        shortCircuit: false,
-                        values: loadedCurve.slice()
-                    };
-                }
-
-                const scale = endValue / TOTAL;
                 return {
                     shortCircuit: false,
-                    values: loadedCurve.map((v) => Math.round(v * scale))
+                    values: loadedCurve.slice()
                 };
             }
 

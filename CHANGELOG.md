@@ -20,6 +20,23 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Docs
 - _Nothing yet._
 
+## [Beta 3.0.4] — 2025-10-04
+### Added
+- _Nothing yet._
+
+### Changed
+- _Nothing yet._
+
+### Fixed
+- Smart curve baking now preserves the full measurement point set and marks the graph status as *BAKED* the moment LAB corrections are converted into Smart curves, preventing the two-point collapse seen in regression tests.
+- Global revert button now disables once a correction is baked, steering operators to undo instead of a no-op click.
+
+### Removed
+- _Nothing yet._
+
+### Docs
+- _Nothing yet._
+
 ## [Beta 3.0.3] — 2025-10-03
 ### Added
 - Added a Playwright regression that verifies inserting a Smart point with MK limited to 50% lands on the plotted curve.
