@@ -14,6 +14,7 @@ import { AUTO_LIMIT_CONFIG } from './auto-limit-config.js';
 import { setChannelAutoLimitMeta, clearChannelAutoLimitMeta } from './auto-limit-state.js';
 import { registerDebugNamespace } from '../utils/debug-registry.js';
 import { getLegacyLinearizationBridge } from '../legacy/linearization-bridge.js';
+import { isActiveRangeLinearizationEnabled, isCubeEndpointAnchoringEnabled } from './feature-flags.js';
 
 const globalScope = typeof globalThis !== 'undefined' ? globalThis : {};
 const legacyLinearizationBridge = getLegacyLinearizationBridge();
@@ -800,13 +801,8 @@ export function make256(endValue, channelName, applyLinearization = false, optio
  * @param {number} smoothingPercent - Smoothing percentage
  * @returns {Array<number>} Processed values
  */
-export function apply1DLUT(values, lutOrData, domainMin = 0, domainMax = 1, maxValue = TOTAL, interpolationType = 'cubic', smoothingPercent = 0) {
+function prepareLUTInterpolation(lutOrData, domainMin, domainMax, interpolationType, smoothingPercent) {
     try {
-        if (!Array.isArray(values) || values.length === 0) {
-            return [];
-        }
-
-
         const entry = lutOrData || {};
         const debugChannel = typeof entry === 'object' && entry.__debugChannelName ? entry.__debugChannelName : null;
         const lutDomainMin = typeof entry.domainMin === 'number' ? entry.domainMin : domainMin;
@@ -891,7 +887,7 @@ export function apply1DLUT(values, lutOrData, domainMin = 0, domainMax = 1, maxV
         }
 
         if (!Array.isArray(processedSamples) || processedSamples.length < 2) {
-            return values.slice();
+            return null;
         }
 
         const converted = DataSpace.convertSamples(processedSamples, {
@@ -902,8 +898,10 @@ export function apply1DLUT(values, lutOrData, domainMin = 0, domainMax = 1, maxV
         processedSamples = converted.values.map(clamp01);
         sourceSpace = converted.sourceSpace;
 
-        processedSamples[0] = 0;
-        processedSamples[processedSamples.length - 1] = 1;
+        if (isCubeEndpointAnchoringEnabled()) {
+            processedSamples[0] = 0;
+            processedSamples[processedSamples.length - 1] = 1;
+        }
 
         if (!Array.isArray(lutX) || lutX.length !== processedSamples.length) {
             lutX = ensureDomainCoords(processedSamples.length);
@@ -947,6 +945,39 @@ export function apply1DLUT(values, lutOrData, domainMin = 0, domainMax = 1, maxV
             interpolationFunction = createCubicSpline(lutX, processedSamples);
         }
 
+        return {
+            interpolationFunction,
+            lutDomainMin,
+            lutDomainMax,
+            domainSpan
+        };
+    } catch (error) {
+        console.error('Error preparing LUT interpolation:', error);
+        return null;
+    }
+}
+
+export function apply1DLUT(values, lutOrData, domainMin = 0, domainMax = 1, maxValue = TOTAL, interpolationType = 'cubic', smoothingPercent = 0) {
+    if (isActiveRangeLinearizationEnabled()) {
+        return apply1DLUTActiveRange(values, lutOrData, domainMin, domainMax, maxValue, interpolationType, smoothingPercent);
+    }
+
+    return apply1DLUTFixedDomain(values, lutOrData, domainMin, domainMax, maxValue, interpolationType, smoothingPercent);
+}
+
+export function apply1DLUTFixedDomain(values, lutOrData, domainMin = 0, domainMax = 1, maxValue = TOTAL, interpolationType = 'cubic', smoothingPercent = 0) {
+    try {
+        if (!Array.isArray(values) || values.length === 0) {
+            return [];
+        }
+
+        const context = prepareLUTInterpolation(lutOrData, domainMin, domainMax, interpolationType, smoothingPercent);
+        if (!context) {
+            return values.slice();
+        }
+
+        const { interpolationFunction, lutDomainMin, lutDomainMax, domainSpan } = context;
+
         const maxOutput = Math.max(1, maxValue || TOTAL);
         const enableDebug = typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS;
 
@@ -967,6 +998,167 @@ export function apply1DLUT(values, lutOrData, domainMin = 0, domainMax = 1, maxV
         console.error('Error in apply1DLUT:', error);
         return values.slice();
     }
+}
+
+export function apply1DLUTActiveRange(values, lutOrData, domainMin = 0, domainMax = 1, maxValue = TOTAL, interpolationType = 'cubic', smoothingPercent = 0) {
+    try {
+        if (!Array.isArray(values) || values.length === 0) {
+            return [];
+        }
+
+        const context = prepareLUTInterpolation(lutOrData, domainMin, domainMax, interpolationType, smoothingPercent);
+        if (!context) {
+            return values.slice();
+        }
+
+        const { interpolationFunction, lutDomainMin, lutDomainMax } = context;
+        const maxOutput = Math.max(1, maxValue || TOTAL);
+
+        const targets = calculateLinearizationTargets(maxOutput, interpolationFunction, lutDomainMin, lutDomainMax, values.length);
+        const activeRange = detectActiveRange(values);
+        const remapped = remapActiveRange(values, targets, activeRange, { maxOutput });
+        return enforceMonotonic(remapped);
+    } catch (error) {
+        console.error('Error in apply1DLUTActiveRange:', error);
+        return values.slice();
+    }
+}
+
+export function detectActiveRange(curve, { threshold = 0 } = {}) {
+    if (!Array.isArray(curve) || curve.length === 0) {
+        return {
+            startIndex: -1,
+            endIndex: -1,
+            span: 0,
+            isActive: false
+        };
+    }
+
+    const effectiveThreshold = Number.isFinite(threshold) ? threshold : 0;
+    let startIndex = -1;
+    let endIndex = -1;
+
+    for (let i = 0; i < curve.length; i++) {
+        if (curve[i] > effectiveThreshold) {
+            startIndex = i;
+            break;
+        }
+    }
+
+    for (let i = curve.length - 1; i >= 0; i--) {
+        if (curve[i] > effectiveThreshold) {
+            endIndex = i;
+            break;
+        }
+    }
+
+    const isActive = startIndex >= 0 && endIndex >= startIndex;
+
+    return {
+        startIndex,
+        endIndex,
+        span: isActive ? (endIndex - startIndex) : 0,
+        isActive
+    };
+}
+
+export function calculateLinearizationTargets(maxValue, interpolationFunction, domainMin = 0, domainMax = 1, resolution = CURVE_RESOLUTION) {
+    if (typeof interpolationFunction !== 'function' || resolution <= 0) {
+        return new Array(Math.max(0, resolution)).fill(0);
+    }
+
+    const targets = new Array(resolution);
+    const domainSpan = Math.abs(domainMax - domainMin) > 1e-9 ? domainMax - domainMin : 1;
+    const maxOutput = Math.max(1, Number(maxValue) || TOTAL);
+
+    for (let i = 0; i < resolution; i++) {
+        const inputNormalized = resolution === 1 ? 0 : i / (resolution - 1);
+        const t = domainMin + inputNormalized * domainSpan;
+        const lutValue = clamp01(interpolationFunction(t));
+        targets[i] = Math.round(lutValue * maxOutput);
+    }
+
+    return targets;
+}
+
+export function remapActiveRange(baseCurve, targets, activeRange, options = {}) {
+    if (!Array.isArray(baseCurve) || baseCurve.length === 0) {
+        return [];
+    }
+
+    if (!Array.isArray(targets) || targets.length === 0) {
+        return baseCurve.slice();
+    }
+
+    const effectiveActiveRange = activeRange && typeof activeRange === 'object'
+        ? activeRange
+        : detectActiveRange(baseCurve);
+
+    if (!effectiveActiveRange || !effectiveActiveRange.isActive) {
+        return baseCurve.slice();
+    }
+
+    const targetRange = detectActiveRange(targets, { threshold: options.targetThreshold ?? 0 });
+    if (!targetRange.isActive) {
+        return baseCurve.slice();
+    }
+
+    const result = new Array(baseCurve.length).fill(0);
+    const maxOutput = Math.max(1, Number(options.maxOutput) || TOTAL);
+
+    const baseSpan = Math.max(1, effectiveActiveRange.span || 0);
+    const targetSpan = Math.max(1, targetRange.span || 0);
+
+    const clampTargetIndex = (index) => {
+        if (Number.isNaN(index)) return targetRange.startIndex;
+        return Math.max(targetRange.startIndex, Math.min(targetRange.endIndex, index));
+    };
+
+    const safeTargetValue = (index) => {
+        const clamped = clampTargetIndex(index);
+        return targets[clamped] ?? 0;
+    };
+
+    for (let i = 0; i < baseCurve.length; i++) {
+        if (i < effectiveActiveRange.startIndex || i > effectiveActiveRange.endIndex) {
+            result[i] = 0;
+            continue;
+        }
+
+        const fraction = baseSpan === 0 ? 0 : (i - effectiveActiveRange.startIndex) / baseSpan;
+        const targetIndexFloat = targetRange.startIndex + fraction * targetSpan;
+
+        if (!Number.isFinite(targetIndexFloat)) {
+            result[i] = 0;
+            continue;
+        }
+
+        const lowerIndex = Math.floor(targetIndexFloat);
+        const upperIndex = Math.ceil(targetIndexFloat);
+        const alpha = clamp01(targetIndexFloat - lowerIndex);
+        const lowerValue = safeTargetValue(lowerIndex);
+        const upperValue = safeTargetValue(upperIndex);
+        const interpolated = (1 - alpha) * lowerValue + alpha * upperValue;
+
+        result[i] = Math.round(Math.max(0, Math.min(maxOutput, interpolated)));
+    }
+
+    return result;
+}
+
+export function enforceMonotonic(curve) {
+    if (!Array.isArray(curve) || curve.length === 0) {
+        return [];
+    }
+
+    const result = curve.slice();
+    for (let i = 1; i < result.length; i++) {
+        if (result[i] < result[i - 1]) {
+            result[i] = result[i - 1];
+        }
+    }
+
+    return result;
 }
 
 /**
@@ -1050,6 +1242,12 @@ export function buildFile() {
 registerDebugNamespace('processingPipeline', {
     make256,
     apply1DLUT,
+    apply1DLUTFixedDomain,
+    apply1DLUTActiveRange,
+    detectActiveRange,
+    calculateLinearizationTargets,
+    remapActiveRange,
+    enforceMonotonic,
     buildFile,
     buildBaseCurve,
     applyPerChannelLinearizationStep,

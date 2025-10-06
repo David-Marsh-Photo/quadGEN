@@ -8,6 +8,7 @@ import { LinearizationState, markLinearizationEdited } from '../data/linearizati
 import { InputValidator } from '../core/validation.js';
 import { triggerInkChartUpdate, triggerProcessingDetail, triggerRevertButtonsUpdate, triggerPreviewUpdate } from '../ui/ui-hooks.js';
 import { make256 } from '../core/processing-pipeline.js';
+import { isActiveRangeLinearizationEnabled } from '../core/feature-flags.js';
 import { isEditModeEnabled } from '../ui/edit-mode.js';
 import { getHistoryManager } from '../core/history-manager.js';
 import { updateAppState, getAppState } from '../core/state.js';
@@ -62,6 +63,22 @@ const smartRescaleAudit = (() => {
     globalScope.__SMART_RESCALE_AUDIT = api;
     return api;
 })();
+
+function isActiveRangeModeEnabled() {
+    try {
+        if (isActiveRangeLinearizationEnabled()) {
+            return true;
+        }
+        if (globalScope && typeof globalScope.isActiveRangeLinearizationEnabled === 'function') {
+            return !!globalScope.isActiveRangeLinearizationEnabled();
+        }
+    } catch (err) {
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.warn('[SMART CURVES] Active-range flag probe failed:', err);
+        }
+    }
+    return false;
+}
 
 /**
  * Smart Curve simplification configuration
@@ -219,6 +236,12 @@ export const ControlPoints = {
             ...prevMeta,
             interpolationType: (interpolation === 'linear' ? 'linear' : 'smooth')
         };
+
+        if (isActiveRangeModeEnabled()) {
+            loadedData.keyPointsMeta[channelName].activeRangeLinearized = true;
+        } else if (loadedData.keyPointsMeta[channelName].activeRangeLinearized) {
+            delete loadedData.keyPointsMeta[channelName].activeRangeLinearized;
+        }
     },
 
     /**
@@ -1017,7 +1040,7 @@ export function simplifySmartKeyPointsFromCurve(channelName, options = {}) {
 
         const row = getChannelRow(channelName);
         const endValue = row ? InputValidator.clampEnd(row.querySelector('.end-input')?.value || TOTAL) : TOTAL;
-        const rawCurveValues = make256(endValue, channelName, false);
+        const rawCurveValues = make256(endValue, channelName, true);
 
         const keyPoints = extractAdaptiveKeyPointsFromValues(rawCurveValues, {
             maxErrorPercent,
@@ -1058,6 +1081,12 @@ export function simplifySmartKeyPointsFromCurve(channelName, options = {}) {
             bakedAutoWhite: autoWhiteOn,
             bakedAutoBlack: autoBlackOn
         };
+
+        if (isActiveRangeModeEnabled()) {
+            data.keyPointsMeta[channelName].activeRangeLinearized = true;
+        } else if (data.keyPointsMeta[channelName].activeRangeLinearized) {
+            delete data.keyPointsMeta[channelName].activeRangeLinearized;
+        }
 
         if (globalActive) {
             const history = getHistoryManager?.();
@@ -1207,6 +1236,12 @@ function applySmartKeyPointsInternal(channelName, keyPoints, interpolationType =
         nextMeta.smartTouched = true;
     } else if ('smartTouched' in nextMeta) {
         delete nextMeta.smartTouched;
+    }
+
+    if (isActiveRangeModeEnabled()) {
+        nextMeta.activeRangeLinearized = true;
+    } else if ('activeRangeLinearized' in nextMeta) {
+        delete nextMeta.activeRangeLinearized;
     }
     data.keyPointsMeta[channelName] = nextMeta;
 

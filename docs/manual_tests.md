@@ -96,13 +96,11 @@ Manual spot checks are only required if one of these specs fails or a new scenar
 ## Scaling State – Manual Acceptance (Single Operator)
 Use this quick pass whenever the scaling-state flag defaults to ON or after making related changes. It complements the automated harness by confirming the UI, history, and telemetry behave as expected in a real session.
 
-1. Launch the latest `index.html` build (post-`npm run build:agent`) and confirm `Help → Version History` shows the Scaling State audit panel with live counters.
-2. In the Global Scale panel, enter `135` and press Enter. Expect the scale field to snap back to `100` while the audit counters increment `scaleChannelEndsByPercent:applied`.
-3. Click **Undo** and **Redo** once each. Verify:
-   - The scale input reads `90` after redo (matching the automated Playwright workflow), and
-   - No console warnings/errors appear in DevTools; `history:undo` and `history:redo` counters increment.
+1. Launch the latest `index.html` build (post-`npm run build:agent`) and confirm `Help → Version History` loads normally without the former Scaling State audit panel.
+2. In the Global Scale panel, enter `135` and press Enter. Expect the field to snap back to `100`, reflecting the guard against values above the cached maximum.
+3. Click **Undo** and **Redo** once each. Verify the scale input returns to the prior value (`90` after redo in the current workflow) and that no console warnings/errors appear in DevTools.
 4. Open the DevTools console and run `window.validateScalingStateSync()`; ensure it logs success without mismatches.
-5. Record the run by saving the current audit snapshot via:
+5. Capture the current scaling audit snapshot (if available) via:
    ```js
    JSON.stringify(window.scalingStateAudit, null, 2)
    ```

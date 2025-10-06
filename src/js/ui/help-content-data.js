@@ -9,12 +9,43 @@ export const VERSION_HISTORY = {
     title: 'In progress',
     sections: {
       ADDED: [],
-      CHANGED: [],
+      CHANGED: [
+        'Smoke gate (`npm run test:smoke`) now skips the active-range diff diagnostics while the feature work is paused.'
+      ],
       FIXED: [],
-      REMOVED: [],
+      REMOVED: [
+        'Scaling State audit panel removed from Help → Version History; access telemetry via diagnostics scripts if needed.'
+      ],
       DOCS: []
     },
     aboutDialog: []
+  },
+  '3.1.2': {
+    date: '2025-10-06',
+    title: 'Active-range flag & LUT clamp defaults',
+    sections: {
+      ADDED: [
+        'Active-range linearization flag (`enableActiveRangeLinearization`) stays opt-in with fresh Vitest coverage across delayed-onset, zero-ink, and tiny-span cases.',
+        'Cube endpoint anchoring flag now defaults off so sub-100% LUT maxima (like negative plates) load without manual toggles.'
+      ],
+      CHANGED: [
+        'apply1DLUT shares its interpolation prep across fixed and active-range paths while keeping the legacy route intact when the flag is disabled.',
+        'Smoke gate (`npm run test:smoke`) runs only the Playwright check; the active-range diff diagnostics are sidelined while the pipeline work is paused.'
+      ],
+      FIXED: [
+        'Global LUT application honours the cube-endpoint anchoring flag so LUT-driven scaling actually shows up in exported curves.'
+      ],
+      REMOVED: [],
+      DOCS: [
+        'Print linearization guide documents active-range mapping plus the new flag toggle.',
+        'Active-range migration checklist now tracks the diagnostics hook status and how to re-enable the diff script when feature work resumes.',
+        'Help → Version History and internal guides now explain how to disable or restore the cube endpoint clamp.'
+      ]
+    },
+    aboutDialog: [
+      { label: 'Active-range Flag', desc: 'Opt-in flag stays available with expanded tests and docs covering delayed-onset and zero-ink scenarios.' },
+      { label: 'LUT Clamp Toggle', desc: 'Cube endpoint anchoring defaults off so negative-density LUTs scale curves; re-enable the clamp when legacy exports need 0/100 endpoints.' }
+    ]
   },
   '3.1.1': {
     date: '2025-10-06',

@@ -35,6 +35,14 @@ You may perform the inversion in \(D_{rel}\) instead of L*. The code below provi
 - Enforce endpoints: \(x=0\Rightarrow x_{adj}=0\), \(x=100\Rightarrow x_{adj}=100\).
 - Export a **256‑sample** LUT for integration into printing pipelines.
 
+### Active-range mapping (quadGEN feature flag)
+- QuadToneRIP reference workflows normalize linearization within each channel’s **active ink span**. quadGEN mirrors this behavior behind the `ENABLE_ACTIVE_RANGE_LINEARIZATION` flag (toggle via `enableActiveRangeLinearization(true)`).
+- The active-range path:
+  - Detects the channel’s active indices (first/last non-zero ink samples) and the equivalent range in the LUT targets.
+  - Reprojects the target curve across that span so delayed-onset channels can compress (later starts) and early channels can expand while the zero plateau stays untouched.
+  - Enforces monotonic output with `enforceMonotonic()` after remapping to avoid banding or reversals.
+- When the flag is **off**, quadGEN retains the legacy fixed-domain behavior (same correction applied at every 0–100% input). Enable the flag when validating active-range parity against DNPRO/POPS data; leave it off during legacy comparisons.
+
 ## Python example
 Reads a CSV with columns: `input_percent,Lstar`. Produces a 256‑sample correction LUT (`x_adj[0..255]`) mapping nominal input 0..100 to adjusted input 0..100.
 
@@ -152,4 +160,3 @@ if __name__ == "__main__":
 ## Deliverables
 - This guide (`print_linearization_guide.md`).
 - Example LUTs if you run the script: `linearization_Lstar_LUT.csv`, `linearization_Drel_LUT.csv`.
-

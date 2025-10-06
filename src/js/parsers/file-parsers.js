@@ -4,6 +4,7 @@
 import { CURVE_RESOLUTION } from '../data/processing-utils.js';
 import { DataSpace } from '../data/processing-utils.js';
 import { anchorSamplesToUnitRange } from '../data/linearization-utils.js';
+import { isCubeEndpointAnchoringEnabled } from '../core/feature-flags.js';
 import {
     parseLabData,
     parseCgatsNumber,
@@ -14,7 +15,7 @@ import {
     rebuildLabSamplesFromOriginal
 } from '../data/lab-parser.js';
 import { parseCGATS17 } from '../data/cgats-parser.js';
-import { createPCHIPSpline } from '../math/interpolation.js';
+import { createPCHIPSpline, clamp01 } from '../math/interpolation.js';
 import { registerDebugNamespace } from '../utils/debug-registry.js';
 
 export {
@@ -344,7 +345,10 @@ export function parseCube1D(cubeText, filename = 'lut.cube') {
             metadata: { filename }
         });
 
-        const anchoredSamples = anchorSamplesToUnitRange(converted.values.map(value => Number(value) || 0));
+        const normalizedSamples = converted.values.map(value => clamp01(Number(value) || 0));
+        const processedSamples = isCubeEndpointAnchoringEnabled()
+            ? anchorSamplesToUnitRange(normalizedSamples)
+            : normalizedSamples;
 
         if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
             console.log('[mod] parseCube1D', {
@@ -361,8 +365,8 @@ export function parseCube1D(cubeText, filename = 'lut.cube') {
             format: '1D LUT',
             filename,
             lutSize: declaredSize || samples.length,
-            samples: anchoredSamples,
-            originalSamples: anchoredSamples.slice(),
+            samples: processedSamples,
+            originalSamples: processedSamples.slice(),
             rawSamples: converted.values.slice(),
             sourceSpace: converted.sourceSpace,
             conversionMeta: converted.meta,

@@ -9,16 +9,37 @@ This changelog follows a concise, user-facing format. Engineering details live i
 - _Nothing yet._
 
 ### Changed
-- _Nothing yet._
+- `npm run test:smoke` now runs only the Playwright smoke check; the active-range diff diagnostics have been retired while the linearization work is on hold.
 
 ### Fixed
 - _Nothing yet._
 
 ### Removed
-- _Nothing yet._
+- Scaling State audit panel removed from Help → Version History now that the coordinator rollout is complete.
 
 ### Docs
 - _Nothing yet._
+
+## [v3.1.2] — 2025-10-06
+### Added
+- Active-range linearization feature flag (`enableActiveRangeLinearization`) remains opt-in with scaffolding and Vitest coverage for delayed-onset, zero-ink, and tiny-span channels.
+- 1D LUT endpoint anchoring flag (`setCubeEndpointAnchoringEnabled`) now defaults off, honoring sub-100% LUT maxima while allowing the legacy 0/100 clamp to be re-enabled when required.
+
+### Changed
+- `apply1DLUT` routes through shared interpolation prep and supports active-range remapping while preserving the legacy fixed-domain path when the flag is disabled.
+- `npm run test:smoke` runs only the Playwright smoke check; active-range diff diagnostics are available separately when the flag work resumes.
+
+### Fixed
+- Global LUT application now respects the cube-endpoint anchoring flag, so sub-100% LUTs (e.g., negative density ramps) actually scale exported curves.
+
+### Removed
+- _Nothing yet._
+
+### Docs
+- Documented the active-range workflow and feature flag usage in the print linearization guide; noted the toggle in CLAUDE.md and AGENTS.md.
+- Active-range checklist now records the diagnostics hook status and how to re-enable the diff script when active-range work resumes.
+- Help → Version History now explains the default-on active-range behavior and how to disable it for emergency rollbacks.
+- CLAUDE.md and AGENTS.md now document the cube-endpoint anchoring flag with the new default-off behavior so internal assistants know how to restore the clamp when required.
 
 ## [v3.1.1] — 2025-10-06
 ### Changed
