@@ -10,7 +10,7 @@ This changelog follows a concise, user-facing format. Engineering details live i
 
 ### Changed
 - `npm run test:smoke` now runs only the Playwright smoke check; the active-range diff diagnostics have been retired while the linearization work is on hold.
-- Channel percent/end inputs now update to the effective ink limits when corrections (.cube/.txt) are active, so the table always matches the plotted output.
+- Channel list now shows “Effective” ink limits beneath each percent/end field so corrections (.cube/.txt) keep the UI in sync with the plotted output.
 
 ### Fixed
 - _Nothing yet._

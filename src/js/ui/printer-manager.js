@@ -49,11 +49,17 @@ function buildChannelRow(channelName, percent, endValue) {
         <td class="px-1 pt-2 pb-1 align-middle text-left">
             <span class="processing-label italic font-normal text-xs text-gray-600" data-channel="${channelName}">→ Linear ramp</span>
         </td>
-        <td class="pr-0 pt-2 pb-1 text-right" style="width:120px;">
-            <input type="number" step="1" min="0" max="100" value="${percent}" data-base-percent="${percent}" class="percent-input w-20 m-0 rounded-lg border border-gray-300 px-2 py-1 text-right">
+        <td class="pr-0 pt-2 pb-1 text-right align-top" style="width:120px;">
+            <div class="flex flex-col items-end gap-0.5">
+                <input type="number" step="1" min="0" max="100" value="${percent}" class="percent-input w-20 m-0 rounded-lg border border-gray-300 px-2 py-1 text-right">
+                <div class="text-[10px] text-slate-500 leading-tight hidden" data-effective-percent></div>
+            </div>
         </td>
-        <td class="pl-0 pt-2 pb-1 text-right" style="width:120px;">
-            <input type="number" step="1" min="0" max="65535" value="${endValue}" data-base-end="${endValue}" class="end-input w-20 m-0 rounded-lg border border-gray-300 px-2 py-1 text-right">
+        <td class="pl-0 pt-2 pb-1 text-right align-top" style="width:120px;">
+            <div class="flex flex-col items-end gap-0.5">
+                <input type="number" step="1" min="0" max="65535" value="${endValue}" class="end-input w-20 m-0 rounded-lg border border-gray-300 px-2 py-1 text-right">
+                <div class="text-[10px] text-slate-500 leading-tight hidden" data-effective-end></div>
+            </div>
         </td>
     `;
 
@@ -85,10 +91,16 @@ function buildPlaceholderRow() {
             <span class="text-xs text-gray-500 invisible">—</span>
         </td>
         <td class="pr-0 pt-2 pb-1 text-right" style="width:120px;">
-            <input type="number" step="1" min="0" max="100" value="100" data-base-percent="100" class="percent-input w-20 m-0 rounded-lg border border-gray-300 px-2 py-1 text-right invisible" disabled>
+            <div class="flex flex-col items-end gap-0.5">
+                <input type="number" step="1" min="0" max="100" value="100" class="percent-input w-20 m-0 rounded-lg border border-gray-300 px-2 py-1 text-right invisible" disabled>
+                <div class="text-[10px] text-slate-500 leading-tight hidden" data-effective-percent></div>
+            </div>
         </td>
         <td class="pl-0 pt-2 pb-1 text-right" style="width:120px;">
-            <input type="number" step="1" min="0" max="65535" value="65535" data-base-end="65535" class="end-input w-20 m-0 rounded-lg border border-gray-300 px-2 py-1 text-right invisible" disabled>
+            <div class="flex flex-col items-end gap-0.5">
+                <input type="number" step="1" min="0" max="65535" value="65535" class="end-input w-20 m-0 rounded-lg border border-gray-300 px-2 py-1 text-right invisible" disabled>
+                <div class="text-[10px] text-slate-500 leading-tight hidden" data-effective-end></div>
+            </div>
         </td>
     `;
     return row;

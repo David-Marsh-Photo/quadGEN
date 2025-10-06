@@ -32,7 +32,6 @@ import {
 import { showStatus } from './status-service.js';
 import { initializeHelpSystem } from './help-system.js';
 import { setPrinter, registerChannelRowSetup, syncPrinterForQuadData } from './printer-manager.js';
-import { make256 } from '../core/processing-pipeline.js';
 
 const globalScope = typeof window !== 'undefined' ? window : globalThis;
 const isBrowser = typeof document !== 'undefined';
@@ -462,7 +461,6 @@ function initializeScaleHandlers() {
             console.log(`🔍 [SCALE DEBUG] Executing immediate scaling via coordinator (${parsed})`);
             scalingCoordinator
                 .scale(parsed, 'ui', { priority: 'high', metadata: { trigger: 'commitScaleAllImmediate' } })
-                .then(() => refreshEffectiveInkDisplays())
                 .catch(handleCoordinatorError);
         } else {
             console.log(`🔍 [SCALE DEBUG] Setting up debounced coordinator scaling for:`, parsed);
@@ -470,7 +468,6 @@ function initializeScaleHandlers() {
                 console.log(`🔍 [SCALE DEBUG] Executing debounced coordinator scaling (${parsed})`);
                 scalingCoordinator
                     .scale(parsed, 'ui', { metadata: { trigger: 'commitScaleAllDebounce' } })
-                    .then(() => refreshEffectiveInkDisplays())
                     .catch(handleCoordinatorError);
             }, 100);
             console.log(`🔍 [SCALE DEBUG] Coordinator debounce timeout set:`, scaleDebounceTimeout);
@@ -651,73 +648,6 @@ function initializeChannelRowHandlers() {
     });
 }
 
-function getBasePercentFromInput(input) {
-    if (!input) return 0;
-    const data = input.getAttribute('data-base-percent');
-    return InputValidator.clampPercent(data !== null ? data : input.value);
-}
-
-function getBaseEndFromInput(input) {
-    if (!input) return 0;
-    const data = input.getAttribute('data-base-end');
-    return InputValidator.clampEnd(data !== null ? data : input.value);
-}
-
-function setBasePercentOnInput(input, value) {
-    if (!input) return;
-    const clamped = InputValidator.clampPercent(value);
-    input.setAttribute('data-base-percent', String(clamped));
-}
-
-function setBaseEndOnInput(input, value) {
-    if (!input) return;
-    const clamped = InputValidator.clampEnd(value);
-    input.setAttribute('data-base-end', String(clamped));
-}
-
-function getRowBaselines(row) {
-    if (!row) return { percent: 0, end: 0 };
-    const percentInput = row.querySelector('.percent-input');
-    const endInput = row.querySelector('.end-input');
-    return {
-        percent: getBasePercentFromInput(percentInput),
-        end: getBaseEndFromInput(endInput)
-    };
-}
-
-function refreshEffectiveInkDisplays() {
-    if (!elements.rows) return;
-    const rows = elements.rows.querySelectorAll('tr.channel-row[data-channel]');
-    rows.forEach((row) => {
-        const channelName = row.getAttribute('data-channel');
-        if (!channelName) return;
-        const percentInput = row.querySelector('.percent-input');
-        const endInput = row.querySelector('.end-input');
-        if (!percentInput || !endInput) return;
-
-        const basePercent = getBasePercentFromInput(percentInput);
-        const baseEnd = getBaseEndFromInput(endInput);
-
-        if (baseEnd <= 0 || basePercent <= 0) {
-            percentInput.value = basePercent.toFixed(1);
-            endInput.value = String(baseEnd);
-            return;
-        }
-
-        try {
-            const curveValues = make256(baseEnd, channelName, true);
-            const peakValue = Math.max(...curveValues);
-            const peakPercent = (peakValue / TOTAL) * 100;
-            percentInput.value = peakPercent.toFixed(1);
-            endInput.value = String(Math.round(peakValue));
-        } catch (err) {
-            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-                console.warn('[INK DISPLAY] Failed to compute effective ink for', channelName, err);
-            }
-        }
-    });
-}
-
 function isDefaultSmartRamp(points) {
     if (!Array.isArray(points) || points.length !== 2) {
         return false;
@@ -796,9 +726,10 @@ function handlePercentInput(input) {
     let previousPercent = null;
     let previousEnd = null;
     if (row) {
-        const baselines = getRowBaselines(row);
-        previousPercent = baselines.percent;
-        previousEnd = baselines.end;
+        const currentEndInput = row.querySelector('.end-input');
+        if (currentEndInput) {
+            previousEnd = InputValidator.clampEnd(currentEndInput.value);
+        }
     }
 
     let manager = null;
@@ -809,6 +740,10 @@ function handlePercentInput(input) {
                 console.log(`[INPUT DEBUG] State manager exists: ${!!manager}`);
             }
             if (manager) {
+                const storedPercent = manager.get(`printer.channelValues.${channelName}.percentage`);
+                if (Number.isFinite(storedPercent)) {
+                    previousPercent = storedPercent;
+                }
                 manager.setChannelValue(channelName, 'percentage', validatedPercent);
             }
         } catch (err) {
@@ -822,7 +757,6 @@ function handlePercentInput(input) {
         const endInput = row.querySelector('.end-input');
         if (endInput) {
             newEndValue = InputValidator.computeEndFromPercent(validatedPercent);
-            setBaseEndOnInput(endInput, newEndValue);
             endInput.value = newEndValue;
             InputValidator.clearValidationStyling(endInput);
 
@@ -834,8 +768,6 @@ function handlePercentInput(input) {
                 }
             }
         }
-
-        setBasePercentOnInput(input, validatedPercent);
 
         // Update scale baseline for global scale integration
         const rowChannelName = row.getAttribute('data-channel');
@@ -899,8 +831,6 @@ function handlePercentInput(input) {
         }, 0);
     }
 
-    refreshEffectiveInkDisplays();
-
     // Trigger preview update and chart update
     if (typeof debouncedPreviewUpdate !== 'undefined') {
         debouncedPreviewUpdate();
@@ -929,15 +859,32 @@ function handleEndInput(input) {
     const row = input.closest('tr');
     const channelName = row?.getAttribute('data-channel');
 
-    const baselines = row ? getRowBaselines(row) : { percent: null, end: null };
-    let previousPercent = baselines.percent;
-    let previousEnd = baselines.end;
+    let previousPercent = null;
+    let previousEnd = null;
+    if (row) {
+        const percentInput = row.querySelector('.percent-input');
+        if (percentInput) {
+            previousPercent = InputValidator.clampPercent(percentInput.value);
+        }
+        const endInput = row.querySelector('.end-input');
+        if (endInput) {
+            previousEnd = InputValidator.clampEnd(endInput.value);
+        }
+    }
 
     let manager = null;
     if (channelName) {
         try {
             manager = getStateManager?.() ?? null;
             if (manager) {
+                const storedPercent = manager.get(`printer.channelValues.${channelName}.percentage`);
+                if (Number.isFinite(storedPercent)) {
+                    previousPercent = storedPercent;
+                }
+                const storedEnd = manager.get(`printer.channelValues.${channelName}.endValue`);
+                if (Number.isFinite(storedEnd)) {
+                    previousEnd = storedEnd;
+                }
                 manager.setChannelValue(channelName, 'endValue', validatedEnd);
             }
         } catch (err) {
@@ -952,7 +899,6 @@ function handleEndInput(input) {
         const percentInput = row.querySelector('.percent-input');
         if (percentInput) {
             newPercentValue = InputValidator.computePercentFromEnd(validatedEnd);
-            setBasePercentOnInput(percentInput, newPercentValue);
             percentInput.value = newPercentValue.toFixed(1);
             InputValidator.clearValidationStyling(percentInput);
 
@@ -964,8 +910,6 @@ function handleEndInput(input) {
                 }
             }
         }
-
-        setBaseEndOnInput(input, validatedEnd);
 
         // Update scale baseline for global scale integration
         const rowChannelName = row.getAttribute('data-channel');
@@ -1029,8 +973,6 @@ function handleEndInput(input) {
                 });
         }, 0);
     }
-
-    refreshEffectiveInkDisplays();
 
     // Trigger preview update and chart update
     if (typeof debouncedPreviewUpdate !== 'undefined') {
@@ -1321,8 +1263,6 @@ function initializeFileHandlers() {
                     updatePreview();
                 }
 
-                refreshEffectiveInkDisplays();
-
                 const printer = getCurrentPrinter();
                 const channels = printer?.channels || [];
                 channels.forEach((ch) => {
@@ -1458,7 +1398,6 @@ function initializeFileHandlers() {
                         showStatus(`Loaded global correction: ${file.name} (${countLabel})`);
 
                         applyGlobalLinearizationToggle(true);
-                        refreshEffectiveInkDisplays();
 
                     } else {
                         throw new Error('Failed to parse linearization data');
@@ -2123,7 +2062,6 @@ export function setupChannelRow(tr) {
             updateProcessingDetail(channelName);
             updateInkChart();
             debouncedPreviewUpdate();
-            refreshEffectiveInkDisplays();
 
             // Reinitialize Smart Curves if edit mode is active
             if (typeof globalScope.reinitializeChannelSmartCurves === 'function') {
@@ -2163,7 +2101,6 @@ export function setupChannelRow(tr) {
             refreshPerChannelDisplay();
             updateProcessingDetail(channelName);
             updateInkChart();
-            refreshEffectiveInkDisplays();
         } finally {
             if (perChannelFile) {
                 perChannelFile.value = '';
@@ -2397,8 +2334,8 @@ export function setupChannelRow(tr) {
     registerChannelRow(channelName, tr);
 
     // Store original values for restoration when re-enabling
-    const originalPercent = parseFloat((percentInput?.getAttribute('data-base-percent') ?? percentInput?.value) || 0);
-    const originalEnd = parseFloat((endInput?.getAttribute('data-base-end') ?? endInput?.value) || 0);
+    const originalPercent = parseFloat(percentInput?.value || 0);
+    const originalEnd = parseFloat(endInput?.value || 0);
 
     // Store original values on the row element
     tr._originalPercent = originalPercent;
@@ -2416,27 +2353,23 @@ export function setupChannelRow(tr) {
             // Restore original values if they were stored, otherwise use reasonable defaults
             if (percentInput) {
                 if (tr._originalPercent > 0) {
-                    setBasePercentOnInput(percentInput, tr._originalPercent);
                     percentInput.value = tr._originalPercent.toString();
                 } else {
-                    setBasePercentOnInput(percentInput, 100);
                     percentInput.value = '100';
                 }
             }
             if (endInput) {
                 if (tr._originalEnd > 0) {
-                    setBaseEndOnInput(endInput, tr._originalEnd);
                     endInput.value = tr._originalEnd.toString();
                 } else {
                     const newEndValue = Math.round((parseFloat(percentInput?.value || 100) / 100) * 65535);
-                    setBaseEndOnInput(endInput, newEndValue);
                     endInput.value = newEndValue.toString();
                 }
             }
         } else {
             // Disable channel - but first save current values as the new "original" values
-            tr._originalPercent = parseFloat((percentInput?.getAttribute('data-base-percent') ?? percentInput?.value) || 0);
-            tr._originalEnd = parseFloat((endInput?.getAttribute('data-base-end') ?? endInput?.value) || 0);
+            tr._originalPercent = parseFloat(percentInput?.value || 0);
+            tr._originalEnd = parseFloat(endInput?.value || 0);
 
             tr.setAttribute('data-user-disabled', 'true');
             if (disabledTag) {
@@ -2444,14 +2377,8 @@ export function setupChannelRow(tr) {
             }
 
             // Set values to zero
-            if (percentInput) {
-                setBasePercentOnInput(percentInput, 0);
-                percentInput.value = '0';
-            }
-            if (endInput) {
-                setBaseEndOnInput(endInput, 0);
-                endInput.value = '0';
-            }
+            if (percentInput) percentInput.value = '0';
+            if (endInput) endInput.value = '0';
         }
 
         // Update chart after change

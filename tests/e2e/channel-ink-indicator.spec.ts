@@ -19,24 +19,30 @@ test.describe('Channel ink limit indicators', () => {
     await page.goto(FILE_URL);
 
     // Initial load has zeroed channels; ensure effective indicators are hidden
-    const percentInput = channelRow(page, 'K').locator('.percent-input');
-    const endInput = channelRow(page, 'K').locator('.end-input');
-    const initialPercent = await percentInput.inputValue();
-    const initialEnd = await endInput.inputValue();
+    await expect(channelRow(page, 'K').locator('[data-effective-percent]')).toBeHidden();
+    await expect(channelRow(page, 'K').locator('[data-effective-end]')).toBeHidden();
 
     // Load the base .quad so inputs populate with source ink limits
     await page.setInputFiles('#quadFile', QUAD_PATH);
-    await expect(endInput).not.toHaveValue(initialEnd);
-    const quadPercent = parseFloat(await percentInput.inputValue());
-    const quadEnd = parseFloat(await endInput.inputValue());
+    await expect(channelRow(page, 'K').locator('.end-input')).toHaveValue(/\d+/);
+
+    // Effective indicators are still hidden because no correction applied yet
+    await expect(channelRow(page, 'K').locator('[data-effective-percent]')).toBeHidden();
 
     // Apply the negative cube correction
     await page.setInputFiles('#linearizationFile', CUBE_PATH);
     await expect(channelRow(page, 'K').locator('.processing-label')).toContainText(/negative\.cube/i);
-    await expect.poll(async () => parseFloat(await percentInput.inputValue()), { timeout: 2000 })
-      .toBeLessThan(quadPercent - 0.5);
 
-    await expect.poll(async () => parseFloat(await endInput.inputValue()), { timeout: 2000 })
-      .toBeLessThan(quadEnd - 500);
+    const effectivePercent = channelRow(page, 'K').locator('[data-effective-percent]');
+    const effectiveEnd = channelRow(page, 'K').locator('[data-effective-end]');
+
+    await expect(effectivePercent).toBeVisible();
+    await expect(effectivePercent).toContainText('Effective:');
+    await expect(effectiveEnd).toBeVisible();
+    await expect(effectiveEnd).toContainText('Effective:');
+
+    // The tooltip on the percent input should advertise base vs effective totals
+    await expect(channelRow(page, 'K').locator('.percent-input')).toHaveAttribute('title', /Effective:/);
+    await expect(channelRow(page, 'K').locator('.end-input')).toHaveAttribute('title', /Effective:/);
   });
 });
