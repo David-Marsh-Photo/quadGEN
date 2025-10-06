@@ -16,6 +16,25 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '3.1.1': {
+    date: '2025-10-06',
+    title: 'Quad export metadata polish',
+    sections: {
+      ADDED: [],
+      CHANGED: [
+        'Exported .quad limit summary now reports the highest ink value present after corrections instead of mirroring the on-screen ink limit.'
+      ],
+      FIXED: [
+        'Linearization intent comments only appear when LAB/CGATS measurements are active, so LUT-only exports stay clean.'
+      ],
+      REMOVED: [],
+      DOCS: []
+    },
+    aboutDialog: [
+      { label: 'Accurate Ink Limits', desc: 'Exported .quad headers now reflect the true peak ink after corrections, not just the UI cap.' },
+      { label: 'Scoped Intent Notes', desc: '“Linearization Applied” comments show up only when LAB/CGATS data is baked into the export.' }
+    ]
+  },
   '3.1.0': {
     date: '2025-10-05',
     title: 'Scaling coordinator rollout',

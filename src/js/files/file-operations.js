@@ -2,9 +2,10 @@
 // File loading, saving, and download utilities
 
 import { sanitizeFilename } from '../ui/ui-utils.js';
-import { PRINTERS, elements } from '../core/state.js';
+import { PRINTERS, elements, TOTAL } from '../core/state.js';
 import { InputValidator } from '../core/validation.js';
 import { LinearizationState } from '../data/linearization-utils.js';
+import { isLabLinearizationData } from '../data/lab-legacy-bypass.js';
 import { make256 } from '../core/processing-pipeline.js';
 import { APP_DISPLAY_VERSION } from '../core/version.js';
 import { CONTRAST_INTENT_PRESETS } from '../core/config.js';
@@ -267,36 +268,35 @@ export function buildQuadFile() {
     }
 
     // Add linearization information using modular state
-    const hasLinearization = LinearizationState.hasAnyLinearization();
-    if (hasLinearization) {
-        lines.push("#");
-        lines.push("# Linearization Applied:");
+    const globalData = LinearizationState.getGlobalData?.() || null;
+    const globalLabApplied = !!(globalData && LinearizationState.globalApplied && isLabLinearizationData(globalData));
 
-        // Global linearization
-        const globalData = LinearizationState.getGlobalData();
-        if (globalData && LinearizationState.globalApplied) {
-            const globalFilename = globalData.filename || "unknown file";
-            const globalCount = globalData.samples ? globalData.samples.length : 0;
+    const perChannelLabEntries = [];
+    p.channels.forEach((channelName) => {
+        if (!LinearizationState.isPerChannelEnabled?.(channelName)) return;
+        const data = LinearizationState.getPerChannelData?.(channelName);
+        if (!data || !isLabLinearizationData(data)) return;
+        const filename = data.filename || 'unknown file';
+        const count = Array.isArray(data.samples) ? data.samples.length : 0;
+        perChannelLabEntries.push({ channelName, filename, count });
+    });
+
+    const hasLabLinearization = globalLabApplied || perChannelLabEntries.length > 0;
+
+    if (hasLabLinearization) {
+        lines.push("#");
+        lines.push("# Linearization Applied (LAB measurements):");
+
+        if (globalLabApplied) {
+            const globalFilename = globalData.filename || 'unknown file';
+            const globalCount = Array.isArray(globalData.samples) ? globalData.samples.length : 0;
             lines.push(`# - Global: ${globalFilename} (${globalCount} points, affects all channels)`);
         }
 
-        // Per-channel linearization
-        const perChannelList = [];
-        p.channels.forEach(channelName => {
-            if (LinearizationState.isPerChannelEnabled(channelName)) {
-                const data = LinearizationState.getPerChannelData(channelName);
-                if (data) {
-                    const filename = data.filename || "unknown file";
-                    const count = data.samples ? data.samples.length : 0;
-                    perChannelList.push(`${channelName}: ${filename} (${count} points)`);
-                }
-            }
-        });
-
-        if (perChannelList.length > 0) {
+        if (perChannelLabEntries.length > 0) {
             lines.push("# - Per-channel:");
-            perChannelList.forEach(item => {
-                lines.push(`#   ${item}`);
+            perChannelLabEntries.forEach(({ channelName, filename, count }) => {
+                lines.push(`#   ${channelName}: ${filename} (${count} points)`);
             });
         }
     }
@@ -333,18 +333,21 @@ function buildLimitsSummary() {
 
         const nameElement = tr.querySelector('td span span:nth-child(2)');
         const endInput = tr.querySelector('.end-input');
+        const channelKey = tr.getAttribute('data-channel');
 
         if (nameElement && endInput) {
             const name = nameElement.textContent.trim();
             const e = InputValidator.clampEnd(endInput.value);
-            const p = InputValidator.computePercentFromEnd(e);
+            const arr = make256(e, channelKey || name, true);
+            const maxInk = Array.isArray(arr) && arr.length ? Math.max(...arr) : 0;
 
-            if (e === 0) {
+            if (maxInk <= 0) {
                 lines.push("#   " + name + ": disabled");
             } else {
-                const isWhole = Math.abs(p - Math.round(p)) < 1e-9;
-                const percentFormatted = isWhole ? String(Math.round(p)) : p.toFixed(2);
-                lines.push("#   " + name + ": = " + percentFormatted + "%");
+                const percent = (maxInk / TOTAL) * 100;
+                const isWhole = Math.abs(percent - Math.round(percent)) < 1e-9;
+                const percentFormatted = isWhole ? String(Math.round(percent)) : percent.toFixed(2);
+                lines.push(`#   ${name}: max ${percentFormatted}%`);
             }
         }
     });

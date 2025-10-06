@@ -20,6 +20,13 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Docs
 - _Nothing yet._
 
+## [v3.1.1] — 2025-10-06
+### Changed
+- Limits summary in exported `.quad` files now reports the true peak ink per channel after corrections instead of the raw UI ink-limit setting.
+
+### Fixed
+- Exported `.quad` files only annotate “Linearization Applied” when LAB measurement data is active (global or per-channel), keeping LUT-only exports clean.
+
 ## [v3.1.0] — 2025-10-05
 ### Added
 - Targeted Vitest coverage (`tests/ai-actions-scaling.test.js`) asserting AI scaling requests route through the coordinator with proper metadata.
