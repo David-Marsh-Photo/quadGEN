@@ -891,8 +891,15 @@ function renderChannelCurves(ctx, geom, colors, fontScale) {
             const percent = InputValidator.clampPercent(percentInput.value);
             const displayEndValue = InputValidator.clampEnd(endInput.value);
 
-            // Skip disabled channels (0 values)
-            if (percent === 0 || displayEndValue === 0) continue;
+            if (percent === 0 || displayEndValue === 0) {
+                const percentIndicator = row.querySelector('[data-effective-percent]');
+                const endIndicator = row.querySelector('[data-effective-end]');
+                if (percentIndicator) percentIndicator.classList.add('hidden');
+                if (endIndicator) endIndicator.classList.add('hidden');
+                percentInput.removeAttribute('title');
+                endInput.removeAttribute('title');
+                continue;
+            }
 
             // Generate curve using the displayEndValue directly
             // The scaling has already been applied to the table values, so no need to scale again
@@ -928,6 +935,42 @@ function renderChannelCurves(ctx, geom, colors, fontScale) {
             const peakPercent = (peakValue / TOTAL) * 100;
             const clampedPeak = Math.max(0, Math.min(100, peakPercent));
             const endY = mapPercentToY(clampedPeak, geom);
+
+            const percentIndicator = row.querySelector('[data-effective-percent]');
+            const endIndicator = row.querySelector('[data-effective-end]');
+
+            if (percentIndicator) {
+                const percentDiff = Math.abs(peakPercent - percent);
+                if (Number.isFinite(peakPercent) && percentDiff > 0.05) {
+                    percentIndicator.textContent = `Effective: ${peakPercent.toFixed(1)}%`;
+                    percentIndicator.classList.remove('hidden');
+                    if (percentInput) {
+                        percentInput.title = `Base: ${percent.toFixed(1)}% | Effective: ${peakPercent.toFixed(1)}%`;
+                    }
+                } else {
+                    percentIndicator.classList.add('hidden');
+                    if (percentInput) {
+                        percentInput.removeAttribute('title');
+                    }
+                }
+            }
+
+            if (endIndicator) {
+                const roundedPeak = Math.round(peakValue);
+                const endDiff = Math.abs(roundedPeak - displayEndValue);
+                if (Number.isFinite(peakValue) && endDiff > 0.5) {
+                    endIndicator.textContent = `Effective: ${roundedPeak}`;
+                    endIndicator.classList.remove('hidden');
+                    if (endInput) {
+                        endInput.title = `Base: ${displayEndValue} | Effective: ${roundedPeak}`;
+                    }
+                } else {
+                    endIndicator.classList.add('hidden');
+                    if (endInput) {
+                        endInput.removeAttribute('title');
+                    }
+                }
+            }
 
             labels.push({
                 channelName,

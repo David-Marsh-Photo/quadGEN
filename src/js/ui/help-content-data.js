@@ -10,7 +10,8 @@ export const VERSION_HISTORY = {
     sections: {
       ADDED: [],
       CHANGED: [
-        'Smoke gate (`npm run test:smoke`) now skips the active-range diff diagnostics while the feature work is paused.'
+        'Smoke gate (`npm run test:smoke`) now skips the active-range diff diagnostics while the feature work is paused.',
+        'Percent and end inputs now display an “Effective” readout so ink limits stay in sync after global/per-channel corrections.'
       ],
       FIXED: [],
       REMOVED: [
