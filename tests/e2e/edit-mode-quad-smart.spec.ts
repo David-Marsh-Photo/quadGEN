@@ -25,10 +25,13 @@ test.describe('Edit Mode smart points align with .quad curves', () => {
         const points = window.ControlPoints?.get(channel)?.points || [];
         const row = document.querySelector(`tr.channel-row[data-channel="${channel}"]`);
         const endVal = Number(row?.querySelector('.end-input')?.value || 0);
+        const channelPercent = Number(row?.querySelector('.percent-input')?.value || 100);
         const values = window.make256 ? window.make256(endVal, channel, true) : [];
         const samples = values.map((value, idx) => ({
           input: (idx / (values.length - 1)) * 100,
-          output: (value / TOTAL) * 100
+          output: channelPercent > 0
+            ? ((value / TOTAL) * 100) / channelPercent * 100
+            : (value / TOTAL) * 100
         }));
 
         deltas[channel] = points.map(point => {
@@ -48,4 +51,3 @@ test.describe('Edit Mode smart points align with .quad curves', () => {
     });
   });
 });
-

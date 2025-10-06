@@ -200,7 +200,8 @@ import {
     scaleChannelEndsByPercent,
     updateScaleBaselineForChannel,
     resetGlobalScale,
-    getCurrentScale
+    getCurrentScale,
+    setScalingStateEnabled
 } from './js/core/scaling-utils.js';
 
 // Import Chat Interface
@@ -294,6 +295,8 @@ import {
     redo,
     clearHistory
 } from './js/core/history-manager.js';
+
+import scalingCoordinator from './js/core/scaling-coordinator.js';
 
 // Import file operations
 import {
@@ -1030,6 +1033,15 @@ function initializeApplication() {
         removeEventHandlers
     };
 
+    const scalingUtilsCompat = {
+        applyGlobalScale,
+        scaleChannelEndsByPercent,
+        updateScaleBaselineForChannel,
+        resetGlobalScale,
+        getCurrentScale,
+        setScalingStateEnabled
+    };
+
     const chartManagerCompat = {
         initializeChart,
         updateInkChart,
@@ -1153,6 +1165,8 @@ function initializeApplication() {
         getPresetDefaults,
         stateManager: stateManagerCompat,
         historyManager: historyManagerCompat,
+        scalingCoordinator,
+        scalingUtils: scalingUtilsCompat,
         eventHandlers: eventHandlersCompat,
         chartManager: chartManagerCompat,
         CHART_ZOOM_LEVELS,
@@ -1181,6 +1195,30 @@ function initializeApplication() {
         exposeOnWindow: true,
         windowAliases: compatAliases
     });
+
+    if (windowRef) {
+        const debugRoot = windowRef.__quadDebug = windowRef.__quadDebug || {};
+        const existingCompat = typeof debugRoot.compat === 'object' && debugRoot.compat !== null
+            ? debugRoot.compat
+            : {};
+
+        const compatScalingUtils = {
+            ...scalingUtilsCompat,
+            ...(existingCompat.scalingUtils || {})
+        };
+
+        compatScalingUtils.setScalingStateEnabled = setScalingStateEnabled;
+
+        debugRoot.compat = {
+            ...compatExports,
+            ...existingCompat,
+            scalingUtils: compatScalingUtils
+        };
+
+        if (typeof windowRef.setScalingStateEnabled !== 'function') {
+            windowRef.setScalingStateEnabled = setScalingStateEnabled;
+        }
+    }
 
     if (windowRef && !Object.getOwnPropertyDescriptor(windowRef, 'chartZoomIndex')) {
         Object.defineProperty(windowRef, 'chartZoomIndex', {

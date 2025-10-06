@@ -11,9 +11,57 @@ import { make256 } from '../core/processing-pipeline.js';
 import { isEditModeEnabled } from '../ui/edit-mode.js';
 import { getHistoryManager } from '../core/history-manager.js';
 import { updateAppState, getAppState } from '../core/state.js';
+import { rescaleKeyPointsForInkLimit, normalizeKeyPoints } from './smart-rescaling-service.js';
 
 const globalScope = typeof window !== 'undefined' ? window : globalThis;
 const isBrowser = typeof document !== 'undefined';
+
+const smartRescaleAudit = (() => {
+    if (!isBrowser) return null;
+    if (globalScope.__SMART_RESCALE_AUDIT) {
+        return globalScope.__SMART_RESCALE_AUDIT;
+    }
+
+    const state = {
+        enabled: false,
+        comparisons: 0,
+        lastDiff: null
+    };
+
+    const api = {
+        enable(flag = true) {
+            state.enabled = !!flag;
+            if (!state.enabled) {
+                api.resetMetrics();
+            }
+        },
+        disable() {
+            api.enable(false);
+        },
+        isEnabled() {
+            return state.enabled;
+        },
+        record(payload) {
+            if (!state.enabled) return;
+            state.comparisons += 1;
+            state.lastDiff = payload || null;
+        },
+        resetMetrics() {
+            state.comparisons = 0;
+            state.lastDiff = null;
+        },
+        dumpMetrics() {
+            return {
+                enabled: state.enabled,
+                comparisons: state.comparisons,
+                lastDiff: state.lastDiff
+            };
+        }
+    };
+
+    globalScope.__SMART_RESCALE_AUDIT = api;
+    return api;
+})();
 
 /**
  * Smart Curve simplification configuration
@@ -66,6 +114,16 @@ function getChannelRow(channelName) {
     } catch (err) {
         return null;
     }
+}
+
+function isDefaultRampPoints(points) {
+    if (!Array.isArray(points) || points.length !== 2) {
+        return false;
+    }
+    const [p0, p1] = points;
+    const nearZero = (value) => Math.abs(Number(value) || 0) <= 0.0001;
+    const nearHundred = (value) => Math.abs((Number(value) || 0) - 100) <= 0.0001;
+    return nearZero(p0?.input) && nearZero(p0?.output) && nearHundred(p1?.input) && nearHundred(p1?.output);
 }
 
 function getChannelPercent(channelName) {
@@ -402,41 +460,126 @@ export function extractAdaptiveKeyPointsFromValues(values, options = {}) {
  * @returns {boolean} True if rescaling was applied
  */
 export function rescaleSmartCurveForInkLimit(channelName, fromPercent, toPercent, options = {}) {
-    if (!isSmartCurve(channelName) || fromPercent <= 0 || toPercent <= 0) {
+    if (!isSmartCurve(channelName) || !Number.isFinite(fromPercent) || !Number.isFinite(toPercent) || fromPercent <= 0 || toPercent < 0) {
         return false;
     }
 
     const { points, interpolation } = ControlPoints.get(channelName);
-    if (!points || points.length === 0) return false;
+    if (!points || points.length === 0) {
+        return false;
+    }
 
     const mode = options.mode === 'preserveRelative' ? 'preserveRelative' : 'preserveAbsolute';
     const basePoints = points.map((p) => ({ input: p.input, output: p.output }));
+
+    const data = ensureLoadedQuadData(() => ({ curves: {}, sources: {}, keyPoints: {}, keyPointsMeta: {} }));
+    data.keyPointsMeta = data.keyPointsMeta || {};
+    const existingMeta = data.keyPointsMeta[channelName] ? { ...data.keyPointsMeta[channelName] } : {};
+
+    const serviceResult = rescaleKeyPointsForInkLimit(channelName, fromPercent, toPercent, {
+        points: basePoints,
+        metadata: existingMeta,
+        mode
+    });
+
+    if (!serviceResult || !serviceResult.success) {
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.warn('[SMART CURVES] Rescale service failed', {
+                channelName,
+                fromPercent,
+                toPercent,
+                mode,
+                error: serviceResult?.error || 'unknown'
+            });
+        }
+        return false;
+    }
+
+    let auditPayload = null;
+    if (smartRescaleAudit && typeof smartRescaleAudit.isEnabled === 'function' && smartRescaleAudit.isEnabled() && mode !== 'preserveRelative') {
+        const scaleFactor = fromPercent === 0 ? 0 : (toPercent === 0 ? 0 : toPercent / fromPercent);
+        const legacyPoints = basePoints.map((point) => ({
+            input: point.input,
+            output: scaleFactor === 0 ? 0 : Math.min(100, point.output * scaleFactor)
+        }));
+        const legacyNormalized = normalizeKeyPoints(legacyPoints);
+        const newPoints = serviceResult.points || [];
+        const pairCount = Math.min(legacyNormalized.length, newPoints.length);
+        let maxDelta = 0;
+        for (let i = 0; i < pairCount; i += 1) {
+            const delta = Math.abs((newPoints[i]?.output ?? 0) - (legacyNormalized[i]?.output ?? 0));
+            if (delta > maxDelta) {
+                maxDelta = delta;
+            }
+        }
+        auditPayload = {
+            channelName,
+            fromPercent,
+            toPercent,
+            mode,
+            scaleFactor,
+            maxDelta,
+            legacyPoints: legacyNormalized,
+            servicePoints: newPoints,
+            lengthMismatch: legacyNormalized.length !== newPoints.length
+        };
+        if (typeof smartRescaleAudit.record === 'function') {
+            smartRescaleAudit.record(auditPayload);
+        }
+        if (maxDelta > 0.05 && typeof console !== 'undefined') {
+            console.warn('[SMART CURVES][AUDIT] Legacy vs service rescale delta > 0.05%', auditPayload);
+        }
+    }
+
+    const historyExtras = {
+        rescaledFromPercent: fromPercent,
+        rescaledToPercent: toPercent,
+        rescaleMode: mode,
+        ...(options.historyExtras || {})
+    };
+
+    if (Array.isArray(serviceResult.warnings) && serviceResult.warnings.length > 0) {
+        historyExtras.rescaleWarnings = serviceResult.warnings.slice();
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.warn('[SMART CURVES] Rescale warnings', {
+                channelName,
+                warnings: serviceResult.warnings
+            });
+        }
+    }
 
     const applyOptions = {
         allowWhenEditModeOff: true,
         skipUiRefresh: !!options.skipUiRefresh,
         skipHistory: !!options.skipHistory,
-        historyExtras: {
-            rescaledFromPercent: fromPercent,
-            rescaledToPercent: toPercent,
-            rescaleMode: mode,
-            ...(options.historyExtras || {})
-        }
+        bakedFlags: serviceResult.metadata || existingMeta,
+        historyExtras
     };
 
-    if (mode === 'preserveRelative') {
-        const result = setSmartKeyPoints(channelName, basePoints, interpolation, applyOptions);
-        return !!result.success;
+    const applyResult = setSmartKeyPoints(channelName, serviceResult.points || basePoints, interpolation, applyOptions);
+    const success = !!applyResult?.success;
+
+    if (!success && typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+        console.warn('[SMART CURVES] Failed to persist rescaled key points', {
+            channelName,
+            applyResult
+        });
     }
 
-    const scaleFactor = toPercent / fromPercent;
-    const rescaledPoints = basePoints.map((p) => ({
-        input: p.input,
-        output: Math.min(100, p.output * scaleFactor)
-    }));
+    if (success && typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+        console.log('[SMART CURVES] Rescale applied', {
+            channelName,
+            fromPercent,
+            toPercent,
+            mode,
+            warnings: serviceResult.warnings,
+            audit: auditPayload
+        });
+    } else if (auditPayload && typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+        console.log('[SMART CURVES][AUDIT] Rescale evaluated without apply success', auditPayload);
+    }
 
-    const result = setSmartKeyPoints(channelName, rescaledPoints, interpolation, applyOptions);
-    return !!result.success;
+    return success;
 }
 
 /**
@@ -1017,6 +1160,27 @@ function applySmartKeyPointsInternal(channelName, keyPoints, interpolationType =
         } catch (err) {
             console.warn('[SMART CURVES] recordKeyPointsChange failed:', err);
         }
+    }
+
+    const editModeActive = typeof isEditModeEnabled === 'function' ? isEditModeEnabled() : false;
+    const defaultRamp = isDefaultRampPoints(normalized);
+    const forceDefaultRamp = options.forcePersistDefaultRamp === true;
+
+    if (!forceDefaultRamp && !editModeActive && defaultRamp) {
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.log('[SMART CURVES] Skipped default ramp persistence (edit mode off)', {
+                channelName,
+                pointCount: normalized.length
+            });
+        }
+        return {
+            success: true,
+            message: 'Default ramp ignored while edit mode is off',
+            channelName,
+            keyPointCount: normalized.length,
+            interpolation: interp,
+            skipped: true
+        };
     }
 
     ControlPoints.persist(channelName, normalized, interp);

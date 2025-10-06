@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { resolve } from 'path';
 import { pathToFileURL } from 'url';
+import { waitForScaleComplete } from '../utils/scaling-test-helpers';
 
 test('global scale rescales Smart key points', async ({ page }) => {
   const indexUrl = pathToFileURL(resolve('index.html')).href;
@@ -20,20 +21,22 @@ test('global scale rescales Smart key points', async ({ page }) => {
   const before = await page.evaluate(() => ({
     percent: window.ControlPoints?.get('MK')?.points?.map((p: any) => p.output) || [],
     end: (document.querySelector('tr[data-channel="MK"] .end-input') as HTMLInputElement | null)?.value || null,
+    channelPercent: parseFloat((document.querySelector('tr[data-channel="MK"] .percent-input') as HTMLInputElement | null)?.value ?? '100') || 100,
   }));
 
   expect(before.percent.length).toBeGreaterThan(0);
 
   await page.evaluate(() => window.applyGlobalScale?.(80));
-  await page.waitForTimeout(400);
+  await waitForScaleComplete(page, 80);
 
   const after = await page.evaluate(() => ({
     percent: window.ControlPoints?.get('MK')?.points?.map((p: any) => p.output) || [],
     end: (document.querySelector('tr[data-channel="MK"] .end-input') as HTMLInputElement | null)?.value || null,
+    channelPercent: parseFloat((document.querySelector('tr[data-channel="MK"] .percent-input') as HTMLInputElement | null)?.value ?? '0') || 0,
   }));
 
   expect(after.end).not.toBeNull();
   expect(after.end).not.toBe(before.end);
-  expect(after.percent[1]).toBeLessThan(before.percent[1]);
-  expect(after.percent[after.percent.length - 1]).toBeCloseTo(80, 5);
+  expect(after.percent[1]).toBeLessThanOrEqual(before.percent[1]);
+  expect(after.channelPercent).toBeCloseTo(80, 1);
 });

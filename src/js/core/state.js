@@ -6,6 +6,16 @@ import { getLegacyStateBridge } from '../legacy/state-bridge.js';
 
 const legacyBridge = getLegacyStateBridge();
 
+if (typeof window !== 'undefined') {
+    if (typeof window.__USE_SCALING_COORDINATOR === 'undefined') {
+        window.__USE_SCALING_COORDINATOR = false;
+    }
+
+    if (typeof window.__USE_SCALING_STATE === 'undefined') {
+        window.__USE_SCALING_STATE = true;
+    }
+}
+
 /**
  * Printer configurations for different Epson models
  */
@@ -198,6 +208,9 @@ export const elements = {
     helpBtn: null,
     helpPopup: null,
     helpContent: null,
+    helpDebugPanel: null,
+    helpDebugRefreshBtn: null,
+    helpDebugResetBtn: null,
     closeHelpBtn: null,
     helpTabWorkflow: null,
     helpTabReadme: null,
@@ -373,6 +386,9 @@ export function initializeElements() {
     elements.helpBtn = document.getElementById('helpBtn');
     elements.helpPopup = document.getElementById('helpPopup');
     elements.helpContent = document.getElementById('helpContent');
+    elements.helpDebugPanel = document.getElementById('helpDebugPanel');
+    elements.helpDebugRefreshBtn = document.getElementById('helpDebugRefreshBtn');
+    elements.helpDebugResetBtn = document.getElementById('helpDebugResetBtn');
     elements.closeHelpBtn = document.getElementById('closeHelpBtn');
     elements.helpTabWorkflow = document.getElementById('helpTabWorkflow');
     elements.helpTabReadme = document.getElementById('helpTabReadme');

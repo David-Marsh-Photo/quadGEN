@@ -2,7 +2,7 @@
 // QuadGenActions class extracted from monolithic codebase
 // Note: This module requires integration with application state and UI handlers
 
-import { scaleChannelEndsByPercent as scaleFunction } from '../core/scaling-utils.js';
+import scalingCoordinator from '../core/scaling-coordinator.js';
 import { elements, getCurrentPrinter, getCurrentState, updateAppState, getAppState, getLoadedQuadData, PRINTERS } from '../core/state.js';
 import { InputValidator } from '../core/validation.js';
 import { buildFile } from '../core/processing-pipeline.js';
@@ -601,26 +601,38 @@ export class QuadGenActions {
      * @param {number} scalePercent - Scale percentage (e.g., 110 for 10% increase)
      * @returns {Object} Result with success status and message
      */
-    scaleChannelEndsByPercent(scalePercent) {
+    async scaleChannelEndsByPercent(scalePercent) {
         try {
-            // Use the actual scaling function from the core module
-            const result = scaleFunction(scalePercent);
+            const numeric = Number(scalePercent);
+            if (!Number.isFinite(numeric) || numeric <= 0) {
+                return {
+                    success: false,
+                    message: `Invalid scale percent '${scalePercent}'`
+                };
+            }
+
+            const result = await scalingCoordinator.scale(numeric, 'ai', {
+                priority: 'high',
+                metadata: { trigger: 'ai-scale_command' }
+            });
 
             // Update processing details and session status after scaling
             this._updateGraphStatus();
 
             if (result && typeof result === 'object') {
+                const success = typeof result.success === 'boolean' ? result.success : true;
+                const message = result.message || `Scaled channels by ${scalePercent}%`;
                 return {
-                    success: result.success || true,
-                    message: result.message || `Scaled channels by ${scalePercent}%`,
+                    success,
+                    message,
                     details: result.details
                 };
-            } else {
-                return {
-                    success: true,
-                    message: `Scaled channels by ${scalePercent}%`
-                };
             }
+
+            return {
+                success: true,
+                message: `Scaled channels by ${scalePercent}%`
+            };
         } catch (error) {
             return {
                 success: false,

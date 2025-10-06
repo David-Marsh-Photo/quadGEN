@@ -7,6 +7,7 @@ import { LinearizationState } from '../data/linearization-utils.js';
 import { getLegacyIntentBridge } from '../legacy/intent-bridge.js';
 
 const legacyBridge = getLegacyIntentBridge();
+let evaluatingLegacyDelegate = false;
 
 /**
  * Get preset definition by ID
@@ -104,9 +105,21 @@ export function canApplyIntentRemap() {
     const measurementActive = (!!globalData && globalApplied) || hasLegacyMeasurement;
     const fallbackDecision = hasQuad && !measurementActive;
 
-    const delegate = legacyBridge.getRemapDelegate?.();
+    const legacyWindowGetter = typeof legacyBridge.getWindow === 'function'
+      ? legacyBridge.getWindow.bind(legacyBridge)
+      : null;
+    const legacyWindow = legacyWindowGetter ? legacyWindowGetter() : null;
+    const selfDelegated = legacyWindow && legacyWindow.canApplyIntentRemap === canApplyIntentRemap;
+    const delegate = selfDelegated ? null : legacyBridge.getRemapDelegate?.();
+
     if (delegate && delegate !== canApplyIntentRemap) {
+      if (evaluatingLegacyDelegate) {
+        console.warn('Legacy remap delegate recursion detected; using modular fallback.');
+        return fallbackDecision;
+      }
+
       try {
+        evaluatingLegacyDelegate = true;
         const legacyDecision = delegate();
         if (legacyDecision === true) {
           return true;
@@ -118,6 +131,8 @@ export function canApplyIntentRemap() {
       } catch (err) {
         console.warn('Legacy remap delegate threw error, falling back to modular decision:', err);
         return fallbackDecision;
+      } finally {
+        evaluatingLegacyDelegate = false;
       }
     }
 

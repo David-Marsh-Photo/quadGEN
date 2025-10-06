@@ -41,8 +41,12 @@ Developer notes live in `docs/dev/` (build instructions, AI integration, data ty
 
 ## Testing
 - `npm run test:smoke` — Playwright smoke test opening the built bundle.
-- `npm run test:e2e` — full Playwright suite (parity/regressions).
+- `npm run test:e2e` — edit-mode seeding harness plus Phase 0 Track 4 global scaling regression specs (baseline drift, rapid scrub, Smart insertion, measurement revert).
 - `npm run test` — Vitest unit tests when available.
+- `npx playwright test tests/e2e/global-scale-*.spec.ts` — run only the scaling regression specs.
+- `npm run test:scaling:baseline` — targeted baseline cache checks (auto-run by the pre-commit hook; set `SKIP_SCALING_PRECHECK=1` to bypass).
+
+Pre-commit hooks are managed via `simple-git-hooks`. Running `npm install` (or invoking the `prepare` script) wires a pre-commit guard that executes the scaling baseline suite.
 
 Scripts under `scripts/test-tools/` provide parity runners and helper tooling.
 

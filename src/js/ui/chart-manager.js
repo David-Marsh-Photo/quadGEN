@@ -2,9 +2,11 @@
 // Chart rendering, zoom management, and interaction handling
 
 import { elements, getCurrentPrinter, getAppState, updateAppState, INK_COLORS, TOTAL, getLoadedQuadData } from '../core/state.js';
+import { getStateManager } from '../core/state-manager.js';
 import { InputValidator } from '../core/validation.js';
 import { make256 } from '../core/processing-pipeline.js';
 import { getCurrentScale } from '../core/scaling-utils.js';
+import { SCALING_STATE_FLAG_EVENT } from '../core/scaling-constants.js';
 import { ControlPoints, isSmartCurve } from '../curves/smart-curves.js';
 import { registerInkChartHandler, triggerPreviewUpdate } from './ui-hooks.js';
 import { showStatus } from './status-service.js';
@@ -36,6 +38,55 @@ import { updateProcessingDetail, updateAllProcessingDetails } from './processing
 const globalScope = typeof window !== 'undefined' ? window : globalThis;
 const isBrowser = typeof document !== 'undefined';
 
+let unsubscribeScalingStateChart = null;
+let scalingStateChartListenerAttached = false;
+
+function configureChartScalingStateSubscription() {
+    if (!isBrowser) {
+        return;
+    }
+
+    if (unsubscribeScalingStateChart) {
+        try {
+            unsubscribeScalingStateChart();
+        } catch (err) {
+            console.warn('Failed to unsubscribe chart scaling listener', err);
+        }
+        unsubscribeScalingStateChart = null;
+    }
+
+    const enabled = !!globalScope.__USE_SCALING_STATE;
+    if (!enabled) {
+        return;
+    }
+
+    let stateManager;
+    try {
+        stateManager = getStateManager();
+    } catch (error) {
+        console.warn('Unable to obtain state manager for chart scaling subscription', error);
+        return;
+    }
+
+    if (!stateManager || typeof stateManager.subscribe !== 'function') {
+        return;
+    }
+
+    unsubscribeScalingStateChart = stateManager.subscribe(['scaling.globalPercent'], () => {
+        try {
+            updateInkChart();
+        } catch (chartError) {
+            console.warn('Failed to refresh chart after scaling state change', chartError);
+        }
+    });
+
+    try {
+        updateInkChart();
+    } catch (initialError) {
+        console.warn('Initial chart refresh after scaling state subscription failed', initialError);
+    }
+}
+
 const ENABLE_RESPONSIVE_CHART = true;
 const DEFAULT_CHART_ASPECT_RATIO = 4 / 3;
 const DEFAULT_CHART_FIXED_HEIGHT = 586;
@@ -46,6 +97,20 @@ let responsiveInitialPasses = 0;
 const RESPONSIVE_INITIAL_MAX_PASSES = 8;
 let columnResizeObserver = null;
 let chartRegionResizeObserver = null;
+
+if (isBrowser && !scalingStateChartListenerAttached) {
+    globalScope.addEventListener(SCALING_STATE_FLAG_EVENT, () => {
+        configureChartScalingStateSubscription();
+    });
+    scalingStateChartListenerAttached = true;
+
+    if (globalScope.__USE_SCALING_STATE) {
+        const schedule = typeof queueMicrotask === 'function'
+            ? queueMicrotask
+            : (fn) => Promise.resolve().then(fn);
+        schedule(() => configureChartScalingStateSubscription());
+    }
+}
 
 function getChartWrapper() {
     return elements.inkChart ? elements.inkChart.closest('[data-chart-wrapper]') : null;
@@ -534,6 +599,8 @@ registerInkChartHandler(updateInkChart);
  */
 export function initializeChart() {
     console.log('📊 Initializing chart system...');
+
+    configureChartScalingStateSubscription();
 
     if (elements.inkChart) {
         const wrapper = getChartWrapper();

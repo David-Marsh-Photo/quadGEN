@@ -159,4 +159,147 @@ describe('Legacy bridge debug registry coverage', () => {
     expect(typeof registry.chartRenderer.setSmartOverlayDebug).toBe('function');
     expect(typeof registry.chartRenderer.getSmartOverlayDebug).toBe('function');
   });
+
+  describe('scaling window bridges', () => {
+    function mockRegisterDebugNamespace(registry, windowRef) {
+      return vi.fn((namespace, exports, options = {}) => {
+        registry[namespace] = exports;
+        if (options.exposeOnWindow && Array.isArray(options.windowAliases)) {
+          options.windowAliases.forEach((alias) => {
+            windowRef[alias] = exports[alias];
+          });
+        }
+      });
+    }
+
+    function setupCommonMocks({ registry, windowRef, scaleMock }) {
+      vi.doMock('../../src/js/utils/debug-registry.js', () => ({
+        registerDebugNamespace: mockRegisterDebugNamespace(registry, windowRef),
+        getDebugRegistry: () => registry
+      }));
+
+      vi.doMock('../../src/js/core/state.js', () => ({
+        elements: {
+          scaleAllInput: { value: '100' }
+        },
+        getCurrentPrinter: () => ({ channels: [] })
+      }));
+
+      vi.doMock('../../src/js/core/state-manager.js', () => ({
+        getStateManager: () => ({
+          get: vi.fn(),
+          set: vi.fn(),
+          setChannelValue: vi.fn()
+        })
+      }));
+
+      vi.doMock('../../src/js/core/history-manager.js', () => ({
+        getHistoryManager: () => ({
+          recordBatchAction: vi.fn()
+        })
+      }));
+
+      vi.doMock('../../src/js/core/validation.js', () => ({
+        InputValidator: {
+          clampEnd: (value) => Number(value),
+          computePercentFromEnd: (end) => Number(end),
+          validatePercentInput: (input) => Number(input.value),
+          computeEndFromPercent: (percent) => Number(percent),
+          clearValidationStyling: vi.fn(),
+          clampPercent: (value) => Number(value),
+          validateEndInput: (input) => Number(input.value)
+        }
+      }));
+
+      vi.doMock('../../src/js/ui/ui-utils.js', () => ({
+        formatScalePercent: (value) => String(Number(value ?? 0) || 0)
+      }));
+
+      vi.doMock('../../src/js/ui/chart-manager.js', () => ({
+        setChartStatusMessage: vi.fn()
+      }));
+
+      vi.doMock('../../src/js/ui/ui-hooks.js', () => ({
+        triggerInkChartUpdate: vi.fn(),
+        triggerPreviewUpdate: vi.fn(),
+        triggerSessionStatusUpdate: vi.fn()
+      }));
+
+      vi.doMock('../../src/js/ui/status-service.js', () => ({
+        showStatus: vi.fn()
+      }));
+
+      vi.doMock('../../src/js/ui/channel-registry.js', () => ({
+        getChannelRow: () => null
+      }));
+
+      vi.doMock('../../src/js/curves/smart-curves.js', () => ({
+        rescaleSmartCurveForInkLimit: vi.fn()
+      }));
+
+      vi.doMock('../../src/js/core/scaling-coordinator.js', () => ({
+        default: {
+          scale: scaleMock,
+          isEnabled: vi.fn(() => true),
+          setEnabled: vi.fn(),
+          flushQueue: vi.fn(),
+          getDebugInfo: vi.fn()
+        }
+      }));
+    }
+
+    it('routes window.applyGlobalScale through the scaling coordinator and returns a promise', async () => {
+      vi.resetModules();
+      const registry = {};
+      const windowRef = {};
+      const scaleMock = vi.fn(() => Promise.resolve({ success: true }));
+
+      // Ensure window is defined before modules evaluate
+      globalThis.window = windowRef;
+
+      setupCommonMocks({ registry, windowRef, scaleMock });
+
+      await import('../../src/js/core/scaling-utils.js');
+
+      expect(typeof window.applyGlobalScale).toBe('function');
+
+      const result = window.applyGlobalScale(150);
+
+      expect(scaleMock).toHaveBeenCalledWith(150, 'compat-window', expect.objectContaining({
+        priority: 'normal',
+        metadata: expect.objectContaining({ requestedBy: 'window.applyGlobalScale' })
+      }));
+      expect(result).toBeInstanceOf(Promise);
+
+      delete globalThis.window;
+    });
+
+    it('routes window.scaleChannelEndsByPercent through the scaling coordinator', async () => {
+      vi.resetModules();
+      const registry = {};
+      const windowRef = {};
+      const scaleMock = vi.fn(() => Promise.resolve({ success: true }));
+
+      globalThis.window = windowRef;
+
+      setupCommonMocks({ registry, windowRef, scaleMock });
+
+      await import('../../src/js/core/scaling-utils.js');
+
+      expect(typeof window.scaleChannelEndsByPercent).toBe('function');
+
+      const result = window.scaleChannelEndsByPercent(200, { skipHistory: true });
+
+      expect(scaleMock).toHaveBeenCalledWith(200, 'compat-window', expect.objectContaining({
+        priority: 'normal',
+        metadata: expect.objectContaining({
+          requestedBy: 'window.scaleChannelEndsByPercent',
+          options: { skipHistory: true }
+        })
+      }));
+      expect(result).toBeInstanceOf(Promise);
+
+      delete globalThis.window;
+    });
+  });
 });

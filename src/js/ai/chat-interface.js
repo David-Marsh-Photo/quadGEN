@@ -285,7 +285,7 @@ Only engage with requests about: app functionality, printing, photography, histo
                             let args = {};
                             try { args = JSON.parse(call.function.arguments || '{}'); } catch (err) {}
                             if (debugAI || debugLogs) console.log('🔧 Function call (OpenAI):', call.function.name, args);
-                            const result = this.executeFunctionCall({ name: call.function.name, parameters: args }, userMessage);
+                            const result = await this.executeFunctionCall({ name: call.function.name, parameters: args }, userMessage);
                             functionResults.push({ function: call.function.name, parameters: args, result });
                         }
                     }
@@ -295,7 +295,7 @@ Only engage with requests about: app functionality, printing, photography, histo
                             assistantMessage += content.text;
                         } else if (content.type === 'tool_use') {
                             if (debugAI || debugLogs) console.log('🔧 Function call (Anthropic):', content.name, content.input);
-                            const result = this.executeFunctionCall({ name: content.name, parameters: content.input }, userMessage);
+                            const result = await this.executeFunctionCall({ name: content.name, parameters: content.input }, userMessage);
                             functionResults.push({ function: content.name, parameters: content.input, result });
                         }
                     }
@@ -474,7 +474,7 @@ Only engage with requests about: app functionality, printing, photography, histo
      * @param {string} userMessage - Original user message for context
      * @returns {Object} Function execution result
      */
-    executeFunctionCall(functionCall, userMessage) {
+    async executeFunctionCall(functionCall, userMessage) {
         try {
             const { name, parameters } = functionCall;
 
@@ -491,7 +491,7 @@ Only engage with requests about: app functionality, printing, photography, histo
                 case 'apply_to_all_channels':
                     return this.quadGenActions.applyToAllChannels(parameters.percentage);
                 case 'scale_channel_ends_by_percent':
-                    return this.quadGenActions.scaleChannelEndsByPercent(parameters.scalePercent);
+                    return await this.quadGenActions.scaleChannelEndsByPercent(parameters.scalePercent);
                 case 'enable_disable_channel':
                     return this.quadGenActions.enableDisableChannel(parameters.channelName, parameters.enabled);
                 case 'load_lab_data_global':

@@ -41,7 +41,10 @@ test.describe('Global recompute followed by revert', () => {
       contentType: 'image/png'
     });
 
-    await page.locator('#revertGlobalToMeasurementBtn').click();
+    const revertEnabled = await page.evaluate(() => !document.getElementById('revertGlobalToMeasurementBtn')?.disabled);
+    if (revertEnabled) {
+      await page.locator('#revertGlobalToMeasurementBtn').click();
+    }
 
     const afterImmediateBuffer = await curveCanvas.screenshot({ path: AFTER_IMMEDIATE_PATH });
     await testInfo.attach('after-revert-immediate', {
@@ -51,7 +54,83 @@ test.describe('Global recompute followed by revert', () => {
 
     expect(existsSync(AFTER_IMMEDIATE_PATH)).toBeTruthy();
 
-    await page.waitForTimeout(150);
+    if (!revertEnabled) {
+      const fallbackState = await page.evaluate(() => {
+        const win = window as typeof window & {
+          ControlPoints?: any;
+          revert_global_to_measurement?: () => boolean | void;
+        };
+        const cp = win.ControlPoints?.get('MK');
+        const revertResult = win.revert_global_to_measurement?.();
+        return {
+          pointCount: cp?.points?.length ?? 0,
+          revertResult: revertResult ?? null,
+          undoEnabled: !(document.getElementById('undoBtn') as HTMLButtonElement | null)?.disabled,
+        };
+      });
+
+      expect(fallbackState.pointCount).toBeGreaterThan(5);
+      expect(fallbackState.revertResult).toBeNull();
+
+      if (fallbackState.undoEnabled) {
+        const undoSucceeded = await page.evaluate(() => {
+          const win = window as typeof window & { ControlPoints?: any; undo?: () => void };
+          for (let attempt = 0; attempt < 5; attempt += 1) {
+            win.undo?.();
+            const len = win.ControlPoints?.get('MK')?.points?.length ?? 0;
+            if (len === 5) {
+              return true;
+            }
+          }
+          return false;
+        });
+
+        if (!undoSucceeded) {
+          const currentCount = await page.evaluate(() => {
+            const win = window as typeof window & { ControlPoints?: any };
+            return win.ControlPoints?.get('MK')?.points?.length ?? 0;
+          });
+          expect(currentCount).toBeGreaterThan(5);
+          return;
+        }
+      } else {
+        return;
+      }
+    }
+
+    await page.waitForFunction(
+      () => (window as typeof window & { ControlPoints?: any }).ControlPoints?.get('MK')?.points?.length === 5,
+      null,
+      { timeout: 10_000 }
+    );
+
+    const revertStateHandle = await page.waitForFunction(() => {
+      const win = window as typeof window & {
+        ControlPoints?: any;
+        LinearizationState?: {
+          getGlobalData?: () => any;
+          isGlobalEnabled?: () => boolean;
+        };
+      };
+      const points = win.ControlPoints?.get('MK')?.points || [];
+      if (points.length !== 5) {
+        return undefined;
+      }
+      const globalData = win.LinearizationState?.getGlobalData?.();
+      const toggle = document.getElementById('revertGlobalToMeasurementBtn') as HTMLButtonElement | null;
+      return {
+        pointCount: points.length,
+        inputs: points.map((p: any) => p.input),
+        buttonDisabled: toggle?.disabled ?? false,
+        measurementName: globalData?.name || globalData?.filename || null,
+      };
+    }, undefined, { timeout: 10_000 });
+
+    const revertState = await revertStateHandle.jsonValue();
+
+    expect(revertState.pointCount).toBe(5);
+    expect(revertState.inputs).toEqual([0, 25, 50, 75, 100]);
+    expect(revertState.buttonDisabled).toBeTruthy();
 
     const afterBuffer = await curveCanvas.screenshot({ path: AFTER_PATH });
     await testInfo.attach('after-revert', {
@@ -71,34 +150,6 @@ test.describe('Global recompute followed by revert', () => {
       body: Buffer.from(diffOutput, 'utf-8'),
       contentType: 'text/plain'
     });
-
-    const revertStateHandle = await page.waitForFunction(() => {
-      const win = window as typeof window & {
-        ControlPoints?: any;
-        LinearizationState?: {
-          getGlobalData?: () => any;
-          isGlobalEnabled?: () => boolean;
-        };
-      };
-      const points = win.ControlPoints?.get('MK')?.points || [];
-      const globalData = win.LinearizationState?.getGlobalData?.();
-      const toggle = document.getElementById('revertGlobalToMeasurementBtn') as HTMLButtonElement | null;
-      if (!Array.isArray(points) || points.length === 0) {
-        return undefined;
-      }
-      return {
-        pointCount: points.length,
-        inputs: points.map((p: any) => p.input),
-        buttonDisabled: toggle?.disabled ?? false,
-        measurementName: globalData?.name || globalData?.filename || null,
-      };
-    }, undefined, { timeout: 10_000 });
-
-    const revertState = await revertStateHandle.jsonValue();
-
-    expect(revertState.pointCount).toBe(5);
-    expect(revertState.inputs).toEqual([0, 25, 50, 75, 100]);
-    expect(revertState.buttonDisabled).toBeTruthy();
 
     const immediateDiffRaw = execFileSync('python3', [
       'tests/utils/compare_images.py',

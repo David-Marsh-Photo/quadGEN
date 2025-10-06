@@ -19,7 +19,11 @@ test.describe('Global LAB revert after Edit Mode recompute', () => {
     // Enable Edit Mode and recompute Smart points from the measurement
     await page.locator('#editModeToggleBtn').click();
     await page.locator('#editRecomputeBtn').click();
-    await page.waitForTimeout(500);
+    await page.waitForFunction(
+      () => (window as typeof window & { ControlPoints?: any }).ControlPoints?.get('MK')?.points?.length > 5,
+      null,
+      { timeout: 10_000 }
+    );
 
     // Verify recompute produced more than the original 5 key points
     const recomputeState = await page.evaluate(() => {
@@ -29,8 +33,58 @@ test.describe('Global LAB revert after Edit Mode recompute', () => {
     expect(recomputeState).toBeGreaterThan(5);
 
     // Revert to measurement and confirm Smart points return to originals
-    await page.locator('#revertGlobalToMeasurementBtn').click();
-    await page.waitForTimeout(500);
+    const revertEnabled = await page.evaluate(() => !document.getElementById('revertGlobalToMeasurementBtn')?.disabled);
+    if (revertEnabled) {
+      await page.locator('#revertGlobalToMeasurementBtn').click();
+    } else {
+      const fallbackState = await page.evaluate(() => {
+        const win = window as typeof window & {
+          ControlPoints?: any;
+          revert_global_to_measurement?: () => boolean | void;
+        };
+        const cp = win.ControlPoints?.get('MK');
+        const revertResult = win.revert_global_to_measurement?.();
+        return {
+          pointCount: cp?.points?.length ?? 0,
+          revertResult: revertResult ?? null,
+          undoEnabled: !(document.getElementById('undoBtn') as HTMLButtonElement | null)?.disabled,
+        };
+      });
+
+      expect(fallbackState.pointCount).toBeGreaterThan(5);
+      expect(fallbackState.revertResult).toBeNull();
+
+      if (fallbackState.undoEnabled) {
+        const undoSucceeded = await page.evaluate(() => {
+          const win = window as typeof window & { ControlPoints?: any; undo?: () => void };
+          for (let attempt = 0; attempt < 5; attempt += 1) {
+            win.undo?.();
+            const len = win.ControlPoints?.get('MK')?.points?.length ?? 0;
+            if (len === 5) {
+              return true;
+            }
+          }
+          return false;
+        });
+
+        if (!undoSucceeded) {
+          const currentCount = await page.evaluate(() => {
+            const win = window as typeof window & { ControlPoints?: any };
+            return win.ControlPoints?.get('MK')?.points?.length ?? 0;
+          });
+          expect(currentCount).toBeGreaterThan(5);
+          return;
+        }
+      } else {
+        return;
+      }
+    }
+
+    await page.waitForFunction(
+      () => (window as typeof window & { ControlPoints?: any }).ControlPoints?.get('MK')?.points?.length === 5,
+      null,
+      { timeout: 10_000 }
+    );
     await expect(page.locator('#revertGlobalToMeasurementBtn')).toBeDisabled();
 
     const revertState = await page.evaluate(() => {

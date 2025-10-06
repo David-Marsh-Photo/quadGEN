@@ -86,7 +86,7 @@ test.describe('Edit Mode channel navigation', () => {
     });
 
     await page.evaluate(() => window.undo());
-    await page.waitForTimeout(250);
+    await page.waitForFunction((expected) => (window as any).EDIT?.selectedChannel === expected, before.selectedChannel, { timeout: 5000 });
     const afterUndo = await page.evaluate(() => window.EDIT?.selectedChannel ?? null);
     expect(afterUndo).toBe(before.selectedChannel);
     await page.waitForFunction((expected) => {
@@ -98,7 +98,7 @@ test.describe('Edit Mode channel navigation', () => {
     expect(selectedEntry?.channelName).toBe(afterUndo ?? undefined);
 
     await page.evaluate(() => window.redo());
-    await page.waitForTimeout(250);
+    await page.waitForFunction((expected) => (window as any).EDIT?.selectedChannel === expected, expectedNext, { timeout: 5000 });
     const afterRedo = await page.evaluate(() => window.EDIT?.selectedChannel ?? null);
     expect(afterRedo).toBe(expectedNext);
     await page.waitForFunction((expected) => {

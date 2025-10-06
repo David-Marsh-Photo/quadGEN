@@ -11,8 +11,183 @@ import {
   getHelpHistoryHTML,
   getHelpWorkflowHTML
 } from './help-content.js';
+import {
+  getCurrentScale,
+  getScalingStateAudit,
+  resetScalingStateAudit,
+  validateScalingStateSync,
+  SCALING_STATE_FLAG_EVENT,
+  SCALING_STATE_AUDIT_EVENT
+} from '../core/scaling-utils.js';
 
 let currentHelpTab = 'readme';
+let scalingDebugListenersAttached = false;
+
+function getHelpDebugPanel() {
+  return elements.helpDebugPanel || null;
+}
+
+function getHelpDebugField(name) {
+  const panel = getHelpDebugPanel();
+  if (!panel) return null;
+  return panel.querySelector(`[data-scaling-debug-field="${name}"]`);
+}
+
+function formatNumber(value, fractionDigits = 2) {
+  return Number.isFinite(value) ? value.toFixed(fractionDigits) : '—';
+}
+
+function formatPercent(value) {
+  return Number.isFinite(value) ? `${value.toFixed(2)}%` : '—';
+}
+
+function formatTimestamp(timestamp) {
+  if (!Number.isFinite(timestamp)) {
+    return '—';
+  }
+  const date = new Date(timestamp);
+  if (Number.isNaN(date.getTime())) {
+    return '—';
+  }
+  return date.toLocaleString();
+}
+
+function formatMismatchDetail(detail) {
+  if (!detail) return '—';
+  try {
+    return JSON.stringify(detail, null, 2);
+  } catch (error) {
+    return String(detail);
+  }
+}
+
+function updateHelpDebugPanel(eventLike = null) {
+  const panel = getHelpDebugPanel();
+  if (!panel) {
+    return;
+  }
+
+  const eventDetail = eventLike && typeof eventLike === 'object' && 'detail' in eventLike ? eventLike.detail : eventLike;
+  const detail = (eventDetail && typeof eventDetail === 'object') ? eventDetail : {};
+  const auditFromEvent = detail && typeof detail === 'object' && detail.audit ? detail.audit : null;
+  const audit = auditFromEvent || getScalingStateAudit() || null;
+  const flagEnabled = typeof window !== 'undefined' ? !!window.__USE_SCALING_STATE : false;
+
+  const statusText = detail && typeof detail.status === 'string' ? detail.status : (flagEnabled ? 'idle' : 'flag-disabled');
+  const reasonText = detail && typeof detail.reason === 'string' && detail.reason.trim() ? detail.reason : (audit?.lastCheckReason || (flagEnabled ? 'parity-check' : 'flag-disabled'));
+  const auditTimestamp = audit?.lastCheckTimestamp ?? (audit?.lastCheckTimestampIso ? Date.parse(audit.lastCheckTimestampIso) : Number.NaN);
+
+  const statusField = getHelpDebugField('status');
+  if (statusField) {
+    statusField.textContent = `status: ${statusText}`;
+  }
+
+  const flagField = getHelpDebugField('flag');
+  if (flagField) {
+    flagField.textContent = flagEnabled ? 'Enabled' : 'Disabled';
+  }
+
+  const scaleField = getHelpDebugField('scalePercent');
+  if (scaleField) {
+    const currentScale = Number(getCurrentScale());
+    scaleField.textContent = formatPercent(currentScale);
+  }
+
+  const totalChecksField = getHelpDebugField('totalChecks');
+  if (totalChecksField) {
+    totalChecksField.textContent = String(audit?.totalChecks ?? 0);
+  }
+
+  const mismatchCountField = getHelpDebugField('mismatchCount');
+  if (mismatchCountField) {
+    mismatchCountField.textContent = String(audit?.mismatchCount ?? 0);
+  }
+
+  const reasonField = getHelpDebugField('lastReason');
+  if (reasonField) {
+    reasonField.textContent = reasonText || '—';
+  }
+
+  const lastCheckField = getHelpDebugField('lastCheck');
+  if (lastCheckField) {
+    lastCheckField.textContent = formatTimestamp(auditTimestamp);
+  }
+
+  const expectedField = getHelpDebugField('expectedMaxAllowed');
+  if (expectedField) {
+    expectedField.textContent = formatNumber(audit?.lastExpectedMaxAllowed, 0);
+  }
+
+  const observedField = getHelpDebugField('observedMaxAllowed');
+  if (observedField) {
+    observedField.textContent = formatNumber(audit?.lastObservedMaxAllowed, 0);
+  }
+
+  const deltaField = getHelpDebugField('lastMismatchDelta');
+  if (deltaField) {
+    deltaField.textContent = formatNumber(audit?.lastMismatchDelta, 4);
+  }
+
+  const detailField = getHelpDebugField('lastMismatchDetail');
+  if (detailField) {
+    detailField.textContent = formatMismatchDetail(audit?.lastMismatchDetail);
+  }
+
+  const shouldShow = currentHelpTab === 'history';
+  panel.classList.toggle('hidden', !shouldShow);
+}
+
+function handleHelpDebugRefresh(event) {
+  event?.preventDefault?.();
+  try {
+    validateScalingStateSync({ throwOnMismatch: false, reason: 'help-refresh' });
+  } catch (error) {
+    if (typeof console !== 'undefined' && console.warn) {
+      console.warn('[Help] scaling audit refresh failed', error);
+    }
+  }
+  updateHelpDebugPanel({ status: 'refresh', reason: 'help-refresh' });
+}
+
+function handleHelpDebugReset(event) {
+  event?.preventDefault?.();
+  resetScalingStateAudit('help-reset');
+  updateHelpDebugPanel({ status: 'reset', reason: 'help-reset' });
+}
+
+function wireHelpDebugPanel() {
+  const panel = getHelpDebugPanel();
+  if (!panel || panel.dataset.wired === 'true') {
+    return;
+  }
+
+  if (elements.helpDebugRefreshBtn) {
+    elements.helpDebugRefreshBtn.addEventListener('click', handleHelpDebugRefresh);
+  }
+
+  if (elements.helpDebugResetBtn) {
+    elements.helpDebugResetBtn.addEventListener('click', handleHelpDebugReset);
+  }
+
+  panel.dataset.wired = 'true';
+}
+
+function ensureScalingDebugListeners() {
+  if (scalingDebugListenersAttached || typeof window === 'undefined') {
+    return;
+  }
+
+  window.addEventListener(SCALING_STATE_FLAG_EVENT, (event) => {
+    const enabled = !!(event && event.detail && event.detail.enabled);
+    updateHelpDebugPanel({ status: enabled ? 'flag-enabled' : 'flag-disabled', reason: enabled ? 'flag-enabled' : 'flag-disabled' });
+  });
+
+  window.addEventListener(SCALING_STATE_AUDIT_EVENT, (event) => {
+    updateHelpDebugPanel(event);
+  });
+
+  scalingDebugListenersAttached = true;
+}
 
 function lockBodyScroll() {
   try {
@@ -123,6 +298,9 @@ function setHelpActiveTab(tab) {
     elements.helpContent.innerHTML = html;
     wireSampleButtons();
   }
+
+  wireHelpDebugPanel();
+  updateHelpDebugPanel();
 }
 
 function openHelpPopup(defaultTab = 'readme') {
@@ -263,6 +441,10 @@ export function initializeHelpSystem() {
   if (!elements.helpContent) {
     return;
   }
+
+  wireHelpDebugPanel();
+  ensureScalingDebugListeners();
+  updateHelpDebugPanel();
 
   if (elements.helpBtn && elements.helpPopup) {
     elements.helpBtn.addEventListener('click', () => openHelpPopup('readme'));

@@ -20,6 +20,41 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Docs
 - _Nothing yet._
 
+## [v3.1.0] — 2025-10-05
+### Added
+- Targeted Vitest coverage (`tests/ai-actions-scaling.test.js`) asserting AI scaling requests route through the coordinator with proper metadata.
+- Help → Version History now includes a Scaling State audit panel with live counters plus refresh/reset controls for the Phase 2 declarative-state rollout.
+- Scaling-state workflow coverage: new Vitest reason-counter checks (`tests/core/scaling-utils-audit-reasons.test.js`) and Playwright flows (`tests/e2e/scaling-state-workflows.spec.ts`) exercise flag toggles, rapid scaling, and undo/redo parity under the state flag.
+
+### Changed
+- Feature-flagged global scaling coordinator queues Scale operations behind undo-safe history transactions; toggle via `enableScalingCoordinator(true)` during Phase 1 testing.
+- Window/global scaling helpers exposed on `window` now enqueue through the coordinator queue and provide `legacy*` fallbacks for diagnostics tooling.
+- `scalingStateAudit` now records per-reason counters (flag enable/disable, subscription resync, legacy fallback, history undo/redo) and `scripts/diagnostics/scaling-state-ab.js` aggregates them as `reasonCountsSummary` for A/B telemetry artifacts.
+- Dev builds now enable `__USE_SCALING_STATE` by default so the declarative scaling path is active without manual toggles (compat `setScalingStateEnabled(false)` remains for rollback).
+
+### Fixed
+- Smart point parity check for preloaded `.quad` files now converts curve samples into relative output, keeping Edit Mode key points in sync with reduced ink-limit curves.
+- Lab Tech scaling commands now propagate coordinator failures instead of forcing a success flag when queue operations reject or return `success: false`.
+- Scaling state parity no longer fails when clamping back to 100 %—the state slice now resets `maxAllowed` to 1000 alongside legacy globals, keeping coordinator retries green while the flag is enabled.
+- Undo/redo history refresh now routes through UI hooks, eliminating the missing trigger warnings surfaced during the scaling-state Playwright workflows.
+- Reapplying the same contrast intent no longer compounds the loaded curve—intent remap now reuses the original curve baseline so repeated clicks are idempotent (`tests/e2e/intent-double-apply.spec.ts`).
+- Ink limit edits now rescale the original `.quad` samples and skip seeding default Smart ramps while Edit Mode is off, so adjusting a channel no longer collapses the plotted curve into a linear ramp (`tests/e2e/ink-limit-linearization.spec.ts`).
+
+### Removed
+- _Nothing yet._
+
+### Docs
+- Documented the Phase 0 scaling release handoff (checklist, regression matrix, and in-app Version History entry).
+- Added coordinator flag guidance (`enableScalingCoordinator`) to CLAUDE.md and AGENTS.md.
+- Noted the coordinator-backed window bridge + legacy helpers in AGENTS.md and marked the scaling UI migration checklist update.
+- Marked the AI/programmatic migration milestone complete in `docs/features/SCALING_IMPROVEMENT_PLANS.md`.
+- Logged the combined Smart + LAB parity diagnostics run (`scripts/diagnostics/compare-coordinator-combined.js`).
+- Recorded the clamp-to-100 parity fix and updated harness metrics in `docs/features/SCALING_IMPROVEMENT_PLANS.md` and `docs/features/checklists/PHASE_2_DECLARATIVE_STATE.md`.
+- Captured the help overlay scaling audit panel in the Phase 2 plan and checklist so consumer coverage is fully accounted for before the canary rollout.
+- Documented scaling-state reason counters + workflow coverage updates in the Phase 2 plan.
+- Logged the undo/redo trigger fix and Playwright coverage update in `docs/features/SCALING_IMPROVEMENT_PLANS.md`.
+- Noted the private-lab rollout workflow and single-operator manual acceptance steps in `docs/features/SCALING_IMPROVEMENT_PLANS.md` and `docs/manual_tests.md`.
+
 ## [Beta 3.0.4] — 2025-10-04
 ### Added
 - _Nothing yet._

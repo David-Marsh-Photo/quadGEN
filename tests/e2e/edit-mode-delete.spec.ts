@@ -24,7 +24,7 @@ test.describe('Edit Mode delete button', () => {
 
     // Advance to first interior key point (ordinal 2)
     await page.locator('#editPointRight').click();
-    await page.waitForTimeout(150);
+    await page.waitForFunction(() => (window as any).EDIT?.selectedOrdinal === 2, undefined, { timeout: 2000 });
 
     const before = await page.evaluate(() => {
       const points = window.ControlPoints?.get('K')?.points || [];

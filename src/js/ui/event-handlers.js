@@ -3,12 +3,14 @@
 
 import { elements, getCurrentPrinter, setLoadedQuadData, getLoadedQuadData, ensureLoadedQuadData, getAppState, updateAppState, TOTAL } from '../core/state.js';
 import { getStateManager } from '../core/state-manager.js';
-import { sanitizeFilename, debounce } from './ui-utils.js';
+import { sanitizeFilename, debounce, formatScalePercent } from './ui-utils.js';
 import { generateFilename, downloadFile, readFileAsText } from '../files/file-operations.js';
 import { InputValidator } from '../core/validation.js';
 import { parseQuadFile, parseLinearizationFile } from '../parsers/file-parsers.js';
 import { updateInkChart, stepChartZoom } from './chart-manager.js';
-import { getCurrentScale, updateScaleBaselineForChannel as updateScaleBaselineForChannelCore, applyGlobalScale as applyGlobalScaleCore, scaleChannelEndsByPercent as scaleChannelEndsByPercentCore } from '../core/scaling-utils.js';
+import { getCurrentScale, updateScaleBaselineForChannel as updateScaleBaselineForChannelCore, validateScalingStateSync } from '../core/scaling-utils.js';
+import { SCALING_STATE_FLAG_EVENT } from '../core/scaling-constants.js';
+import scalingCoordinator from '../core/scaling-coordinator.js';
 import { updateCompactChannelsList, updateChannelCompactState, updateNoChannelsMessage } from './compact-channels.js';
 import { registerChannelRow, getChannelRow } from './channel-registry.js';
 import { updateProcessingDetail, updateSessionStatus } from './graph-status.js';
@@ -33,6 +35,96 @@ import { setPrinter, registerChannelRowSetup, syncPrinterForQuadData } from './p
 
 const globalScope = typeof window !== 'undefined' ? window : globalThis;
 const isBrowser = typeof document !== 'undefined';
+
+let unsubscribeScalingStateInput = null;
+let scalingStateFlagListenerAttached = false;
+let lastScalingStateValue = null;
+let scaleHandlerRetryCount = 0;
+const SCALE_HANDLER_MAX_RETRIES = 5;
+
+function syncScaleInputFromStateValue(value) {
+    if (!elements.scaleAllInput) return;
+
+    const numeric = Number(value);
+    const fallback = getCurrentScale();
+    const target = Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
+    const formatted = formatScalePercent(target);
+
+    if (elements.scaleAllInput.value !== formatted) {
+        elements.scaleAllInput.value = formatted;
+    }
+
+    lastScalingStateValue = target;
+}
+
+function configureScalingStateSubscription() {
+    if (!elements.scaleAllInput) {
+        return;
+    }
+
+    if (unsubscribeScalingStateInput) {
+        try {
+            unsubscribeScalingStateInput();
+        } catch (err) {
+            console.warn('Failed to remove scaling state subscription', err);
+        }
+        unsubscribeScalingStateInput = null;
+        if (isBrowser) {
+            globalScope.__scalingStateSubscribed = false;
+        }
+    }
+
+    const enabled = !!(isBrowser && globalScope.__USE_SCALING_STATE);
+    if (!enabled) {
+        lastScalingStateValue = null;
+        syncScaleInputFromStateValue(getCurrentScale());
+        return;
+    }
+
+    let stateManager;
+    try {
+        stateManager = getStateManager();
+    } catch (error) {
+        console.warn('Scaling state manager unavailable:', error);
+        return;
+    }
+
+    if (!stateManager || typeof stateManager.subscribe !== 'function') {
+        return;
+    }
+
+    try {
+        syncScaleInputFromStateValue(stateManager.get('scaling.globalPercent'));
+    } catch (readError) {
+        console.warn('Unable to read scaling.globalPercent from state', readError);
+    }
+
+    unsubscribeScalingStateInput = stateManager.subscribe(['scaling.globalPercent'], (_, newValue) => {
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.log('🔁 [SCALE STATE] scaling.globalPercent changed', newValue);
+        }
+        if (!elements.scaleAllInput) return;
+
+        if (lastScalingStateValue != null) {
+            const numeric = Number(newValue);
+            if (Number.isFinite(numeric) && Math.abs(numeric - lastScalingStateValue) < 1e-6) {
+                return;
+            }
+        }
+
+        syncScaleInputFromStateValue(newValue);
+    });
+
+    if (isBrowser) {
+        globalScope.__scalingStateSubscribed = true;
+    }
+
+    try {
+        validateScalingStateSync({ reason: 'subscription:resync', throwOnMismatch: false });
+    } catch (validationError) {
+        console.warn('Scaling state validation failed after subscription resync', validationError);
+    }
+}
 
 function setRevertInProgress(active) {
     if (!isBrowser) return;
@@ -73,6 +165,10 @@ const debouncedPreviewUpdate = debounce(() => {
  */
 export function initializeEventHandlers() {
     console.log('🎛️ Initializing UI event handlers...');
+
+    if (typeof window !== 'undefined') {
+        scalingCoordinator.setEnabled(!!window.__USE_SCALING_COORDINATOR);
+    }
 
     // Core UI handlers
     initializeUndoRedoHandlers();
@@ -263,7 +359,34 @@ function initializeFilenameHandlers() {
  * Initialize global scale input handlers
  */
 function initializeScaleHandlers() {
-    if (!elements.scaleAllInput) return;
+    if (!elements.scaleAllInput && isBrowser) {
+        elements.scaleAllInput = document.getElementById('scaleAllInput');
+    }
+
+    if (!elements.scaleAllInput) {
+        if (isBrowser && scaleHandlerRetryCount < SCALE_HANDLER_MAX_RETRIES) {
+            scaleHandlerRetryCount += 1;
+            globalScope.setTimeout(() => {
+                initializeScaleHandlers();
+            }, 50 * scaleHandlerRetryCount);
+        } else {
+            console.warn('Scale handlers unable to locate #scaleAllInput element. Dual-read subscription not initialized.');
+        }
+        return;
+    }
+
+    scaleHandlerRetryCount = 0;
+
+    if (isBrowser && !scalingStateFlagListenerAttached) {
+        globalScope.addEventListener(SCALING_STATE_FLAG_EVENT, () => {
+            console.log('🔁 [SCALE STATE] flag event received', globalScope.__USE_SCALING_STATE);
+            configureScalingStateSubscription();
+        });
+        scalingStateFlagListenerAttached = true;
+        globalScope.__scalingStateListenerReady = true;
+    }
+
+    configureScalingStateSubscription();
 
     const MIN_SCALE = 1;
     const MAX_SCALE = 1000;
@@ -327,20 +450,27 @@ function initializeScaleHandlers() {
         elements.scaleAllInput.value = parsed.toString();
         console.log(`🔍 [SCALE DEBUG] Input value updated to:`, parsed.toString());
 
+        const handleCoordinatorError = (error) => {
+            console.error('Scaling coordinator error:', error);
+            if (elements.scaleAllInput) {
+                elements.scaleAllInput.value = formatScalePercent(getCurrentScale());
+            }
+        };
+
         if (immediate) {
-            // Execute immediately for explicit actions like Enter key
-            console.log(`🔍 [SCALE DEBUG] Executing immediate scaling with applyGlobalScale(${parsed})`);
-            applyGlobalScaleCore(parsed);
-            console.log(`🔍 [SCALE DEBUG] applyGlobalScale(${parsed}) completed`);
+            console.log(`🔍 [SCALE DEBUG] Executing immediate scaling via coordinator (${parsed})`);
+            scalingCoordinator
+                .scale(parsed, 'ui', { priority: 'high', metadata: { trigger: 'commitScaleAllImmediate' } })
+                .catch(handleCoordinatorError);
         } else {
-            // Debounce for other events like arrow keys
-            console.log(`🔍 [SCALE DEBUG] Setting up debounced scaling for:`, parsed);
+            console.log(`🔍 [SCALE DEBUG] Setting up debounced coordinator scaling for:`, parsed);
             scaleDebounceTimeout = setTimeout(() => {
-                console.log(`🔍 [SCALE DEBUG] Executing debounced scaling with applyGlobalScale(${parsed})`);
-                applyGlobalScaleCore(parsed);
-                console.log(`🔍 [SCALE DEBUG] Debounced applyGlobalScale(${parsed}) completed`);
+                console.log(`🔍 [SCALE DEBUG] Executing debounced coordinator scaling (${parsed})`);
+                scalingCoordinator
+                    .scale(parsed, 'ui', { metadata: { trigger: 'commitScaleAllDebounce' } })
+                    .catch(handleCoordinatorError);
             }, 100);
-            console.log(`🔍 [SCALE DEBUG] Debounce timeout set:`, scaleDebounceTimeout);
+            console.log(`🔍 [SCALE DEBUG] Coordinator debounce timeout set:`, scaleDebounceTimeout);
         }
     };
 
@@ -440,11 +570,14 @@ function initializeScaleHandlers() {
             inputDebounceTimer = setTimeout(() => {
                 console.log(`🔍 [EVENT DEBUG] Debounced input scaling - value:`, value);
 
-                // Directly call applyGlobalScale instead of commitScaleAll
-                // This bypasses the complex baseline logic and just scales from current values
-                if (applyGlobalScaleCore) {
-                    applyGlobalScaleCore(value);
-                }
+                scalingCoordinator
+                    .scale(value, 'ui-input', { metadata: { trigger: 'inputDebounce' } })
+                    .catch((error) => {
+                        console.error('Scaling coordinator input error:', error);
+                        if (elements.scaleAllInput) {
+                            elements.scaleAllInput.value = formatScalePercent(getCurrentScale());
+                        }
+                    });
             }, 150); // 150ms debounce
         }
 
@@ -513,6 +646,67 @@ function initializeChannelRowHandlers() {
             updatePreview();
         }
     });
+}
+
+function isDefaultSmartRamp(points) {
+    if (!Array.isArray(points) || points.length !== 2) {
+        return false;
+    }
+    const [p0, p1] = points;
+    const nearZero = (value) => Math.abs(Number(value) || 0) <= 0.0001;
+    const nearHundred = (value) => Math.abs((Number(value) || 0) - 100) <= 0.0001;
+    return nearZero(p0?.input) && nearZero(p0?.output) && nearHundred(p1?.input) && nearHundred(p1?.output);
+}
+
+function preserveQuadCurveForInkLimit(channelName, newEndValue) {
+    if (!channelName || !Number.isFinite(newEndValue)) {
+        return;
+    }
+
+    const loadedData = getLoadedQuadData();
+    if (!loadedData) {
+        return;
+    }
+
+    const original = loadedData.originalCurves?.[channelName];
+    if (!Array.isArray(original) || original.length === 0) {
+        return;
+    }
+
+    const baselineSource = loadedData.baselineEnd?.[channelName];
+    const baselineEnd = Number.isFinite(baselineSource) && baselineSource > 0
+        ? baselineSource
+        : Math.max(...original);
+    if (!baselineEnd || baselineEnd <= 0) {
+        return;
+    }
+
+    const ratio = newEndValue <= 0 ? 0 : newEndValue / baselineEnd;
+    const scaledCurve = original.map((value) => {
+        if (!Number.isFinite(value)) return 0;
+        const scaled = ratio * value;
+        if (!Number.isFinite(scaled)) return 0;
+        return Math.max(0, Math.min(TOTAL, Math.round(scaled)));
+    });
+
+    if (!loadedData.curves) {
+        loadedData.curves = {};
+    }
+    loadedData.curves[channelName] = scaledCurve;
+
+    const keyPoints = loadedData.keyPoints?.[channelName];
+    const sourceTag = loadedData.sources?.[channelName];
+    if (sourceTag === 'smart' && isDefaultSmartRamp(keyPoints)) {
+        if (loadedData.keyPoints) {
+            delete loadedData.keyPoints[channelName];
+        }
+        if (loadedData.keyPointsMeta) {
+            delete loadedData.keyPointsMeta[channelName];
+        }
+        if (loadedData.sources) {
+            delete loadedData.sources[channelName];
+        }
+    }
 }
 
 /**
@@ -611,14 +805,29 @@ function handlePercentInput(input) {
         });
     }
 
+    if (channelName && Number.isFinite(newEndValue)) {
+        setTimeout(() => {
+            try {
+                preserveQuadCurveForInkLimit(channelName, newEndValue);
+            } catch (err) {
+                console.warn('[INK LIMIT] preserveQuadCurveForInkLimit failed:', err);
+            }
+        }, 0);
+    }
+
     const currentScalePercent = typeof getCurrentScale === 'function' ? getCurrentScale() : 100;
     if (Number.isFinite(currentScalePercent) && Math.abs(currentScalePercent - 100) > 1e-6) {
         setTimeout(() => {
-            try {
-                scaleChannelEndsByPercentCore(currentScalePercent, { skipHistory: true });
-            } catch (err) {
-                console.warn('[SCALE] Reapply after percent edit failed:', err);
-            }
+            scalingCoordinator
+                .scale(currentScalePercent, 'ui-resync', {
+                    metadata: {
+                        trigger: 'percentInputResync',
+                        skipHistory: true
+                    }
+                })
+                .catch((err) => {
+                    console.warn('[SCALE] Coordinator resync after percent edit failed:', err);
+                });
         }, 0);
     }
 
@@ -739,14 +948,29 @@ function handleEndInput(input) {
         });
     }
 
+    if (channelName && Number.isFinite(validatedEnd)) {
+        setTimeout(() => {
+            try {
+                preserveQuadCurveForInkLimit(channelName, validatedEnd);
+            } catch (err) {
+                console.warn('[INK LIMIT] preserveQuadCurveForInkLimit failed:', err);
+            }
+        }, 0);
+    }
+
     const currentScalePercent = typeof getCurrentScale === 'function' ? getCurrentScale() : 100;
     if (Number.isFinite(currentScalePercent) && Math.abs(currentScalePercent - 100) > 1e-6) {
         setTimeout(() => {
-            try {
-                scaleChannelEndsByPercentCore(currentScalePercent, { skipHistory: true });
-            } catch (err) {
-                console.warn('[SCALE] Reapply after end edit failed:', err);
-            }
+            scalingCoordinator
+                .scale(currentScalePercent, 'ui-resync', {
+                    metadata: {
+                        trigger: 'endInputResync',
+                        skipHistory: true
+                    }
+                })
+                .catch((err) => {
+                    console.warn('[SCALE] Coordinator resync after end edit failed:', err);
+                });
         }, 0);
     }
 
@@ -1487,9 +1711,12 @@ function applyIntentToLoadedCurve() {
             const oldSource = loadedData.sources?.[channelName];
 
             let newCurve;
+            const originalCurveForChannel = Array.isArray(loadedData.originalCurves?.[channelName])
+                ? loadedData.originalCurves[channelName]
+                : null;
 
             if (restoringLinear) {
-                const originalCurve = loadedData.originalCurves?.[channelName];
+                const originalCurve = originalCurveForChannel;
                 if (!Array.isArray(originalCurve) || originalCurve.length !== length) {
                     console.warn('Intent remap: missing original curve for', channelName);
                     continue;
@@ -1519,11 +1746,15 @@ function applyIntentToLoadedCurve() {
                     console.warn('Intent remap: failed clearing Smart metadata for', channelName, err);
                 }
             } else {
+                const baselineCurve = (Array.isArray(originalCurveForChannel) && originalCurveForChannel.length === length)
+                    ? originalCurveForChannel
+                    : existingCurve;
+
                 const xs = new Array(length);
                 const ys = new Array(length);
                 for (let i = 0; i < length; i++) {
                     xs[i] = denom === 0 ? 0 : i / denom;
-                    ys[i] = clamp01(existingCurve[i] / total);
+                    ys[i] = clamp01(baselineCurve[i] / total);
                 }
 
                 let sampler = null;

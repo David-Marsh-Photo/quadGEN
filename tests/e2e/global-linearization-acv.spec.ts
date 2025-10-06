@@ -39,8 +39,6 @@ test('loading an ACV global correction succeeds without parse errors', async ({ 
 
   await page.setInputFiles('input#linearizationFile', acvPath);
 
-  await page.waitForTimeout(500);
-
   const preWaitState = await page.evaluate(() => ({
     hasData: !!window.linearizationData,
     format: window.linearizationData?.format || null,

@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "QuadGEN Agent Log Entry",
+  "type": "object",
+  "required": [
+    "ts",
+    "agent",
+    "session_id",
+    "event",
+    "status",
+    "task_id"
+  ],
+  "properties": {
+    "ts": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "agent": {
+      "type": "string"
+    },
+    "session_id": {
+      "type": "string"
+    },
+    "task_id": {
+      "type": "string"
+    },
+    "event": {
+      "type": "string",
+      "enum": [
+        "start_session",
+        "start_task",
+        "heartbeat",
+        "checkpoint",
+        "artifact_saved",
+        "end_task",
+        "error",
+        "handoff",
+        "shutdown"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "running",
+        "waiting",
+        "done",
+        "error",
+        "skipped"
+      ]
+    },
+    "msg": {
+      "type": "string"
+    },
+    "inputs_ref": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "outputs": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "cursor": {
+      "type": "object",
+      "properties": {
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "file",
+        "line"
+      ]
+    },
+    "next_steps": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "context": {
+      "type": "object"
+    },
+    "metrics": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": true
+}

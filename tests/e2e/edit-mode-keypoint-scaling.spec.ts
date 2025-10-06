@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { existsSync, mkdirSync } from 'fs';
 import { resolve } from 'path';
 import { pathToFileURL } from 'url';
+import { waitForScaleComplete, waitForPointNearInput } from '../utils/scaling-test-helpers';
 
 test.describe('Edit Mode key point scaling', () => {
   test('inserting a Smart point follows the plotted curve after scaling', async ({ page }) => {
@@ -15,13 +16,6 @@ test.describe('Edit Mode key point scaling', () => {
     await mkPercent.fill('50');
     await mkPercent.press('Enter');
     await expect(mkPercent).toHaveValue('50');
-
-    const zoomIn = page.locator('#chartZoomInBtn');
-    await expect(zoomIn).toBeEnabled();
-    for (let i = 0; i < 4; i += 1) {
-      await zoomIn.click();
-      await page.waitForTimeout(150);
-    }
 
     await page.locator('#editModeToggleBtn').click();
     await expect(page.locator('#editModeLabel')).toHaveText(/ON/);
@@ -43,7 +37,8 @@ test.describe('Edit Mode key point scaling', () => {
     const clickX = rect.left + rect.width * 0.5;
     const clickY = rect.top + rect.height * 0.5;
     await page.mouse.click(clickX, clickY);
-    await page.waitForTimeout(400);
+
+    await waitForPointNearInput(page, 'MK', 50, 5);
 
     const analysis = await page.evaluate(() => {
       const row = document.querySelector('tr[data-channel="MK"]');
@@ -175,6 +170,7 @@ test.describe('Edit Mode key point scaling', () => {
     }, undefined, { timeout: 15000 });
 
     await page.evaluate(() => window.applyGlobalScale?.(80));
+    await waitForScaleComplete(page, 80);
 
     await expect(page.locator('tr[data-channel="MK"] input.percent-input')).toHaveValue(/80/);
 
@@ -199,9 +195,9 @@ test.describe('Edit Mode key point scaling', () => {
         : null;
 
       let lastSamplePercent: number | null = null;
-      if (curve && curve.length > 0) {
-        const denominator = curve.length - 1;
-        const lastValue = curve[denominator];
+    if (curve && curve.length > 0) {
+      const denominator = curve.length - 1;
+      const lastValue = curve[denominator];
         lastSamplePercent = (lastValue / 65535) * 100;
       }
 
@@ -351,7 +347,6 @@ test.describe('Edit Mode key point scaling', () => {
       if (!bakedMeta) {
         break;
       }
-      await page.waitForTimeout(100);
     }
 
     await page.waitForFunction(
@@ -374,5 +369,79 @@ test.describe('Edit Mode key point scaling', () => {
     expect(postUndoState.bakedMeta).toBeNull();
     expect(postUndoState.toggleDisabled).toBe(false);
     expect(postUndoState.labelText || '').not.toMatch(/^\*BAKED\*/);
+  });
+
+  test('adding a Smart point after global scale keeps absolute output aligned', async ({ page }) => {
+    const indexUrl = pathToFileURL(resolve('index.html')).href;
+    await page.goto(indexUrl);
+
+    await page.waitForSelector('#globalLinearizationBtn', { timeout: 15000 });
+
+    await page.locator('#editModeToggleBtn').click();
+    await expect(page.locator('#editModeLabel')).toHaveText(/ON/);
+
+    await page.waitForFunction(() => {
+      const control = window.ControlPoints?.get?.('MK');
+      return Array.isArray(control?.points) && control.points.length >= 2;
+    }, undefined, { timeout: 15000 });
+
+    await page.evaluate(() => window.applyGlobalScale?.(80));
+    await waitForScaleComplete(page, 80);
+    await expect(page.locator('tr[data-channel="MK"] input.percent-input')).toHaveValue(/80/);
+
+    const rect = await page.evaluate(() => {
+      const canvas = document.querySelector('canvas#inkChart');
+      if (!canvas) {
+        throw new Error('ink chart canvas not found');
+      }
+      const r = canvas.getBoundingClientRect();
+      return { left: r.left, top: r.top, width: r.width, height: r.height };
+    });
+
+    const clickX = rect.left + rect.width * 0.5;
+    const clickY = rect.top + rect.height * 0.45;
+    await page.mouse.click(clickX, clickY);
+
+    await waitForPointNearInput(page, 'MK', 50, 5);
+
+    const analysis = await page.evaluate(() => {
+      const row = document.querySelector('tr[data-channel="MK"]');
+      const control = window.ControlPoints?.get?.('MK');
+      const endInput = row?.querySelector('.end-input');
+      const percentInput = row?.querySelector('.percent-input');
+      const channelPercent = parseFloat(percentInput?.value ?? '0') || 0;
+      const endValue = window.InputValidator?.clampEnd?.(endInput?.value ?? 0) ?? 0;
+      const points = control?.points ?? [];
+      const inserted = points.reduce((best, point) => {
+        if (!best) return point;
+        return Math.abs(point.input - 50) < Math.abs(best.input - 50) ? point : best;
+      }, points[0] ?? null);
+
+      const curve = typeof window.make256 === 'function'
+        ? window.make256(endValue, 'MK', window.LinearizationState?.globalApplied ?? false)
+        : null;
+
+      let samplePercent: number | null = null;
+      if (curve && inserted) {
+        const idx = Math.round((inserted.input / 100) * (curve.length - 1));
+        samplePercent = (curve[idx] / 65535) * 100;
+      }
+
+      return {
+        channelPercent,
+        inserted,
+        samplePercent,
+        delta: inserted && samplePercent !== null
+          ? samplePercent - ((inserted.output / 100) * channelPercent)
+          : null,
+      };
+    });
+
+    expect(analysis.channelPercent).toBeCloseTo(80, 1);
+    expect(analysis.inserted).toBeTruthy();
+    expect(analysis.samplePercent).not.toBeNull();
+    expect(Math.abs(analysis.delta ?? Number.NaN)).toBeLessThanOrEqual(0.6);
+    expect(analysis.inserted?.output).toBeGreaterThanOrEqual(0);
+    expect(analysis.inserted?.output).toBeLessThanOrEqual(100);
   });
 });

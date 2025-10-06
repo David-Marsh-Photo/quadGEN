@@ -17,6 +17,12 @@ export class QuadGenStateManager {
         this.state = this.createInitialState();
         this.listeners = new Map(); // Event listeners for state changes
         this.isRestoring = false; // Flag to prevent cascading updates during restoration
+        this.isBatching = false;
+        this.batchDepth = 0;
+        this.batchBuffer = new Map(); // path -> { oldValue, newValue, options }
+        this.batchOriginalState = null;
+        this.selectorRegistry = new Set();
+        this.computedRegistry = new Map(); // path -> { dependencies, computeFn, selector }
 
         // Debugging support
         this.enableDebugging = false;
@@ -97,6 +103,19 @@ export class QuadGenStateManager {
                 recentFiles: [],
                 autoSaveEnabled: false,
                 lastSaveTime: null
+            },
+
+            scaling: {
+                globalPercent: 100,
+                baselines: null,
+                maxAllowed: 1000
+            },
+
+            // Computed values (populated via addComputed)
+            computed: {
+                scaling: {
+                    isActive: false
+                }
             }
         };
     }
@@ -129,6 +148,26 @@ export class QuadGenStateManager {
             return; // Prevent cascading updates during restoration
         }
 
+        if (this.isBatching) {
+            const oldValue = this.get(path);
+            this.setValueByPath(this.state, path, value);
+
+            const existing = this.batchBuffer.get(path);
+            const entry = existing || { oldValue, options: { ...options } };
+            if (existing) {
+                entry.options = { ...entry.options, ...options };
+            }
+            entry.newValue = value;
+            this.batchBuffer.set(path, entry);
+
+            if (this.enableDebugging) {
+                this.captureStateSnapshot(`BATCHED SET ${path}`, { path, oldValue, newValue: value });
+            }
+
+            this.invalidateSelectorsForPath(path);
+            return;
+        }
+
         const oldValue = this.get(path);
         this.setValueByPath(this.state, path, value);
 
@@ -136,6 +175,9 @@ export class QuadGenStateManager {
         if (this.enableDebugging) {
             this.captureStateSnapshot(`SET ${path}`, { path, oldValue, newValue: value });
         }
+
+        this.invalidateSelectorsForPath(path);
+        this.updateComputedForPaths([path]);
 
         // Notify listeners
         this.notifyListeners(path, value, oldValue, options);
@@ -151,30 +193,31 @@ export class QuadGenStateManager {
      * @param {Object} options - Update options
      */
     batch(updates, options = {}) {
-        const oldValues = {};
-
-        // Capture old values
-        for (const path in updates) {
-            oldValues[path] = this.get(path);
+        if (typeof updates === 'function') {
+            this.beginBatch();
+            try {
+                updates();
+                this.completeBatch(options);
+            } catch (error) {
+                this.rollbackBatch();
+                throw error;
+            }
+            return;
         }
 
-        // Apply all updates
-        for (const path in updates) {
-            this.setValueByPath(this.state, path, updates[path]);
+        if (!updates || typeof updates !== 'object') {
+            throw new Error('stateManager.batch expects a function or an object map');
         }
 
-        // Capture snapshot for debugging
-        if (this.enableDebugging) {
-            this.captureStateSnapshot('BATCH UPDATE', { updates, oldValues });
-        }
-
-        // Notify listeners for each change
-        for (const path in updates) {
-            this.notifyListeners(path, updates[path], oldValues[path], options);
-        }
-
-        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-            console.log('[STATE] BATCH UPDATE:', Object.keys(updates));
+        this.beginBatch();
+        try {
+            for (const path in updates) {
+                this.set(path, updates[path], options);
+            }
+            this.completeBatch(options);
+        } catch (error) {
+            this.rollbackBatch();
+            throw error;
         }
     }
 
@@ -203,6 +246,61 @@ export class QuadGenStateManager {
         }
     }
 
+    beginBatch() {
+        if (!this.isBatching) {
+            this.isBatching = true;
+            this.batchBuffer.clear();
+            this.batchOriginalState = JSON.parse(JSON.stringify(this.state));
+        }
+        this.batchDepth += 1;
+    }
+
+    completeBatch(options = {}) {
+        if (!this.isBatching) return;
+
+        this.batchDepth -= 1;
+
+        if (this.batchDepth > 0) {
+            return;
+        }
+
+        const snapshotEntries = Array.from(this.batchBuffer.entries());
+        const changedPaths = snapshotEntries.map(([path]) => path);
+
+        if (this.computedRegistry.size > 0) {
+            this.updateComputedForPaths(changedPaths, { forceBatch: true });
+        }
+
+        this.isBatching = false;
+        const bufferEntries = Array.from(this.batchBuffer.entries());
+
+        for (const [path, entry] of bufferEntries) {
+            const { oldValue, newValue } = entry;
+            this.invalidateSelectorsForPath(path);
+            this.notifyListeners(path, newValue, oldValue, { ...entry.options, batched: true, batchSize: bufferEntries.length, ...options });
+        }
+
+        this.batchBuffer.clear();
+        this.batchOriginalState = null;
+
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.log('[STATE] Batch flushed', bufferEntries.map(([path]) => path));
+        }
+    }
+
+    rollbackBatch() {
+        if (!this.isBatching) return;
+
+        if (this.batchOriginalState) {
+            this.state = JSON.parse(JSON.stringify(this.batchOriginalState));
+        }
+
+        this.isBatching = false;
+        this.batchDepth = 0;
+        this.batchBuffer.clear();
+        this.batchOriginalState = null;
+    }
+
     /**
      * Subscribe to state changes
      * @param {string|Array<string>} paths - Path(s) to watch, or '*' for all changes
@@ -225,6 +323,69 @@ export class QuadGenStateManager {
     }
 
     /**
+     * Create a memoized selector function
+     * @param {string|Array<string>} paths - dependency paths to watch
+     * @param {Function} computeFn - optional compute function
+     * @returns {Function} selector function
+     */
+    createSelector(paths, computeFn = (value) => value) {
+        const dependencyPaths = Array.isArray(paths) ? [...paths] : [paths];
+        if (dependencyPaths.length === 0) {
+            throw new Error('createSelector requires at least one dependency path');
+        }
+
+        const cache = new WeakMap();
+        const selector = () => {
+            const dependencies = dependencyPaths.map((path) => this.get(path));
+            let cached = cache.get(this.state);
+
+            if (
+                cached &&
+                cached.dependencies.length === dependencies.length &&
+                cached.dependencies.every((value, index) => value === dependencies[index])
+            ) {
+                return cached.result;
+            }
+
+            const result = computeFn(...dependencies);
+            cache.set(this.state, {
+                dependencies,
+                result
+            });
+            return result;
+        };
+
+        selector.invalidate = () => {
+            cache.delete(this.state);
+        };
+
+        this.selectorRegistry.add({ selector, dependencyPaths, cache });
+
+        return selector;
+    }
+
+    addComputed(path, dependencies, computeFn) {
+        if (!path || typeof path !== 'string') {
+            throw new Error('addComputed requires a string path');
+        }
+
+        const dependencyPaths = Array.isArray(dependencies) ? [...dependencies] : [dependencies];
+        if (dependencyPaths.length === 0) {
+            throw new Error('addComputed requires at least one dependency');
+        }
+
+        const selector = this.createSelector(dependencyPaths, (...args) => computeFn(...args));
+        this.computedRegistry.set(path, { dependencies: dependencyPaths, selector });
+
+        const initialValue = selector();
+        this.setValueByPath(this.state, path, initialValue);
+    }
+
+    removeComputed(path) {
+        this.computedRegistry.delete(path);
+    }
+
+    /**
      * Helper method to get value by dot-notation path
      * @private
      */
@@ -242,6 +403,38 @@ export class QuadGenStateManager {
         }
 
         return current;
+    }
+
+    updateComputedForPaths(paths, { forceBatch = false } = {}) {
+        if (this.computedRegistry.size === 0) return;
+
+        const changedPaths = Array.isArray(paths) ? paths : [paths];
+        const treatAsBatch = this.isBatching || forceBatch;
+
+        for (const [computedPath, entry] of this.computedRegistry.entries()) {
+            const { dependencies, selector } = entry;
+            const affected = dependencies.some((depPath) => changedPaths.some((changed) => this.pathsIntersect(depPath, changed)));
+            if (!affected) continue;
+
+            const oldValue = this.getValueByPath(this.state, computedPath);
+            const newValue = selector();
+
+            if (newValue === oldValue) continue;
+
+            this.setValueByPath(this.state, computedPath, newValue);
+            this.invalidateSelectorsForPath(computedPath);
+
+            if (treatAsBatch) {
+                const existing = this.batchBuffer.get(computedPath);
+                const mergedOptions = existing ? { ...existing.options, computed: true } : { computed: true };
+                const bufferEntry = existing || { oldValue, options: mergedOptions };
+                bufferEntry.newValue = newValue;
+                bufferEntry.options = mergedOptions;
+                this.batchBuffer.set(computedPath, bufferEntry);
+            } else {
+                this.notifyListeners(computedPath, newValue, oldValue, { computed: true });
+            }
+        }
     }
 
     /**
@@ -273,7 +466,7 @@ export class QuadGenStateManager {
 
             // Check if this listener should be notified
             const shouldNotify = paths.includes('*') ||
-                                paths.some(watchPath => path.startsWith(watchPath) || watchPath.startsWith(path));
+                                paths.some(watchPath => this.pathsIntersect(watchPath, path));
 
             if (shouldNotify) {
                 try {
@@ -283,6 +476,22 @@ export class QuadGenStateManager {
                 }
             }
         }
+    }
+
+    /**
+     * Invalidate selectors impacted by a state change
+     * @private
+     */
+    invalidateSelectorsForPath(path) {
+        for (const entry of this.selectorRegistry) {
+            if (entry.dependencyPaths.some((depPath) => this.pathsIntersect(depPath, path))) {
+                entry.cache.delete(this.state);
+            }
+        }
+    }
+
+    pathsIntersect(a, b) {
+        return a === b || a.startsWith(`${b}.`) || b.startsWith(`${a}.`);
     }
 
     /**

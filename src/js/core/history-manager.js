@@ -3,13 +3,16 @@
 
 import { getStateManager } from './state-manager.js';
 import { elements, getLoadedQuadData, setLoadedQuadData, ensureLoadedQuadData, updateAppState, getAppState, setEditModeFlag } from './state.js';
+import { getCurrentScale, getLegacyScalingSnapshot, restoreLegacyScalingState, validateScalingStateSync } from './scaling-utils.js';
 import { LinearizationState } from '../data/linearization-utils.js';
 import { setSmartKeyPoints, ControlPoints } from '../curves/smart-curves.js';
 import { InputValidator } from './validation.js';
 import { isEditModeEnabled } from '../ui/edit-mode.js';
+import { triggerInkChartUpdate, triggerPreviewUpdate, triggerProcessingDetail } from '../ui/ui-hooks.js';
 
 const globalScope = typeof window !== 'undefined' ? window : globalThis;
 const isBrowser = typeof document !== 'undefined';
+const HISTORY_SNAPSHOT_VERSION = 2;
 
 /**
  * History management for undo/redo functionality
@@ -24,6 +27,9 @@ export class HistoryManager {
         this.isRestoring = false; // Flag to prevent state capture during restore
         this.isBatchOperation = false; // Flag to prevent individual recording during batch operations
         this._pendingKeyPoints = {}; // Pending key-point extras keyed by channel
+        this._transactionIdCounter = 0;
+        this.activeTransaction = null;
+        this._transactionWarnTimer = null;
 
         // Subscribe to state changes to automatically capture certain operations
         this.setupStateSubscriptions();
@@ -120,6 +126,11 @@ export class HistoryManager {
      */
     _pushHistoryEntry(entry, options = {}) {
         if (this.isRestoring && !options.force) return;
+
+        if (this.activeTransaction && !options.force && !options.allowDuringTransaction) {
+            this.activeTransaction.entries.push(this.cloneEntry(entry));
+            return;
+        }
 
         this.history.push(this.cloneEntry(entry));
 
@@ -310,10 +321,72 @@ export class HistoryManager {
         }
         currentState.curves.loadedQuadData = loaded;
 
+        const scalingSnapshot = (() => {
+            try {
+                if (typeof getLegacyScalingSnapshot === 'function') {
+                    return getLegacyScalingSnapshot();
+                }
+            } catch (error) {
+                console.warn('history-manager: getLegacyScalingSnapshot failed during snapshot capture', error);
+            }
+
+            try {
+                const percent = typeof getCurrentScale === 'function' ? getCurrentScale() : null;
+                return {
+                    percent,
+                    baselines: null,
+                    maxAllowed: null,
+                    statePercent: null,
+                    stateBaselines: null,
+                    stateMaxAllowed: null,
+                    parity: {
+                        status: 'legacy-only',
+                        percentDelta: 0,
+                        baselineDiffs: [],
+                        maxAllowedDelta: 0
+                    }
+                };
+            } catch (fallbackError) {
+                console.warn('history-manager: getCurrentScale fallback failed during snapshot capture', fallbackError);
+                return {
+                    percent: null,
+                    baselines: null,
+                    maxAllowed: null,
+                    statePercent: null,
+                    stateBaselines: null,
+                    stateMaxAllowed: null,
+                    parity: {
+                        status: 'legacy-only',
+                        percentDelta: null,
+                        baselineDiffs: [],
+                        maxAllowedDelta: null
+                    }
+                };
+            }
+        })();
+
+        const scalingStateSnapshot = (scalingSnapshot.statePercent != null
+            || (scalingSnapshot.stateBaselines && Object.keys(scalingSnapshot.stateBaselines).length > 0)
+            || scalingSnapshot.stateMaxAllowed != null)
+            ? {
+                percent: scalingSnapshot.statePercent,
+                baselines: scalingSnapshot.stateBaselines,
+                maxAllowed: scalingSnapshot.stateMaxAllowed
+            }
+            : null;
+
         const state = {
+            version: HISTORY_SNAPSHOT_VERSION,
             timestamp: Date.now(),
             action: actionDescription,
-            stateSnapshot: currentState
+            stateSnapshot: currentState,
+            legacyScaling: {
+                percent: scalingSnapshot.percent,
+                baselines: scalingSnapshot.baselines,
+                maxAllowed: scalingSnapshot.maxAllowed
+            },
+            scalingStateSnapshot,
+            scalingParity: scalingSnapshot.parity
         };
 
         this._pushHistoryEntry({ kind: 'snapshot', state, action: actionDescription });
@@ -353,6 +426,15 @@ export class HistoryManager {
                 this.undoLinearizationAction(entry.action);
                 message = `Undid: ${entry.action.description}`;
                 this._pushRedoEntry({ kind: 'linearization', action: entry.action });
+            } else if (entry.kind === 'transaction') {
+                const tx = entry.action || {};
+                const description = tx.description || 'Transaction';
+                const childEntries = Array.isArray(tx.entries) ? tx.entries : [];
+                for (let i = childEntries.length - 1; i >= 0; i -= 1) {
+                    this.undoTransactionEntry(childEntries[i]);
+                }
+                message = `Undid: ${description}`;
+                this._pushRedoEntry({ kind: 'transaction', action: this.cloneEntry(tx) });
             } else if (entry.kind === 'snapshot') {
                 if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
                     console.log('[HistoryManager] Undo snapshot entry:', entry.action);
@@ -391,7 +473,15 @@ export class HistoryManager {
                 return { success: false, message: 'Unknown action type' };
             }
 
-            return { success: true, message };
+            const result = { success: true, message };
+            try {
+                validateScalingStateSync({ reason: 'history:undo', throwOnMismatch: false });
+            } catch (validationError) {
+                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                    console.warn('HistoryManager undo parity validation failed', validationError);
+                }
+            }
+            return result;
         } catch (error) {
             console.error('Undo failed:', error);
             return { success: false, message: `Undo failed: ${error.message}` };
@@ -435,6 +525,15 @@ export class HistoryManager {
                 this.redoLinearizationAction(entry.action);
                 message = `Redid: ${entry.action.description}`;
                 this._pushHistoryEntry({ kind: 'linearization', action: entry.action }, { preserveRedo: true, force: true });
+            } else if (entry.kind === 'transaction') {
+                const tx = entry.action || {};
+                const description = tx.description || 'Transaction';
+                const childEntries = Array.isArray(tx.entries) ? tx.entries : [];
+                for (const child of childEntries) {
+                    this.redoTransactionEntry(child);
+                }
+                message = `Redid: ${description}`;
+                this._pushHistoryEntry({ kind: 'transaction', action: this.cloneEntry(tx) }, { preserveRedo: true, force: true });
             } else if (entry.kind === 'snapshot') {
                 this.restoreSnapshot(entry.state);
                 message = `Redid: ${entry.action}`;
@@ -467,13 +566,77 @@ export class HistoryManager {
                 return { success: false, message: 'Unknown action type' };
             }
 
-            return { success: true, message };
+            const result = { success: true, message };
+            try {
+                validateScalingStateSync({ reason: 'history:redo', throwOnMismatch: false });
+            } catch (validationError) {
+                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                    console.warn('HistoryManager redo parity validation failed', validationError);
+                }
+            }
+            return result;
         } catch (error) {
             console.error('Redo failed:', error);
             return { success: false, message: `Redo failed: ${error.message}` };
         } finally {
             this.isRestoring = false;
             this.updateButtons();
+        }
+    }
+
+    undoTransactionEntry(entry) {
+        if (!entry) return;
+        switch (entry.kind) {
+            case 'channel':
+                this.undoChannelAction(entry.action);
+                break;
+            case 'batch':
+                this.undoBatchAction(entry.action);
+                break;
+            case 'ui':
+                this.undoUIAction(entry.action);
+                break;
+            case 'linearization':
+                this.undoLinearizationAction(entry.action);
+                break;
+            case 'snapshot':
+                this.restoreSnapshot(entry.state);
+                break;
+            case 'snapshot_pair':
+                if (entry.before) {
+                    this.restoreSnapshot(entry.before.state);
+                }
+                break;
+            default:
+                console.warn('Unknown transaction entry kind during undo:', entry.kind);
+        }
+    }
+
+    redoTransactionEntry(entry) {
+        if (!entry) return;
+        switch (entry.kind) {
+            case 'channel':
+                this.redoChannelAction(entry.action);
+                break;
+            case 'batch':
+                this.redoBatchAction(entry.action);
+                break;
+            case 'ui':
+                this.redoUIAction(entry.action);
+                break;
+            case 'linearization':
+                this.redoLinearizationAction(entry.action);
+                break;
+            case 'snapshot':
+                this.restoreSnapshot(entry.state);
+                break;
+            case 'snapshot_pair':
+                if (entry.after) {
+                    this.restoreSnapshot(entry.after.state);
+                }
+                break;
+            default:
+                console.warn('Unknown transaction entry kind during redo:', entry.kind);
         }
     }
 
@@ -687,10 +850,10 @@ export class HistoryManager {
      * @private
      */
     restoreSnapshot(state) {
-        // Restore state from snapshot
-        if (state.stateSnapshot) {
-            // New format with full state manager snapshot
-            const snapshotCopy = JSON.parse(JSON.stringify(state.stateSnapshot));
+        const normalized = this.ensureSnapshotVersion(state);
+
+        if (normalized && normalized.stateSnapshot) {
+            const snapshotCopy = JSON.parse(JSON.stringify(normalized.stateSnapshot));
             this.stateManager.state = snapshotCopy;
             this.restoreDomFromSnapshot(snapshotCopy);
 
@@ -704,12 +867,12 @@ export class HistoryManager {
                         }
                     });
             }
+
+            this.applyLegacyScaling(normalized.legacyScaling);
         } else {
-            // Legacy format - convert to new state structure
-            this.restoreLegacySnapshot(state);
+            this.restoreLegacySnapshot(normalized);
         }
 
-        // Trigger UI updates
         triggerInkChartUpdate();
     }
 
@@ -750,6 +913,59 @@ export class HistoryManager {
 
         if (state.perChannelEnabled) {
             this.stateManager.set('linearization.perChannel.enabled', state.perChannelEnabled, { skipHistory: true });
+        }
+    }
+
+    getSnapshotVersion(snapshot) {
+        if (!snapshot || typeof snapshot !== 'object') {
+            return 1;
+        }
+        return Number.isFinite(snapshot.version) ? snapshot.version : 1;
+    }
+
+    ensureSnapshotVersion(snapshot) {
+        if (!snapshot || typeof snapshot !== 'object') {
+            return snapshot;
+        }
+
+        const version = this.getSnapshotVersion(snapshot);
+        if (version >= HISTORY_SNAPSHOT_VERSION) {
+            return snapshot;
+        }
+
+        if (snapshot.stateSnapshot) {
+            return {
+                ...snapshot,
+                version: HISTORY_SNAPSHOT_VERSION,
+                legacyScaling: snapshot.legacyScaling ?? null
+            };
+        }
+
+        return snapshot;
+    }
+
+    applyLegacyScaling(legacyScaling) {
+        if (!legacyScaling || typeof legacyScaling.percent !== 'number') {
+            return;
+        }
+
+        const applyScale = (() => {
+            if (typeof globalScope.applyGlobalScale === 'function') {
+                return globalScope.applyGlobalScale;
+            }
+            if (globalScope.__quadDebug?.scalingUtils?.applyGlobalScale) {
+                return globalScope.__quadDebug.scalingUtils.applyGlobalScale;
+            }
+            return null;
+        })();
+
+        if (applyScale) {
+            try {
+                restoreLegacyScalingState(legacyScaling);
+                applyScale(legacyScaling.percent, { priority: 'history-restore', metadata: { trigger: 'historyRestore' } });
+            } catch (error) {
+                console.warn('history-manager: failed to reapply legacy scaling percent', error);
+            }
         }
     }
 
@@ -1223,7 +1439,122 @@ export class HistoryManager {
         this.history = [];
         this.redoStack = [];
         this._pendingKeyPoints = {};
+        this._clearActiveTransaction();
         this.updateButtons();
+    }
+
+    _clearActiveTransaction() {
+        if (this._transactionWarnTimer) {
+            clearTimeout(this._transactionWarnTimer);
+            this._transactionWarnTimer = null;
+        }
+        this.activeTransaction = null;
+    }
+
+    /**
+     * Begin a buffered history transaction.
+     * Subsequent history entries are captured but not flushed until commit.
+     * @param {string} description - Human-readable description for the history entry.
+     * @returns {string} Transaction identifier.
+     */
+    beginTransaction(description = 'History transaction') {
+        if (this.activeTransaction) {
+            throw new Error('History transaction already active');
+        }
+
+        const id = `tx_${Date.now()}_${++this._transactionIdCounter}`;
+        this.activeTransaction = {
+            id,
+            description,
+            startedAt: Date.now(),
+            snapshot: this.captureSnapshotState(),
+            entries: []
+        };
+
+        this._transactionWarnTimer = setTimeout(() => {
+            console.warn(`History transaction "${description}" (${id}) has not been committed after 5s`);
+        }, 5000);
+
+        return id;
+    }
+
+    /**
+     * Commit the active transaction and flush buffered entries as a single history item.
+     * @param {string} transactionId - Transaction identifier returned by beginTransaction.
+     * @returns {{ success: boolean, message: string }} Commit result metadata.
+     */
+    commit(transactionId) {
+        if (!this.activeTransaction) {
+            throw new Error('No active history transaction to commit');
+        }
+        if (this.activeTransaction.id !== transactionId) {
+            throw new Error('Mismatched history transaction id');
+        }
+
+        const tx = this.activeTransaction;
+        this._clearActiveTransaction();
+
+        if (!Array.isArray(tx.entries) || tx.entries.length === 0) {
+            return { success: true, message: 'Transaction committed (no changes)' };
+        }
+
+        const action = {
+            timestamp: Date.now(),
+            type: 'transaction',
+            description: tx.description,
+            entries: tx.entries.map(entry => this.cloneEntry(entry))
+        };
+
+        this._pushHistoryEntry({ kind: 'transaction', action }, { force: true });
+        return { success: true, message: tx.description || 'Transaction committed' };
+    }
+
+    /**
+     * Roll back the active transaction and restore the pre-transaction snapshot.
+     * @param {string} transactionId - Transaction identifier returned by beginTransaction.
+     * @returns {{ success: boolean, message: string }} Rollback status metadata.
+     */
+    rollback(transactionId) {
+        if (!this.activeTransaction) {
+            throw new Error('No active history transaction to rollback');
+        }
+        if (this.activeTransaction.id !== transactionId) {
+            throw new Error('Mismatched history transaction id');
+        }
+
+        const tx = this.activeTransaction;
+        this._clearActiveTransaction();
+
+        if (tx.snapshot) {
+            try {
+                this.isRestoring = true;
+                this.restoreSnapshot(tx.snapshot);
+            } finally {
+                this.isRestoring = false;
+            }
+        }
+
+        return { success: true, message: tx.description ? `Rolled back: ${tx.description}` : 'Transaction rolled back' };
+    }
+
+    /**
+     * Capture the current application state for transaction rollback.
+     * @returns {{ stateSnapshot: object } | null} Cloned snapshot of the state manager.
+     */
+    captureSnapshotState() {
+        try {
+            const currentState = this.stateManager.getState();
+            const snapshot = JSON.parse(JSON.stringify(currentState));
+            const currentLoaded = getLoadedQuadData();
+            if (!snapshot.curves) {
+                snapshot.curves = {};
+            }
+            snapshot.curves.loadedQuadData = currentLoaded ? JSON.parse(JSON.stringify(currentLoaded)) : null;
+            return { stateSnapshot: snapshot };
+        } catch (err) {
+            console.warn('Failed to capture history transaction snapshot:', err);
+            return null;
+        }
     }
 
     /**
@@ -1236,6 +1567,8 @@ export class HistoryManager {
             redoLength: this.redoStack.length,
             isRestoring: this.isRestoring,
             pendingKeyPoints: Object.keys(this._pendingKeyPoints),
+            transactionActive: !!this.activeTransaction,
+            transactionDescription: this.activeTransaction?.description || null,
             recentActions: this.history.slice(-5).map(entry => ({
                 kind: entry.kind,
                 description: entry.action?.description || entry.action
@@ -1281,6 +1614,18 @@ export function captureState(actionDescription = 'Curve modification') {
     return getHistoryManager().captureState(actionDescription);
 }
 
+export function beginHistoryTransaction(description) {
+    return getHistoryManager().beginTransaction(description);
+}
+
+export function commitHistoryTransaction(transactionId) {
+    return getHistoryManager().commit(transactionId);
+}
+
+export function rollbackHistoryTransaction(transactionId) {
+    return getHistoryManager().rollback(transactionId);
+}
+
 export function undo() {
     return getHistoryManager().undo();
 }
@@ -1303,6 +1648,9 @@ if (isBrowser) {
     globalScope.recordUIAction = recordUIAction;
     globalScope.recordBatchAction = recordBatchAction;
     globalScope.captureState = captureState;
+    globalScope.beginHistoryTransaction = beginHistoryTransaction;
+    globalScope.commitHistoryTransaction = commitHistoryTransaction;
+    globalScope.rollbackHistoryTransaction = rollbackHistoryTransaction;
     globalScope.undo = undo;
     globalScope.redo = redo;
     globalScope.clearHistory = clearHistory;
@@ -1316,6 +1664,9 @@ if (isBrowser) {
         undo,
         redo,
         clear: clearHistory,
+        beginTransaction: beginHistoryTransaction,
+        commitTransaction: commitHistoryTransaction,
+        rollbackTransaction: rollbackHistoryTransaction,
         updateUndoButton: () => getHistoryManager().updateUndoButton(),
         updateRedoButton: () => getHistoryManager().updateRedoButton()
     };

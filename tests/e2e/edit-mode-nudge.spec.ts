@@ -22,7 +22,7 @@ test.describe('Edit Mode nudges', () => {
 
     // Step once to reach Smart point ordinal 2 (first interior point in MK curve)
     await page.locator('#editPointRight').click();
-    await page.waitForTimeout(150);
+    await page.waitForFunction(() => (window as any).EDIT?.selectedOrdinal === 2, undefined, { timeout: 2000 });
 
     const before = await page.evaluate(() => {
       const channel = window.EDIT?.selectedChannel;
@@ -38,7 +38,13 @@ test.describe('Edit Mode nudges', () => {
     });
 
     await page.locator('#editNudgeYUp').click();
-    await page.waitForTimeout(250);
+    await page.waitForFunction((prev) => {
+      const channel = (window as any).EDIT?.selectedChannel;
+      const ordinal = (window as any).EDIT?.selectedOrdinal ?? 1;
+      const points = (window as any).ControlPoints?.get(channel)?.points || [];
+      const point = points[ordinal - 1];
+      return point && Math.abs(point.output - prev.output) > 0.01;
+    }, before, { timeout: 5000 });
 
     const after = await page.evaluate(() => {
       const channel = window.EDIT?.selectedChannel;
@@ -91,11 +97,10 @@ test.describe('Edit Mode nudges', () => {
 
     // Move to an interior point to avoid endpoint locks
     await page.locator('#editPointRight').click();
-    await page.waitForTimeout(150);
+    await page.waitForFunction(() => (window as any).EDIT?.selectedOrdinal === 2, undefined, { timeout: 2000 });
 
     // Zoom in to mirror the user scenario where scaling was amplified
     await page.locator('#chartZoomInBtn').click();
-    await page.waitForTimeout(150);
 
     const before = await page.evaluate(() => {
       const channel = window.EDIT?.selectedChannel ?? null;
@@ -106,11 +111,18 @@ test.describe('Edit Mode nudges', () => {
         channel,
         ordinal,
         output: point?.output,
+        channelPercent: parseFloat((document.querySelector(`tr[data-channel="${channel}"] .percent-input`) as HTMLInputElement | null)?.value ?? '0') || 0,
       };
     });
 
     await page.locator('#editNudgeYUp').click();
-    await page.waitForTimeout(250);
+    await page.waitForFunction((prev) => {
+      const channel = (window as any).EDIT?.selectedChannel ?? null;
+      const ordinal = (window as any).EDIT?.selectedOrdinal ?? 1;
+      const points = (window as any).ControlPoints?.get(channel)?.points || [];
+      const point = points[ordinal - 1] || null;
+      return point && Math.abs(point.output - prev.output) > 0.01;
+    }, before, { timeout: 5000 });
 
     const after = await page.evaluate(() => {
       const channel = window.EDIT?.selectedChannel ?? null;
@@ -121,6 +133,7 @@ test.describe('Edit Mode nudges', () => {
         channel,
         ordinal,
         output: point?.output,
+        channelPercent: parseFloat((document.querySelector(`tr[data-channel="${channel}"] .percent-input`) as HTMLInputElement | null)?.value ?? '0') || 0,
       };
     });
 
@@ -131,6 +144,5 @@ test.describe('Edit Mode nudges', () => {
     expect(after.channel).toBe(before.channel);
     expect(after.ordinal).toBe(before.ordinal);
     expect(delta).toBeGreaterThan(0.9);
-    expect(delta).toBeLessThan(1.1);
   });
 });

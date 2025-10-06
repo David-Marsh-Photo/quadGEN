@@ -16,6 +16,43 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '3.1.0': {
+    date: '2025-10-05',
+    title: 'Scaling coordinator rollout',
+    sections: {
+      ADDED: [
+        'Targeted Vitest coverage asserts AI-driven scaling requests travel through the coordinator with the correct metadata.',
+        'Help → Version History now includes a Scaling State audit panel with live counters plus refresh/reset controls for the declarative-state rollout.',
+        'New scaling-state workflow tests (Vitest + Playwright) cover flag toggles, rapid scaling, and undo/redo parity.'
+      ],
+      CHANGED: [
+        'Global Scale calls are now queued behind undo-safe transactions when the coordinator flag is on; toggle via `enableScalingCoordinator(true)`.',
+        'Window/global scaling helpers queue through the coordinator and expose `legacy*` fallbacks for diagnostics utilities.',
+        '`scalingStateAudit` records per-reason counters and the diagnostics harness aggregates them for telemetry; dev builds enable `__USE_SCALING_STATE` by default.'
+      ],
+      FIXED: [
+        'Smart point parity for preloaded `.quad` curves samples relative ink, keeping Edit Mode key points aligned when channels are limited.',
+        'Lab Tech scaling commands now surface coordinator failures instead of reporting success on rejected queue operations.',
+        'Scaling-state parity remains intact when clamping back to 100 % ink; `maxAllowed` resets alongside legacy globals.',
+        'Undo/redo history refresh uses UI hooks, eliminating the missing-trigger warnings seen in scaling-state Playwright runs.',
+        'Contrast intent reapply is idempotent—the original baseline is reused so repeated picks no longer compound the curve.',
+        'Per-channel ink limit edits rescale the original `.quad` samples and skip default Smart ramps while Edit Mode is off, preventing linearized plots.'
+      ],
+      REMOVED: [],
+      DOCS: [
+        'Phase 0 scaling checklist, regression matrix, and in-app notes updated for handoff.',
+        'CLAUDE.md and AGENTS.md now document the coordinator flag (`enableScalingCoordinator`) and window bridge.',
+        'Scaling UI migration checklist and Smart/LAB parity diagnostics updates captured in `docs/features/SCALING_IMPROVEMENT_PLANS.md`.',
+        'Clamp-to-100 parity fix, undo trigger corrections, and private-lab rollout workflow documented across Phase 2 plan/checklists and `docs/manual_tests.md`.'
+      ]
+    },
+    aboutDialog: [
+      { label: 'Scaling Coordinator', desc: 'Global Scale now routes through the transaction-aware coordinator, with diagnostics fallbacks and expanded telemetry.' },
+      { label: 'Smart Curve Parity', desc: 'Preloaded .quad curves keep their shape—Smart points and ink-limit edits stay aligned without auto-created ramps.' },
+      { label: 'Workflow Coverage', desc: 'Fresh Vitest and Playwright suites exercise scaling-state toggles, undo/redo parity, and AI-driven queue usage.' },
+      { label: 'Docs Refresh', desc: 'Phase 0 handoff notes, scaling plans, and manual test guides now cover the coordinator rollout and parity fixes.' }
+    ]
+  },
   '3.0.4': {
     date: '2025-10-04',
     title: 'Smart baking guard',

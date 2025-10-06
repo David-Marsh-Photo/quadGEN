@@ -21,12 +21,52 @@ describe('intent-system bridge', () => {
     const cachedWindow = Object.prototype.hasOwnProperty.call(globalThis, 'window')
       ? globalThis.window
       : undefined;
-    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warnings = [];
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation((...args) => {
+      warnings.push(args.map(String).join(' '));
+    });
     try {
       delete globalThis.window;
       const result = canApplyIntentRemap();
       expect(result).toBe(false);
       expect(warnSpy).not.toHaveBeenCalled();
+    } finally {
+      warnSpy.mockRestore();
+      if (cachedWindow === undefined) {
+        delete globalThis.window;
+      } else {
+        globalThis.window = cachedWindow;
+      }
+    }
+  });
+
+  it('canApplyIntentRemap avoids recursion when legacy delegate references the modular implementation', () => {
+    const cachedWindow = Object.prototype.hasOwnProperty.call(globalThis, 'window')
+      ? globalThis.window
+      : undefined;
+
+    const fakeWindow = {
+      linearizationData: null,
+      linearizationApplied: false,
+      perChannelLinearization: {},
+      perChannelEnabled: {},
+      hasLoadedQuadCurves: vi.fn(() => true)
+    };
+
+    fakeWindow.canApplyIntentRemap = canApplyIntentRemap;
+
+    const warnings = [];
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation((...args) => {
+      warnings.push(args.map(String).join(' '));
+    });
+
+    try {
+      globalThis.window = fakeWindow;
+
+      expect(() => canApplyIntentRemap()).not.toThrow();
+      const result = canApplyIntentRemap();
+      expect(result).toBe(true);
+      expect(warnings.some(msg => msg.includes('Legacy remap delegate'))).toBe(false);
     } finally {
       warnSpy.mockRestore();
       if (cachedWindow === undefined) {
