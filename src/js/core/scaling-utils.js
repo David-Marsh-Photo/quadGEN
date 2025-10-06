@@ -630,7 +630,7 @@ export function updateScaleBaselineForChannel(channelName) {
     const endInput = row.querySelector('.end-input');
     if (!endInput) return;
 
-    const currentEnd = InputValidator.clampEnd(endInput.value);
+    const currentEnd = InputValidator.clampEnd(endInput.getAttribute('data-base-end') ?? endInput.value);
     const factor = Math.max(0.0001, scaleAllPercent / 100 || 1);
     const base = InputValidator.clampEnd(Math.round(currentEnd / factor));
 
@@ -702,7 +702,7 @@ export function scaleChannelEndsByPercent(percent, options = {}) {
             const endInput = row.querySelector('.end-input');
             if (!endInput) continue;
 
-            const currentEnd = InputValidator.clampEnd(endInput.value);
+            const currentEnd = InputValidator.clampEnd(endInput.getAttribute('data-base-end') ?? endInput.value);
             if (currentEnd <= 0) continue;
 
             let baseEnd;
@@ -746,19 +746,21 @@ export function scaleChannelEndsByPercent(percent, options = {}) {
             const baseEnd = baselineMap[channelName];
             if (baseEnd <= 0) return;
 
-            const previousEnd = InputValidator.clampEnd(endInput.value);
+            const previousEnd = InputValidator.clampEnd(endInput.getAttribute('data-base-end') ?? endInput.value);
             const prevPercent = InputValidator.computePercentFromEnd(previousEnd);
             const newEnd = InputValidator.clampEnd(Math.round(baseEnd * newFactor));
 
             if (newEnd !== previousEnd) {
                 const oldEndValue = previousEnd;
                 endInput.value = newEnd;
+                endInput.setAttribute('data-base-end', String(newEnd));
 
                 // Update corresponding percent input
                 const newPercent = InputValidator.computePercentFromEnd(newEnd);
                 const percentInput = row.querySelector('.percent-input');
                 if (percentInput) {
                     percentInput.value = newPercent.toFixed(1);
+                    percentInput.setAttribute('data-base-percent', String(newPercent));
                     InputValidator.clearValidationStyling(percentInput);
                 }
 

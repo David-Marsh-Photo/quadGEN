@@ -888,33 +888,26 @@ function renderChannelCurves(ctx, geom, colors, fontScale) {
 
             if (!percentInput || !endInput) continue;
 
-            const percent = InputValidator.clampPercent(percentInput.value);
-            const displayEndValue = InputValidator.clampEnd(endInput.value);
+            const basePercent = InputValidator.clampPercent(percentInput.getAttribute('data-base-percent') ?? percentInput.value);
+            const baseEndValue = InputValidator.clampEnd(endInput.getAttribute('data-base-end') ?? endInput.value);
 
-            if (percent === 0 || displayEndValue === 0) {
-                const percentIndicator = row.querySelector('[data-effective-percent]');
-                const endIndicator = row.querySelector('[data-effective-end]');
-                if (percentIndicator) percentIndicator.classList.add('hidden');
-                if (endIndicator) endIndicator.classList.add('hidden');
-                percentInput.removeAttribute('title');
-                endInput.removeAttribute('title');
+            if (basePercent === 0 || baseEndValue === 0) {
+                percentInput.value = basePercent.toFixed(1);
+                endInput.value = String(baseEndValue);
                 continue;
             }
 
-            // Generate curve using the displayEndValue directly
-            // The scaling has already been applied to the table values, so no need to scale again
-            // Apply linearization if global linearization data is loaded
             const applyLinearization = LinearizationState.globalApplied && LinearizationState.globalData;
-            const curveValues = make256(displayEndValue, channelName, applyLinearization);
+            const curveValues = make256(baseEndValue, channelName, applyLinearization);
 
             // Draw reference line (target intent curve) if linearization is active
-            drawReferenceIntentCurve(ctx, geom, colors, channelName, displayEndValue);
+            drawReferenceIntentCurve(ctx, geom, colors, channelName, baseEndValue);
 
             // Draw original loaded curve overlay (dashed) when linearization is active
-            drawOriginalCurveOverlay(ctx, geom, colors, channelName, displayEndValue);
+            drawOriginalCurveOverlay(ctx, geom, colors, channelName, baseEndValue);
 
             // Convert curve to chart coordinates and draw
-            const curveMeta = drawChannelCurve(ctx, geom, colors, channelName, curveValues, displayEndValue);
+            const curveMeta = drawChannelCurve(ctx, geom, colors, channelName, curveValues, baseEndValue);
             if (curveMeta) {
                 drawMeta.push({
                     channelName,
@@ -936,41 +929,8 @@ function renderChannelCurves(ctx, geom, colors, fontScale) {
             const clampedPeak = Math.max(0, Math.min(100, peakPercent));
             const endY = mapPercentToY(clampedPeak, geom);
 
-            const percentIndicator = row.querySelector('[data-effective-percent]');
-            const endIndicator = row.querySelector('[data-effective-end]');
-
-            if (percentIndicator) {
-                const percentDiff = Math.abs(peakPercent - percent);
-                if (Number.isFinite(peakPercent) && percentDiff > 0.05) {
-                    percentIndicator.textContent = `Effective: ${peakPercent.toFixed(1)}%`;
-                    percentIndicator.classList.remove('hidden');
-                    if (percentInput) {
-                        percentInput.title = `Base: ${percent.toFixed(1)}% | Effective: ${peakPercent.toFixed(1)}%`;
-                    }
-                } else {
-                    percentIndicator.classList.add('hidden');
-                    if (percentInput) {
-                        percentInput.removeAttribute('title');
-                    }
-                }
-            }
-
-            if (endIndicator) {
-                const roundedPeak = Math.round(peakValue);
-                const endDiff = Math.abs(roundedPeak - displayEndValue);
-                if (Number.isFinite(peakValue) && endDiff > 0.5) {
-                    endIndicator.textContent = `Effective: ${roundedPeak}`;
-                    endIndicator.classList.remove('hidden');
-                    if (endInput) {
-                        endInput.title = `Base: ${displayEndValue} | Effective: ${roundedPeak}`;
-                    }
-                } else {
-                    endIndicator.classList.add('hidden');
-                    if (endInput) {
-                        endInput.removeAttribute('title');
-                    }
-                }
-            }
+            percentInput.value = peakPercent.toFixed(1);
+            endInput.value = String(Math.round(peakValue));
 
             labels.push({
                 channelName,
