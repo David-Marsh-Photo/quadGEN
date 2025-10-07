@@ -32,10 +32,13 @@
    - Editing the percentage or End field updates baselines and then schedules a silent `scaleChannelEndsByPercent(currentScale)` to reapply the global multiplier.
    - Result: Even if a user types 100 % for MK while Scale is 80 %, the field snaps back to 80 % and the plotted endpoint remains 80 %.
 
-3. **Returning to 100 %**
+3. **Rebased baselines after corrections**
+   - When `.cube`/LAB/manual corrections are baked, `rebaseChannelsToCorrectedCurves` refreshes both the visible ink-limit fields and the cached scale baselines. Subsequent scale edits operate on the rebased maxima so nudging a channel resumes from the baked curve rather than the original `.quad` value.
+
+4. **Returning to 100 %**
    - When the user sets the Scale to 100 %, baselines are cleared so subsequent adjustments capture fresh unscaled values.
 
-4. **Clamping**
+5. **Clamping**
    - If a baseline would exceed 65 535 at the requested multiplier, the operation clamps to the maximum safe percent and reports “already maxed” in the status message.
 
 ## Interactions & Edge Cases

@@ -31,11 +31,15 @@
    - `history.recordBatchAction(label, actions[])` groups multiple channel updates under one entry (used for initial seeding, global scale, manual undo sequences).
    - Undo replays sub-actions in reverse order.
 
-4. **Integration with Edit Mode**
+4. **Rebased Ink Limits & Global Loads**
+   - Global correction loads call `rebaseChannelsToCorrectedCurves` and immediately capture `CurveHistory.captureState('After: Load Global Linearization (rebased)')` so undo restores the pre-baked `.cube`/LAB baselines (percent, End, and curve samples).
+   - Rebase helpers write the rebased curve plus `baselineEnd` into history payloads; undo/redo restores those values before re-running downstream refresh hooks to keep channel fields and Smart curves aligned.
+
+5. **Integration with Edit Mode**
    - Selected channel/ordinal snapshots ensure focus stays consistent after undo/redo.
    - `_REVERT_IN_PROGRESS` guards prevent Edit Mode from reacting mid-operation.
 
-5. **Persistence**
+6. **Persistence**
    - History cleared when loading a new `.quad` or resetting app state.
 
 ## Edge Cases & Guards

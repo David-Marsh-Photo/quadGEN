@@ -18,7 +18,7 @@ import {
 import { LinearizationState } from '../data/linearization-utils.js';
 import { getChannelRow } from './channel-registry.js';
 import { getStateManager } from '../core/state-manager.js';
-import { triggerInkChartUpdate, triggerProcessingDetail, triggerRevertButtonsUpdate, triggerPreviewUpdate } from './ui-hooks.js';
+import { triggerInkChartUpdate, triggerProcessingDetail, triggerProcessingDetailAll, triggerRevertButtonsUpdate, triggerPreviewUpdate } from './ui-hooks.js';
 import { updateSessionStatus } from './graph-status.js';
 import { registerDebugNamespace, getDebugRegistry } from '../utils/debug-registry.js';
 import { showStatus } from './status-service.js';
@@ -157,6 +157,14 @@ export function setGlobalBakedState(meta, options = {}) {
     } catch (err) {
         if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
             console.warn('[EDIT MODE] Failed to update session status after baked state change:', err);
+        }
+    }
+
+    try {
+        triggerProcessingDetailAll();
+    } catch (err) {
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.warn('[EDIT MODE] Failed to refresh processing details after baked state change:', err);
         }
     }
 

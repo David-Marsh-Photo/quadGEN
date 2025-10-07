@@ -9,17 +9,40 @@ export const VERSION_HISTORY = {
     title: 'In progress',
     sections: {
       ADDED: [],
-      CHANGED: [
-        'Smoke gate (`npm run test:smoke`) now skips the active-range diff diagnostics while the feature work is paused.',
-        'Percent and end inputs now update directly to the effective ink limits when corrections are active.'
-      ],
+      CHANGED: [],
       FIXED: [],
-      REMOVED: [
-        'Scaling State audit panel removed from Help → Version History; access telemetry via diagnostics scripts if needed.'
-      ],
+      REMOVED: [],
       DOCS: []
     },
     aboutDialog: []
+  },
+  '3.1.3': {
+    date: '2025-10-07',
+    title: 'Baked ink-limit workflow refinements',
+    sections: {
+      ADDED: [
+        'Vitest coverage now exercises the rebased ink-limit workflow so undo/redo and baked-status metadata stay reliable.'
+      ],
+      CHANGED: [
+        'Smoke gate (`npm run test:smoke`) runs just the Playwright load check while the active-range diagnostics remain paused.',
+        'Percent and End inputs immediately show the effective ink limits when corrections (.cube/.txt) are active.',
+        'Undo/redo and revert flows restore the rebased ink limits so manual edits resume from the baked baseline instead of the original .quad.'
+      ],
+      FIXED: [
+        'Processing detail labels now surface “Global (baked)” so the graph header matches the rebased correction state.',
+        'Global LUT baking samples each correction once, keeping LUTs like `negative.cube` at their expected peak ink (~87 %).'
+      ],
+      REMOVED: [
+        'Scaling State audit panel disappeared from Help → Version History; telemetry now lives in diagnostics scripts.'
+      ],
+      DOCS: [
+        'Ink-limit simplification checklist documents the rebase execution plus the revert-alignment steps.'
+      ]
+    },
+    aboutDialog: [
+      { label: 'Baked Workflow', desc: 'Ink limit fields, history, and status badges now update to the rebased baseline the moment a correction is baked.' },
+      { label: 'LUT Sampling', desc: 'Global LUTs are sampled once per bake so sub-100% ramps (like negative plates) stay on target.' }
+    ]
   },
   '3.1.2': {
     date: '2025-10-06',
@@ -1254,6 +1277,9 @@ export function getHelpGlossaryHTML(){
 
         <dt>Auto white limit</dt>
         <dd>Temporarily disabled while the rolloff detector is re-tuned. Previously applied a localized soft shoulder at the white end to preserve highlight separation.</dd>
+
+        <dt>Baked</dt>
+        <dd>Indicates that a correction (global LUT, LAB table, or Smart curve) has been permanently folded into the current baseline curve. Baked data no longer re-applies on redraw; it updates ink-limit fields, exports, and history so further edits start from the corrected curve.</dd>
 
         <dt>ACV (Photoshop Curves)</dt>
         <dd>Binary curve format used by Adobe Photoshop (<code>.acv</code>). In quadGEN: can be loaded as a global correction or per-channel adapter; anchors can seed editable Smart curve.</dd>

@@ -9,17 +9,35 @@ This changelog follows a concise, user-facing format. Engineering details live i
 - _Nothing yet._
 
 ### Changed
-- `npm run test:smoke` now runs only the Playwright smoke check; the active-range diff diagnostics have been retired while the linearization work is on hold.
-- Channel percent/end inputs now update to the effective ink limits when corrections (.cube/.txt) are active, so the table always matches the plotted output.
+- _Nothing yet._
 
 ### Fixed
 - _Nothing yet._
 
 ### Removed
-- Scaling State audit panel removed from Help → Version History now that the coordinator rollout is complete.
+- _Nothing yet._
 
 ### Docs
 - _Nothing yet._
+
+## [v3.1.3] — 2025-10-07
+### Added
+- Vitest coverage for the rebased ink-limit workflow (`tests/history/restore_snapshot_rebase.test.js`, `tests/ui/edit-mode-baked-state.test.js`) guards undo/redo and baked-status regressions.
+
+### Changed
+- `npm run test:smoke` now runs only the Playwright smoke check; the active-range diff diagnostics have been retired while the linearization work is on hold.
+- Channel percent/end inputs now update to the effective ink limits when corrections (.cube/.txt) are active, so the table always matches the plotted output.
+- Undo/redo and revert flows now restore the rebased ink limits, so manual edits resume from the baked curves instead of the original .quad baselines.
+
+### Fixed
+- Processing labels now surface “Global (baked)” details, keeping the graph header aligned with the rebased corrections.
+- Global LUT baking now samples each correction once so files like `negative.cube` land at the expected ink maxima (≈87 % of the source curve) instead of collapsing after multiple redraws.
+
+### Removed
+- Scaling State audit panel removed from Help → Version History now that the coordinator rollout is complete.
+
+### Docs
+- Updated `docs/investigation/INK_LIMIT_BASELINE_SIMPLIFICATION_CHECKLIST.md` to mark the rebase execution and revert-alignment steps complete.
 
 ## [v3.1.2] — 2025-10-06
 ### Added

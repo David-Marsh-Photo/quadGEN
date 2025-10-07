@@ -57,7 +57,8 @@ export class QuadGenStateManager {
                 channels: [...PRINTERS.P700P900.channels], // Active channels
                 channelValues: {}, // Per-channel ink percentages and end values
                 channelStates: {}, // Per-channel enabled/disabled states
-                channelPreviousValues: {} // For undo restoration
+                channelPreviousValues: {}, // For undo restoration
+                channelOriginalValues: {} // Snapshot of pre-correction ink limits
             },
 
             // Curve and quad data
@@ -555,7 +556,8 @@ export class QuadGenStateManager {
 
         this.batch({
             'printer.currentModel': model,
-            'printer.channels': [...PRINTERS[model].channels]
+            'printer.channels': [...PRINTERS[model].channels],
+            'printer.channelOriginalValues': {}
         });
     }
 

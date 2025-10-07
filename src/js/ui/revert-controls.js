@@ -73,6 +73,10 @@ function cleanupChannelMeta(channelName) {
   if (meta.bakedGlobal) {
     delete meta.bakedGlobal;
   }
+
+  if (data.normalizeToEndChannels && typeof data.normalizeToEndChannels === 'object') {
+    delete data.normalizeToEndChannels[channelName];
+  }
 }
 
 export function resetChannelSmartPointsToMeasurement(channelName, options = {}) {

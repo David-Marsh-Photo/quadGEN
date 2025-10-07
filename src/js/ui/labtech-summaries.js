@@ -4,6 +4,7 @@
 import { TOTAL, elements, getCurrentPrinter } from '../core/state.js';
 import { getStateManager } from '../core/state-manager.js';
 import { make256 } from '../core/processing-pipeline.js';
+import { isChannelNormalizedToEnd } from '../core/state.js';
 import { LinearizationState, normalizeLinearizationEntry } from '../data/linearization-utils.js';
 import { getTargetRelAt } from '../data/lab-parser.js';
 import { createPCHIPSpline, createCubicSpline, createCatmullRomSpline, clamp01 } from '../math/interpolation.js';
@@ -151,8 +152,9 @@ function buildChannelChangeSummary(clampMessages) {
 
       if (!endValue) return;
 
-      const before = make256(endValue, channelName, false);
-      const after = make256(endValue, channelName, true);
+      const normalizeToEnd = isChannelNormalizedToEnd(channelName);
+      const before = make256(endValue, channelName, false, { normalizeToEnd });
+      const after = make256(endValue, channelName, true, { normalizeToEnd });
 
       if (!Array.isArray(before) || !Array.isArray(after) || before.length !== after.length) return;
 

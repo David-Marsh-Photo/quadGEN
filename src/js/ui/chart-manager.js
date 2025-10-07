@@ -1,7 +1,7 @@
 // quadGEN Chart Manager
 // Chart rendering, zoom management, and interaction handling
 
-import { elements, getCurrentPrinter, getAppState, updateAppState, INK_COLORS, TOTAL, getLoadedQuadData } from '../core/state.js';
+import { elements, getCurrentPrinter, getAppState, updateAppState, INK_COLORS, TOTAL, isChannelNormalizedToEnd } from '../core/state.js';
 import { getStateManager } from '../core/state-manager.js';
 import { InputValidator } from '../core/validation.js';
 import { make256 } from '../core/processing-pipeline.js';
@@ -898,7 +898,8 @@ function renderChannelCurves(ctx, geom, colors, fontScale) {
             }
 
             const applyLinearization = LinearizationState.globalApplied && LinearizationState.globalData;
-            const curveValues = make256(baseEndValue, channelName, applyLinearization);
+            const normalizeToEnd = isChannelNormalizedToEnd(channelName);
+            const curveValues = make256(baseEndValue, channelName, applyLinearization, { normalizeToEnd });
 
             // Draw reference line (target intent curve) if linearization is active
             drawReferenceIntentCurve(ctx, geom, colors, channelName, baseEndValue);
@@ -925,16 +926,25 @@ function renderChannelCurves(ctx, geom, colors, fontScale) {
                 const v = curveValues[i];
                 if (Number.isFinite(v) && v > peakValue) peakValue = v;
             }
-            const peakPercent = (peakValue / TOTAL) * 100;
-            const clampedPeak = Math.max(0, Math.min(100, peakPercent));
-            const endY = mapPercentToY(clampedPeak, geom);
 
-            percentInput.value = peakPercent.toFixed(1);
-            endInput.value = String(Math.round(peakValue));
+            const peakPercent = (peakValue / TOTAL) * 100;
+            const effectivePercent = InputValidator.clampPercent(peakPercent);
+            const effectiveEnd = InputValidator.clampEnd(Math.round(peakValue));
+
+            const shouldUseEffective = !LinearizationState.globalApplied
+                || LinearizationState.isGlobalBaked?.();
+            const percentToDisplay = shouldUseEffective ? effectivePercent : basePercent;
+            const endToDisplay = shouldUseEffective ? effectiveEnd : baseEndValue;
+            const endY = mapPercentToY(Math.max(0, Math.min(100, effectivePercent)), geom);
+
+            percentInput.value = percentToDisplay.toFixed(1);
+            percentInput.setAttribute('data-base-percent', String(percentToDisplay));
+            endInput.value = String(endToDisplay);
+            endInput.setAttribute('data-base-end', String(endToDisplay));
 
             labels.push({
                 channelName,
-                percent: Math.round(peakPercent),
+                percent: Math.round(effectivePercent),
                 inkColor,
                 endY
             });
@@ -1228,7 +1238,7 @@ export function setupChartCursorTooltip(geom) {
                             if (endVal > 0) {
                                 canInsert = true;
                                 // Generate curve values and lock Y to curve
-                                const values = make256(endVal, selCh, true);
+                                const values = make256(endVal, selCh, true, { normalizeToEnd: isChannelNormalizedToEnd(selCh) });
                                 const t = Math.max(0, Math.min(1, (xPct/100))) * (values.length - 1);
                                 const i0 = Math.floor(t);
                                 const i1 = Math.min(values.length - 1, i0 + 1);
@@ -1304,7 +1314,7 @@ export function setupChartCursorTooltip(geom) {
                     xPct = Math.max(0, Math.min(100, xPct));
 
                     // Sample curve at click position and insert point
-                    const values = make256(endVal, selCh, true);
+                    const values = make256(endVal, selCh, true, { normalizeToEnd: isChannelNormalizedToEnd(selCh) });
                     const t = Math.max(0, Math.min(1, (xPct/100))) * (values.length - 1);
                     const i0 = Math.floor(t);
                     const i1 = Math.min(values.length - 1, i0 + 1);

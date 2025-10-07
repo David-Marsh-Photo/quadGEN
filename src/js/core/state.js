@@ -533,6 +533,35 @@ export const appState = {
  */
 export function setLoadedQuadData(quadData) {
     const previous = appState.loadedQuadData;
+    if (quadData && typeof quadData === 'object') {
+        if (!quadData.curves) quadData.curves = {};
+        if (!quadData.sources) quadData.sources = {};
+        if (!quadData.normalizeToEndChannels || typeof quadData.normalizeToEndChannels !== 'object') {
+            quadData.normalizeToEndChannels = {};
+        }
+        if (!quadData.baselineEnd || typeof quadData.baselineEnd !== 'object') {
+            quadData.baselineEnd = {};
+        }
+        if (!quadData.rebasedCurves || typeof quadData.rebasedCurves !== 'object') {
+            quadData.rebasedCurves = {};
+            Object.keys(quadData.curves).forEach((channelName) => {
+                const curve = quadData.curves?.[channelName];
+                if (Array.isArray(curve)) {
+                    quadData.rebasedCurves[channelName] = curve.slice();
+                }
+            });
+        }
+
+        if (!quadData.rebasedSources || typeof quadData.rebasedSources !== 'object') {
+            quadData.rebasedSources = {};
+            Object.keys(quadData.curves).forEach((channelName) => {
+                const curve = quadData.curves?.[channelName];
+                if (Array.isArray(curve)) {
+                    quadData.rebasedSources[channelName] = curve.slice();
+                }
+            });
+        }
+    }
     appState.loadedQuadData = quadData || null;
     syncWindowLoadedQuadData();
     notifyLoadedQuadListeners(previous, appState.loadedQuadData);
@@ -546,13 +575,33 @@ export function getLoadedQuadData() {
     return appState.loadedQuadData;
 }
 
-export function ensureLoadedQuadData(initialValue = { curves: {}, sources: {} }) {
+export function ensureLoadedQuadData(initialValue = { curves: {}, sources: {}, normalizeToEndChannels: {} }) {
     if (!appState.loadedQuadData) {
         appState.loadedQuadData = typeof initialValue === 'function' ? initialValue() : { ...initialValue };
+        if (!appState.loadedQuadData.curves) appState.loadedQuadData.curves = {};
+        if (!appState.loadedQuadData.sources) appState.loadedQuadData.sources = {};
+        if (!appState.loadedQuadData.normalizeToEndChannels || typeof appState.loadedQuadData.normalizeToEndChannels !== 'object') {
+            appState.loadedQuadData.normalizeToEndChannels = {};
+        }
+        if (!appState.loadedQuadData.baselineEnd || typeof appState.loadedQuadData.baselineEnd !== 'object') {
+            appState.loadedQuadData.baselineEnd = {};
+        }
+        if (!appState.loadedQuadData.rebasedCurves || typeof appState.loadedQuadData.rebasedCurves !== 'object') {
+            appState.loadedQuadData.rebasedCurves = {};
+        }
+        if (!appState.loadedQuadData.rebasedSources || typeof appState.loadedQuadData.rebasedSources !== 'object') {
+            appState.loadedQuadData.rebasedSources = {};
+        }
         syncWindowLoadedQuadData();
         notifyLoadedQuadListeners(null, appState.loadedQuadData);
     }
     return appState.loadedQuadData;
+}
+
+export function isChannelNormalizedToEnd(channelName) {
+    if (!channelName) return false;
+    const data = appState.loadedQuadData;
+    return !!data?.normalizeToEndChannels?.[channelName];
 }
 
 export function subscribeLoadedQuadData(callback) {

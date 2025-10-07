@@ -109,14 +109,21 @@ export function updateProcessingDetail(channelName) {
         // Global linearization segment
         const globalData = LinearizationState.getGlobalData();
         const globalApplied = LinearizationState.globalApplied;
+        const bakedMeta = typeof LinearizationState.getGlobalBakedMeta === 'function'
+            ? LinearizationState.getGlobalBakedMeta()
+            : null;
         if (globalData && Array.isArray(globalData.samples)) {
             const format = globalData.format || 'linearization';
-            const baseName = globalData.filename || 'unknown file';
+            const baseName = (bakedMeta?.filename) || globalData.filename || 'unknown file';
             const dispName = getEditedDisplayName(baseName, !!globalData.edited);
             const countLabel = getBasePointCountLabel(globalData);
             if (globalApplied) {
                 segmentsApplied.push(`Global: ${format} • ${dispName} (${countLabel})`);
+            } else if (bakedMeta) {
+                segmentsApplied.push(`Global (baked): ${format} • ${dispName} (${countLabel})`);
             }
+        } else if (bakedMeta && bakedMeta.filename) {
+            segmentsApplied.push(`Global (baked): ${bakedMeta.filename}`);
         }
 
         // Auto endpoint rolloff annotation (if enabled and detected)

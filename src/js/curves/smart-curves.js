@@ -8,6 +8,7 @@ import { LinearizationState, markLinearizationEdited } from '../data/linearizati
 import { InputValidator } from '../core/validation.js';
 import { triggerInkChartUpdate, triggerProcessingDetail, triggerRevertButtonsUpdate, triggerPreviewUpdate } from '../ui/ui-hooks.js';
 import { make256 } from '../core/processing-pipeline.js';
+import { isChannelNormalizedToEnd } from '../core/state.js';
 import { isActiveRangeLinearizationEnabled } from '../core/feature-flags.js';
 import { isEditModeEnabled } from '../ui/edit-mode.js';
 import { getHistoryManager } from '../core/history-manager.js';
@@ -719,7 +720,7 @@ function ensureEditableKeyPointsForChannel(channelName, interpolationType = 'smo
         const sampleEnd = endVal > 0 ? endVal : 65535;
 
         // Generate current curve values using global function
-        const values = make256(sampleEnd, channelName, true);
+        const values = make256(sampleEnd, channelName, true, { normalizeToEnd: isChannelNormalizedToEnd(channelName) });
 
         // Create simplified key points from the curve using adaptive algorithm
         const candidate = extractAdaptiveKeyPointsFromValues(values, {
@@ -1040,7 +1041,7 @@ export function simplifySmartKeyPointsFromCurve(channelName, options = {}) {
 
         const row = getChannelRow(channelName);
         const endValue = row ? InputValidator.clampEnd(row.querySelector('.end-input')?.value || TOTAL) : TOTAL;
-        const rawCurveValues = make256(endValue, channelName, true);
+        const rawCurveValues = make256(endValue, channelName, true, { normalizeToEnd: isChannelNormalizedToEnd(channelName) });
 
         const keyPoints = extractAdaptiveKeyPointsFromValues(rawCurveValues, {
             maxErrorPercent,

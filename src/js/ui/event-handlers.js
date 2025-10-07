@@ -685,6 +685,41 @@ function getRowBaselines(row) {
     };
 }
 
+function ensureOriginalInkSnapshot(row, channelName) {
+    if (!row || !channelName) return;
+
+    const percentInput = row.querySelector('.percent-input');
+    const endInput = row.querySelector('.end-input');
+
+    const percentValue = percentInput ? InputValidator.clampPercent(percentInput.value) : 0;
+    const endValue = endInput ? InputValidator.clampEnd(endInput.value) : 0;
+
+    if (!row.dataset.originalPercent) {
+        row.dataset.originalPercent = String(percentValue);
+    }
+    if (!row.dataset.originalEnd) {
+        row.dataset.originalEnd = String(endValue);
+    }
+
+    if (typeof getStateManager === 'function') {
+        try {
+            const manager = getStateManager();
+            const existing = manager?.get(`printer.channelOriginalValues.${channelName}`);
+            if (!existing) {
+                manager.set(
+                    `printer.channelOriginalValues.${channelName}`,
+                    { percent: percentValue, end: endValue },
+                    { skipHistory: true, allowDuringRestore: true }
+                );
+            }
+        } catch (err) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[INK SNAPSHOT] Unable to persist original values for', channelName, err);
+            }
+        }
+    }
+}
+
 function refreshEffectiveInkDisplays() {
     if (!elements.rows) return;
     const rows = elements.rows.querySelectorAll('tr.channel-row[data-channel]');
@@ -695,27 +730,333 @@ function refreshEffectiveInkDisplays() {
         const endInput = row.querySelector('.end-input');
         if (!percentInput || !endInput) return;
 
+        ensureOriginalInkSnapshot(row, channelName);
+
         const basePercent = getBasePercentFromInput(percentInput);
         const baseEnd = getBaseEndFromInput(endInput);
 
         if (baseEnd <= 0 || basePercent <= 0) {
-            percentInput.value = basePercent.toFixed(1);
-            endInput.value = String(baseEnd);
+            const clampedPercent = InputValidator.clampPercent(basePercent);
+            const clampedEnd = InputValidator.clampEnd(baseEnd);
+            percentInput.value = clampedPercent.toFixed(1);
+            endInput.value = String(clampedEnd);
+            setBasePercentOnInput(percentInput, clampedPercent);
+            setBaseEndOnInput(endInput, clampedEnd);
             return;
         }
 
         try {
             const curveValues = make256(baseEnd, channelName, true);
             const peakValue = Math.max(...curveValues);
-            const peakPercent = (peakValue / TOTAL) * 100;
-            percentInput.value = peakPercent.toFixed(1);
-            endInput.value = String(Math.round(peakValue));
+            const effectiveEnd = InputValidator.clampEnd(Math.round(peakValue));
+            const effectivePercent = InputValidator.computePercentFromEnd(effectiveEnd);
+
+            percentInput.value = effectivePercent.toFixed(1);
+            endInput.value = String(effectiveEnd);
+
+            setBasePercentOnInput(percentInput, effectivePercent);
+            setBaseEndOnInput(endInput, effectiveEnd);
+
+            try {
+                const loadedData = ensureLoadedQuadData(() => ({ curves: {}, baselineEnd: {}, sources: {}, keyPoints: {}, keyPointsMeta: {}, rebasedCurves: {}, rebasedSources: {} }));
+                if (loadedData) {
+                    loadedData.curves = loadedData.curves || {};
+                    loadedData.curves[channelName] = Array.isArray(curveValues) ? curveValues.slice() : curveValues;
+
+                    loadedData.baselineEnd = loadedData.baselineEnd || {};
+                    loadedData.baselineEnd[channelName] = effectiveEnd;
+
+                    loadedData.rebasedCurves = loadedData.rebasedCurves || {};
+                    loadedData.rebasedCurves[channelName] = Array.isArray(curveValues) ? curveValues.slice() : [];
+
+                    loadedData.rebasedSources = loadedData.rebasedSources || {};
+                    if (!Array.isArray(loadedData.rebasedSources[channelName]) || !loadedData.rebasedSources[channelName].length) {
+                        loadedData.rebasedSources[channelName] = Array.isArray(curveValues) ? curveValues.slice() : [];
+                    }
+                }
+            } catch (stateErr) {
+                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                    console.warn('[INK DISPLAY] Unable to update loadedData baselines for', channelName, stateErr);
+                }
+            }
+
+            if (typeof getStateManager === 'function') {
+                try {
+                    const manager = getStateManager();
+                    manager.setChannelValue(channelName, 'percentage', Number(effectivePercent));
+                    manager.setChannelValue(channelName, 'endValue', effectiveEnd);
+                    manager.setChannelEnabled(channelName, effectiveEnd > 0);
+                } catch (err) {
+                    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                        console.warn('[INK DISPLAY] Failed to sync state for', channelName, err);
+                    }
+                }
+            }
         } catch (err) {
             if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
                 console.warn('[INK DISPLAY] Failed to compute effective ink for', channelName, err);
             }
         }
     });
+}
+
+function rebaseChannelsToCorrectedCurves(channelNames = [], options = {}) {
+    if (!Array.isArray(channelNames) || channelNames.length === 0) {
+        return;
+    }
+
+    const loadedData = ensureLoadedQuadData(() => ({ curves: {}, baselineEnd: {}, sources: {}, keyPoints: {}, keyPointsMeta: {}, rebasedCurves: {}, rebasedSources: {} }));
+    if (!loadedData.rebasedCurves) {
+        loadedData.rebasedCurves = {};
+    }
+    if (!loadedData.rebasedSources) {
+        loadedData.rebasedSources = {};
+    }
+    if (!loadedData.baselineEnd) {
+        loadedData.baselineEnd = {};
+    }
+
+    const manager = typeof getStateManager === 'function' ? getStateManager() : null;
+    const rebased = [];
+    const updateQueue = [];
+
+    const isGlobalSource = options.source === 'globalLoad' || options.source === 'globalToggle';
+
+    channelNames.forEach((channelName) => {
+        const row = getChannelRow(channelName);
+        if (!row) return;
+
+        const percentInput = row.querySelector('.percent-input');
+        const endInput = row.querySelector('.end-input');
+        if (!percentInput || !endInput) return;
+
+        const currentEnd = InputValidator.clampEnd(endInput.getAttribute('data-base-end') ?? endInput.value);
+        let curve = make256(currentEnd, channelName, true);
+        let effectiveEnd = Array.isArray(curve) && curve.length ? Math.max(...curve) : 0;
+
+        const effectivePercent = InputValidator.computePercentFromEnd(effectiveEnd);
+
+        const finalCurve = Array.isArray(curve) ? curve.slice() : [];
+
+        loadedData.curves[channelName] = finalCurve.slice();
+        loadedData.rebasedCurves[channelName] = finalCurve.slice();
+        loadedData.rebasedSources[channelName] = finalCurve.slice();
+        loadedData.baselineEnd[channelName] = effectiveEnd;
+
+        rebased.push(channelName);
+
+        updateQueue.push({
+            channelName,
+            row,
+            percentInput,
+            endInput,
+            effectivePercent,
+            effectiveEnd,
+            perChannelToggle: row.querySelector('.per-channel-toggle'),
+            perChannelDataEntry: options.source === 'perChannelLoad'
+                ? LinearizationState.getPerChannelData?.(channelName)
+                : null
+        });
+
+        if (options.source === 'perChannelLoad') {
+            try {
+                const entry = LinearizationState.getPerChannelData?.(channelName);
+                if (entry) {
+                    LinearizationState.setPerChannelData(channelName, entry, false);
+                }
+            } catch (err) {
+                console.warn('[INK REBASE] Failed to disable per-channel data after rebase:', channelName, err);
+            }
+
+        }
+    });
+
+    if (!rebased.length) {
+        return;
+    }
+
+    if (isGlobalSource) {
+        try {
+            LinearizationState.globalApplied = false;
+            const globalData = LinearizationState.getGlobalData?.();
+            if (globalData) {
+                globalData.applied = false;
+            }
+            if (manager) {
+                manager.set('linearization.global.applied', false, { skipHistory: true, allowDuringRestore: true });
+            }
+        } catch (err) {
+            console.warn('[INK REBASE] Failed to pre-toggle global applied state:', err);
+        }
+    }
+
+    updateQueue.forEach((entry) => {
+        const {
+            channelName,
+            row,
+            percentInput,
+            endInput,
+            effectivePercent,
+            effectiveEnd,
+            perChannelToggle,
+            perChannelDataEntry
+        } = entry;
+
+        percentInput.value = effectivePercent.toFixed(1);
+        percentInput.setAttribute('data-base-percent', String(effectivePercent));
+        InputValidator.clearValidationStyling(percentInput);
+
+        endInput.value = String(effectiveEnd);
+        endInput.setAttribute('data-base-end', String(effectiveEnd));
+        InputValidator.clearValidationStyling(endInput);
+
+        if (row.refreshDisplayFn && typeof row.refreshDisplayFn === 'function') {
+            row.refreshDisplayFn();
+        }
+
+        if (manager) {
+            try {
+                manager.setChannelValue(channelName, 'percentage', effectivePercent);
+                manager.setChannelValue(channelName, 'endValue', effectiveEnd);
+                manager.setChannelEnabled(channelName, effectiveEnd > 0);
+            } catch (stateErr) {
+                console.warn('[INK REBASE] Failed to sync state manager for', channelName, stateErr);
+            }
+        }
+
+        updateScaleBaselineForChannelCore(channelName);
+
+        if (options.source === 'perChannelLoad') {
+            if (perChannelDataEntry) {
+                try {
+                    perChannelDataEntry.edited = false;
+                } catch (err) { /* ignore */ }
+            }
+            if (perChannelToggle) {
+                perChannelToggle.checked = false;
+                perChannelToggle.disabled = true;
+                perChannelToggle.setAttribute('data-baked', 'true');
+                perChannelToggle.title = 'Per-channel correction baked into baseline. Undo or revert to modify.';
+            }
+        }
+    });
+
+    if (isEditModeEnabled()) {
+        try {
+            refreshSmartCurvesFromMeasurements();
+        } catch (err) {
+            console.warn('[INK REBASE] Failed to refresh Smart curves after rebase:', err);
+        }
+    }
+
+    rebased.forEach((channelName) => {
+        try {
+            updateProcessingDetail(channelName);
+        } catch (err) {
+            console.warn('Processing detail refresh failed for', channelName, err);
+        }
+    });
+
+    try { updateInkChart(); } catch (err) { console.warn('[INK REBASE] Chart update failed:', err); }
+
+    if (typeof debouncedPreviewUpdate === 'function') {
+        debouncedPreviewUpdate();
+    }
+
+    try { updateSessionStatus(); } catch (err) { console.warn('[INK REBASE] Session status update failed:', err); }
+
+    if (isGlobalSource) {
+        try {
+            const globalData = LinearizationState.getGlobalData?.();
+            const filename = options.filename || globalData?.filename || 'global correction';
+            setGlobalBakedState({ filename, reason: 'rebased' });
+        } catch (err) {
+            console.warn('[INK REBASE] Failed to mark global correction baked:', err);
+        }
+    }
+}
+
+function restoreChannelsToRebasedSources(channelNames = [], options = {}) {
+    if (!Array.isArray(channelNames) || channelNames.length === 0) {
+        return [];
+    }
+
+    const { skipRefresh = false } = typeof options === 'object' && options !== null ? options : {};
+
+    const loadedData = ensureLoadedQuadData(() => ({
+        curves: {},
+        baselineEnd: {},
+        sources: {},
+        keyPoints: {},
+        keyPointsMeta: {},
+        rebasedCurves: {},
+        rebasedSources: {}
+    }));
+
+    if (!loadedData.rebasedSources) {
+        return [];
+    }
+
+    const manager = typeof getStateManager === 'function' ? getStateManager() : null;
+    const restoredChannels = [];
+
+    channelNames.forEach((channelName) => {
+        const sourceCurve = Array.isArray(loadedData.rebasedSources?.[channelName])
+            ? loadedData.rebasedSources[channelName]
+            : null;
+        if (!Array.isArray(sourceCurve) || sourceCurve.length === 0) {
+            return;
+        }
+
+        const clonedCurve = sourceCurve.slice();
+        const effectiveEnd = clonedCurve.length ? Math.max(...clonedCurve) : 0;
+        const effectivePercent = InputValidator.computePercentFromEnd(effectiveEnd);
+
+        const row = getChannelRow(channelName);
+        if (row) {
+            const percentInput = row.querySelector('.percent-input');
+            const endInput = row.querySelector('.end-input');
+
+            if (percentInput) {
+                percentInput.value = effectivePercent.toFixed(1);
+                percentInput.setAttribute('data-base-percent', String(effectivePercent));
+                InputValidator.clearValidationStyling(percentInput);
+            }
+
+            if (endInput) {
+                endInput.value = String(effectiveEnd);
+                endInput.setAttribute('data-base-end', String(effectiveEnd));
+                InputValidator.clearValidationStyling(endInput);
+            }
+
+            if (!skipRefresh && row.refreshDisplayFn && typeof row.refreshDisplayFn === 'function') {
+                try {
+                    row.refreshDisplayFn();
+                } catch (err) {
+                    console.warn('[INK RESTORE] Failed to refresh row display for', channelName, err);
+                }
+            }
+        }
+
+        loadedData.curves[channelName] = clonedCurve.slice();
+        loadedData.rebasedCurves[channelName] = clonedCurve.slice();
+        loadedData.baselineEnd[channelName] = effectiveEnd;
+
+        if (manager) {
+            try {
+                manager.setChannelValue(channelName, 'percentage', effectivePercent);
+                manager.setChannelValue(channelName, 'endValue', effectiveEnd);
+                manager.setChannelEnabled(channelName, effectiveEnd > 0);
+            } catch (err) {
+                console.warn('[INK RESTORE] Failed to sync state manager for', channelName, err);
+            }
+        }
+
+        updateScaleBaselineForChannelCore(channelName);
+        restoredChannels.push(channelName);
+    });
+
+    return restoredChannels;
 }
 
 function isDefaultSmartRamp(points) {
@@ -738,21 +1079,34 @@ function preserveQuadCurveForInkLimit(channelName, newEndValue) {
         return;
     }
 
-    const original = loadedData.originalCurves?.[channelName];
-    if (!Array.isArray(original) || original.length === 0) {
+    const reference = Array.isArray(loadedData.rebasedCurves?.[channelName])
+        ? loadedData.rebasedCurves[channelName]
+        : loadedData.curves?.[channelName];
+    const fallbackOriginal = loadedData.originalCurves?.[channelName];
+    const baselineSourceCurve = Array.isArray(reference) && reference.length ? reference : fallbackOriginal;
+
+    if (!Array.isArray(baselineSourceCurve) || baselineSourceCurve.length === 0) {
         return;
     }
 
     const baselineSource = loadedData.baselineEnd?.[channelName];
     const baselineEnd = Number.isFinite(baselineSource) && baselineSource > 0
         ? baselineSource
-        : Math.max(...original);
+        : Math.max(...baselineSourceCurve);
     if (!baselineEnd || baselineEnd <= 0) {
         return;
     }
 
     const ratio = newEndValue <= 0 ? 0 : newEndValue / baselineEnd;
-    const scaledCurve = original.map((value) => {
+    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+        console.log('[INK LIMIT preserve] scaling', {
+            channelName,
+            baselineEnd,
+            newEndValue,
+            maxBaseline: Math.max(...baselineSourceCurve)
+        });
+    }
+    const scaledCurve = baselineSourceCurve.map((value) => {
         if (!Number.isFinite(value)) return 0;
         const scaled = ratio * value;
         if (!Number.isFinite(scaled)) return 0;
@@ -763,6 +1117,14 @@ function preserveQuadCurveForInkLimit(channelName, newEndValue) {
         loadedData.curves = {};
     }
     loadedData.curves[channelName] = scaledCurve;
+    if (!loadedData.rebasedCurves) {
+        loadedData.rebasedCurves = {};
+    }
+    loadedData.rebasedCurves[channelName] = scaledCurve.slice();
+    if (!loadedData.baselineEnd) {
+        loadedData.baselineEnd = {};
+    }
+    loadedData.baselineEnd[channelName] = newEndValue;
 
     const keyPoints = loadedData.keyPoints?.[channelName];
     const sourceTag = loadedData.sources?.[channelName];
@@ -788,6 +1150,19 @@ function handlePercentInput(input) {
 
     const row = input.closest('tr');
     const channelName = row?.getAttribute('data-channel');
+
+    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+        console.log('[INK LIMIT percentInput]', {
+            channelName,
+            validatedPercent,
+            rawValue: input?.value
+        });
+    }
+
+    if (globalScope) {
+        globalScope.__percentDebug = globalScope.__percentDebug || [];
+        globalScope.__percentDebug.push({ stage: 'validated', channelName, value: validatedPercent });
+    }
 
     if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
         console.log(`[INPUT DEBUG] handlePercentInput called for ${channelName}, value: ${validatedPercent}`);
@@ -836,6 +1211,9 @@ function handlePercentInput(input) {
         }
 
         setBasePercentOnInput(input, validatedPercent);
+        if (globalScope) {
+            globalScope.__percentDebug.push({ stage: 'setBasePercent', channelName, value: validatedPercent });
+        }
 
         // Update scale baseline for global scale integration
         const rowChannelName = row.getAttribute('data-channel');
@@ -874,29 +1252,25 @@ function handlePercentInput(input) {
     }
 
     if (channelName && Number.isFinite(newEndValue)) {
-        setTimeout(() => {
-            try {
-                preserveQuadCurveForInkLimit(channelName, newEndValue);
-            } catch (err) {
-                console.warn('[INK LIMIT] preserveQuadCurveForInkLimit failed:', err);
-            }
-        }, 0);
+        try {
+            preserveQuadCurveForInkLimit(channelName, newEndValue);
+        } catch (err) {
+            console.warn('[INK LIMIT] preserveQuadCurveForInkLimit failed:', err);
+        }
     }
 
     const currentScalePercent = typeof getCurrentScale === 'function' ? getCurrentScale() : 100;
     if (Number.isFinite(currentScalePercent) && Math.abs(currentScalePercent - 100) > 1e-6) {
-        setTimeout(() => {
-            scalingCoordinator
-                .scale(currentScalePercent, 'ui-resync', {
-                    metadata: {
-                        trigger: 'percentInputResync',
-                        skipHistory: true
-                    }
-                })
-                .catch((err) => {
-                    console.warn('[SCALE] Coordinator resync after percent edit failed:', err);
-                });
-        }, 0);
+        scalingCoordinator
+            .scale(currentScalePercent, 'ui-resync', {
+                metadata: {
+                    trigger: 'percentInputResync',
+                    skipHistory: true
+                }
+            })
+            .catch((err) => {
+                console.warn('[SCALE] Coordinator resync after percent edit failed:', err);
+            });
     }
 
     refreshEffectiveInkDisplays();
@@ -953,6 +1327,9 @@ function handleEndInput(input) {
         if (percentInput) {
             newPercentValue = InputValidator.computePercentFromEnd(validatedEnd);
             setBasePercentOnInput(percentInput, newPercentValue);
+            if (globalScope) {
+                globalScope.__percentDebug.push({ stage: 'syncPercent', channelName, value: newPercentValue });
+            }
             percentInput.value = newPercentValue.toFixed(1);
             InputValidator.clearValidationStyling(percentInput);
 
@@ -1005,29 +1382,25 @@ function handleEndInput(input) {
     }
 
     if (channelName && Number.isFinite(validatedEnd)) {
-        setTimeout(() => {
-            try {
-                preserveQuadCurveForInkLimit(channelName, validatedEnd);
-            } catch (err) {
-                console.warn('[INK LIMIT] preserveQuadCurveForInkLimit failed:', err);
-            }
-        }, 0);
+        try {
+            preserveQuadCurveForInkLimit(channelName, validatedEnd);
+        } catch (err) {
+            console.warn('[INK LIMIT] preserveQuadCurveForInkLimit failed:', err);
+        }
     }
 
     const currentScalePercent = typeof getCurrentScale === 'function' ? getCurrentScale() : 100;
     if (Number.isFinite(currentScalePercent) && Math.abs(currentScalePercent - 100) > 1e-6) {
-        setTimeout(() => {
-            scalingCoordinator
-                .scale(currentScalePercent, 'ui-resync', {
-                    metadata: {
-                        trigger: 'endInputResync',
-                        skipHistory: true
-                    }
-                })
-                .catch((err) => {
-                    console.warn('[SCALE] Coordinator resync after end edit failed:', err);
-                });
-        }, 0);
+        scalingCoordinator
+            .scale(currentScalePercent, 'ui-resync', {
+                metadata: {
+                    trigger: 'endInputResync',
+                    skipHistory: true
+                }
+            })
+            .catch((err) => {
+                console.warn('[SCALE] Coordinator resync after end edit failed:', err);
+            });
     }
 
     refreshEffectiveInkDisplays();
@@ -1315,13 +1688,21 @@ function initializeFileHandlers() {
                 }
             }
 
+            if (applied) {
+                const printer = getCurrentPrinter();
+                const channels = printer?.channels || [];
+                const globalData = LinearizationState.getGlobalData?.();
+                rebaseChannelsToCorrectedCurves(channels, {
+                    source: 'globalToggle',
+                    filename: globalData?.filename || null
+                });
+            }
+
             try {
                 updateInkChart();
                 if (typeof updatePreview !== 'undefined') {
                     updatePreview();
                 }
-
-                refreshEffectiveInkDisplays();
 
                 const printer = getCurrentPrinter();
                 const channels = printer?.channels || [];
@@ -1370,6 +1751,10 @@ function initializeFileHandlers() {
 
                     if (parsed && parsed.samples) {
                         console.log('✅ Global linearization file loaded:', file.name);
+
+                        if (typeof CurveHistory !== 'undefined' && CurveHistory && typeof CurveHistory.captureState === 'function') {
+                            CurveHistory.captureState('Before: Load Global Linearization');
+                        }
 
                         // Store in LinearizationState (modular system)
                         const normalized = normalizeLinearizationEntry(parsed);
@@ -1458,7 +1843,10 @@ function initializeFileHandlers() {
                         showStatus(`Loaded global correction: ${file.name} (${countLabel})`);
 
                         applyGlobalLinearizationToggle(true);
-                        refreshEffectiveInkDisplays();
+
+                        if (typeof CurveHistory !== 'undefined' && CurveHistory && typeof CurveHistory.captureState === 'function') {
+                            CurveHistory.captureState('After: Load Global Linearization (rebased)');
+                        }
 
                     } else {
                         throw new Error('Failed to parse linearization data');
@@ -1542,6 +1930,12 @@ function initializeFileHandlers() {
 
                 if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
                     console.log('[DEBUG REVERT] Smart points restored during global revert', smartRestoreSummary);
+                }
+
+                const restoredChannels = restoreChannelsToRebasedSources(channels);
+
+                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                    console.log('[DEBUG REVERT] Baselines restored for channels', restoredChannels);
                 }
 
                 const globalBtnRef = document.getElementById('revertGlobalToMeasurementBtn');
@@ -1969,6 +2363,8 @@ export function setupChannelRow(tr) {
     const processingLabel = tr.querySelector('.processing-label');
     const channelName = tr.dataset.channel;
 
+    ensureOriginalInkSnapshot(tr, channelName);
+
     if (processingLabel) {
         processingLabel.textContent = '→ Linear ramp';
         processingLabel.setAttribute('title', 'Linear ramp');
@@ -2098,6 +2494,8 @@ export function setupChannelRow(tr) {
                 perChannelToggle.checked = true;
             }
 
+            rebaseChannelsToCorrectedCurves([channelName], { source: 'perChannelLoad' });
+
             if (typeof updateInterpolationControls === 'function') {
                 try { updateInterpolationControls(); } catch (err) { /* ignore */ }
             } else if (typeof globalScope.updateInterpolationControls === 'function') {
@@ -2123,7 +2521,6 @@ export function setupChannelRow(tr) {
             updateProcessingDetail(channelName);
             updateInkChart();
             debouncedPreviewUpdate();
-            refreshEffectiveInkDisplays();
 
             // Reinitialize Smart Curves if edit mode is active
             if (typeof globalScope.reinitializeChannelSmartCurves === 'function') {
@@ -2256,32 +2653,13 @@ export function setupChannelRow(tr) {
                     CurveHistory.captureState(`Before: Revert ${channelName} to Measurement`);
                 }
 
-                const loadedData = ensureLoadedQuadData(() => ({ curves: {}, sources: {}, keyPoints: {}, keyPointsMeta: {}, baselineEnd: {} }));
-                try {
-                    if (!hasMeasurement) {
-                        if (hasSmart) {
-                            let restored = false;
-                            const originalCurve = loadedData?.originalCurves?.[channelName];
-                            if (Array.isArray(originalCurve) && originalCurve.length === 256) {
-                                loadedData.curves = loadedData.curves || {};
-                                loadedData.curves[channelName] = [...originalCurve];
-                                restored = true;
-                            }
-                            if (!restored && loadedData?.curves?.[channelName]) {
-                                // keep existing curve if restoration failed but a curve exists
-                            }
-                        } else if (loadedData.curves?.[channelName]) {
-                            delete loadedData.curves[channelName];
-                        }
-
-                        if (loadedData.baselineEnd?.[channelName]) delete loadedData.baselineEnd[channelName];
-                        if (loadedData.keyPoints?.[channelName]) delete loadedData.keyPoints[channelName];
-                        if (loadedData.keyPointsMeta?.[channelName]) delete loadedData.keyPointsMeta[channelName];
-                        if (loadedData.sources?.[channelName]) delete loadedData.sources[channelName];
-                    }
-                } catch (err) {}
+                const manager = typeof getStateManager === 'function' ? getStateManager() : null;
+                const loadedData = ensureLoadedQuadData(() => ({ curves: {}, sources: {}, keyPoints: {}, keyPointsMeta: {}, baselineEnd: {}, rebasedCurves: {}, rebasedSources: {} }));
+                let restoredBaselines = [];
 
                 if (hasMeasurement) {
+                    restoredBaselines = restoreChannelsToRebasedSources([channelName]);
+
                     tr.removeAttribute('data-allow-toggle');
                     try { measurement.edited = false; } catch (err) {}
                     perChannelEnabledMap[channelName] = true;
@@ -2299,19 +2677,12 @@ export function setupChannelRow(tr) {
                     });
 
                     if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-                        console.log(`[DEBUG REVERT] Helper invoked for ${channelName}`);
-                    }
-
-                    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
                         const refreshed = ControlPoints.get(channelName)?.points?.length || null;
                         console.log(`[DEBUG REVERT] Post-restore state for ${channelName}`, {
                             restoredFromSeed: restoreResult?.restoredFromSeed,
-                            pointCount: refreshed
+                            pointCount: refreshed,
+                            rebasedBaselineRestored: restoredBaselines.includes(channelName)
                         });
-                    }
-
-                    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-                        console.log(`[DEBUG REVERT] Per-channel Smart points restored for ${channelName}`, restoreResult);
                     }
                 } else {
                     tr.setAttribute('data-allow-toggle', 'true');
@@ -2321,6 +2692,61 @@ export function setupChannelRow(tr) {
                     LinearizationState.clearPerChannel(channelName);
                     syncPerChannelAppState(channelName, null);
                     existingPerChannelData = null;
+
+                    let restored = false;
+                    const originalCurve = loadedData?.originalCurves?.[channelName];
+                    if (Array.isArray(originalCurve) && originalCurve.length) {
+                        const originalEnd = Math.max(...originalCurve);
+                        const originalPercent = InputValidator.computePercentFromEnd(originalEnd);
+                        const percentInput = tr.querySelector('.percent-input');
+                        const endInput = tr.querySelector('.end-input');
+
+                        if (percentInput) {
+                            percentInput.value = originalPercent.toFixed(1);
+                            percentInput.setAttribute('data-base-percent', String(originalPercent));
+                            InputValidator.clearValidationStyling(percentInput);
+                        }
+
+                        if (endInput) {
+                            endInput.value = String(originalEnd);
+                            endInput.setAttribute('data-base-end', String(originalEnd));
+                            InputValidator.clearValidationStyling(endInput);
+                        }
+
+                        if (manager) {
+                            try {
+                                manager.setChannelValue(channelName, 'percentage', originalPercent);
+                                manager.setChannelValue(channelName, 'endValue', originalEnd);
+                                manager.setChannelEnabled(channelName, originalEnd > 0);
+                            } catch (err) {
+                                console.warn('[DEBUG REVERT] Failed to sync state manager for original restore on', channelName, err);
+                            }
+                        }
+
+                        loadedData.curves = loadedData.curves || {};
+                        loadedData.curves[channelName] = originalCurve.slice();
+                        loadedData.rebasedCurves = loadedData.rebasedCurves || {};
+                        loadedData.rebasedCurves[channelName] = originalCurve.slice();
+
+                        if (loadedData.rebasedSources && loadedData.rebasedSources[channelName]) {
+                            delete loadedData.rebasedSources[channelName];
+                        }
+
+                        loadedData.baselineEnd = loadedData.baselineEnd || {};
+                        loadedData.baselineEnd[channelName] = originalEnd;
+
+                        updateScaleBaselineForChannelCore(channelName);
+                        restored = true;
+                    } else {
+                        if (loadedData.curves?.[channelName]) delete loadedData.curves[channelName];
+                        if (loadedData.rebasedCurves?.[channelName]) delete loadedData.rebasedCurves[channelName];
+                        if (loadedData.baselineEnd?.[channelName]) delete loadedData.baselineEnd[channelName];
+                        if (loadedData.rebasedSources?.[channelName]) delete loadedData.rebasedSources[channelName];
+                    }
+
+                    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                        console.log(`[DEBUG REVERT] Cleared per-channel measurement for ${channelName}`, { restored });
+                    }
                 }
 
                 refreshPerChannelDisplay();

@@ -23,7 +23,8 @@
 2. **.cube LUT (1D/3D)**
    - Normalize orientation, map to printer-space samples, convert per-channel curves, and store as overlays (read-only) while keeping `.quad` base intact.
    - Provide smoothing control points when sample counts ≤25 (for Smart seeding).
-   - Metadata notes LUT size and orientation; undo reverts overlay application.
+   - Metadata notes LUT size, orientation, and anchoring flags; undo reverts overlay application.
+   - Baking a LUT into the baseline samples the correction once and caches the rebased curve so repeated redraws maintain the expected peak ink (e.g., 87 % for `negative.cube`).
 
 3. **.acv Curves**
    - Parse Photoshop curve anchors; when ≤25 anchors, seed Smart points directly; otherwise simplify plotted curve.
@@ -32,6 +33,11 @@
 4. **General UI Updates**
    - Chart overlays display as dimmed markers (no ordinal labels when Smart points exist).
    - Status toasts confirm load success; errors flagged with descriptive messages.
+   - After any correction is applied, `rebaseChannelsToCorrectedCurves` updates the channel table so the visible percent and End fields match the corrected maxima (`make256` peak) instead of the original `.quad` baseline. The stored baselines (`loadedQuadData.baselineEnd`) and rebased curves mirror those effective values for exports and undo.
+
+5. **Global Baked State**
+   - When global data is rebased (e.g., `.cube`, LAB, manual table), the processing detail row switches to “Global (baked)” and records the originating filename/reason. This prevents the correction from double-applying on subsequent redraws and signals to operators that the baseline now includes the correction.
+   - History snapshots label the state transition (`CurveHistory.captureState('After: Load Global Linearization (rebased)')`) so undo returns to the pre-baked curves, including original ink limits.
 
 ## Edge Cases & Guards
 - Non-grayscale channels: warn and ignore unsupported ones; maintain channel ordering consistent with current printer profile.

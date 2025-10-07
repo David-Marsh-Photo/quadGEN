@@ -2,7 +2,7 @@
 // File loading, saving, and download utilities
 
 import { sanitizeFilename } from '../ui/ui-utils.js';
-import { PRINTERS, elements, TOTAL } from '../core/state.js';
+import { PRINTERS, elements, TOTAL, getLoadedQuadData, isChannelNormalizedToEnd } from '../core/state.js';
 import { InputValidator } from '../core/validation.js';
 import { LinearizationState } from '../data/linearization-utils.js';
 import { isLabLinearizationData } from '../data/lab-legacy-bypass.js';
@@ -312,7 +312,7 @@ export function buildQuadFile() {
 
         const endInput = row.querySelector('.end-input');
         const e = InputValidator.clampEnd(endInput ? endInput.value : 0);
-        const arr = make256(e, ch, true); // Apply linearization if enabled
+        const arr = make256(e, ch, true, { normalizeToEnd: isChannelNormalizedToEnd(ch) }); // Apply linearization if enabled
         lines.push("# " + ch + " curve");
         lines.push(...arr.map(String));
     });
@@ -326,6 +326,9 @@ export function buildQuadFile() {
  */
 function buildLimitsSummary() {
     const lines = ["# Limits summary:"];
+    const loadedData = getLoadedQuadData();
+    const curveMap = loadedData?.curves || {};
+    const baselineMap = loadedData?.baselineEnd || {};
 
     Array.from(elements.rows.children).forEach((tr) => {
         // Skip the placeholder row
@@ -335,20 +338,38 @@ function buildLimitsSummary() {
         const endInput = tr.querySelector('.end-input');
         const channelKey = tr.getAttribute('data-channel');
 
-        if (nameElement && endInput) {
-            const name = nameElement.textContent.trim();
-            const e = InputValidator.clampEnd(endInput.value);
-            const arr = make256(e, channelKey || name, true);
-            const maxInk = Array.isArray(arr) && arr.length ? Math.max(...arr) : 0;
+        if (!nameElement || !endInput) {
+            return;
+        }
 
-            if (maxInk <= 0) {
-                lines.push("#   " + name + ": disabled");
-            } else {
-                const percent = (maxInk / TOTAL) * 100;
-                const isWhole = Math.abs(percent - Math.round(percent)) < 1e-9;
-                const percentFormatted = isWhole ? String(Math.round(percent)) : percent.toFixed(2);
-                lines.push(`#   ${name}: max ${percentFormatted}%`);
+        const name = nameElement.textContent.trim();
+        const channelName = channelKey || name;
+
+        let maxInk = 0;
+
+        const curve = Array.isArray(curveMap[channelName]) ? curveMap[channelName] : null;
+        if (curve && curve.length) {
+            maxInk = Math.max(...curve);
+        }
+
+        if (maxInk <= 0) {
+            const storedEnd = baselineMap[channelName];
+            if (Number.isFinite(storedEnd) && storedEnd > 0) {
+                maxInk = InputValidator.clampEnd(storedEnd);
             }
+        }
+
+        if (maxInk <= 0) {
+            maxInk = InputValidator.clampEnd(endInput.value);
+        }
+
+        if (maxInk <= 0) {
+            lines.push(`#   ${name}: disabled`);
+        } else {
+            const percent = (maxInk / TOTAL) * 100;
+            const isWhole = Math.abs(percent - Math.round(percent)) < 1e-9;
+            const percentFormatted = isWhole ? String(Math.round(percent)) : percent.toFixed(2);
+            lines.push(`#   ${name}: max ${percentFormatted}%`);
         }
     });
 

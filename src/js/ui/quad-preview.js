@@ -1,7 +1,7 @@
 // quadGEN Quad File Preview Module
 // Handles generating and displaying .quad file previews with parity to legacy quadgen.html
 
-import { elements, getCurrentPrinter, getAppState, INK_COLORS, updateAppState } from '../core/state.js';
+import { elements, getCurrentPrinter, getAppState, INK_COLORS, updateAppState, isChannelNormalizedToEnd } from '../core/state.js';
 import { APP_DISPLAY_VERSION } from '../core/version.js';
 import { InputValidator } from '../core/validation.js';
 import { LinearizationState, getEditedDisplayName, getBasePointCountLabel } from '../data/linearization-utils.js';
@@ -140,7 +140,7 @@ function appendChannelCurves(lines, channelOrder) {
     const row = rowMap.get(channelName);
     const endInput = row?.querySelector('.end-input');
     const endValue = InputValidator.clampEnd(endInput ? endInput.value : 0);
-    const curveValues = make256(endValue, channelName, true);
+    const curveValues = make256(endValue, channelName, true, { normalizeToEnd: isChannelNormalizedToEnd(channelName) });
 
     lines.push(`# ${channelName} curve`);
     lines.push(...curveValues.map(String));

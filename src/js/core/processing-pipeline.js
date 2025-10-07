@@ -2,7 +2,7 @@
 // Main curve generation, LUT application, and file building functions
 
 import { CURVE_RESOLUTION, DataSpace } from '../data/processing-utils.js';
-import { elements, getCurrentPrinter, getAppState, TOTAL, getLoadedQuadData } from './state.js';
+import { elements, getCurrentPrinter, getAppState, TOTAL, getLoadedQuadData, isChannelNormalizedToEnd } from './state.js';
 import { InputValidator } from './validation.js';
 import { ControlPoints, isSmartCurve } from '../curves/smart-curves.js';
 import { LinearizationState, ensurePrinterSpaceData, normalizeLinearizationEntry } from '../data/linearization-utils.js';
@@ -780,6 +780,35 @@ export function make256(endValue, channelName, applyLinearization = false, optio
 
         if (debugEnabled) {
             console.log('[MAKE256] final', { channelName, first: arr.slice(0, 10), mid: arr[Math.floor(arr.length / 2)], last: arr.slice(-10) });
+        }
+
+        const shouldNormalize = (() => {
+            if (options && Object.prototype.hasOwnProperty.call(options, 'normalizeToEnd')) {
+                return !!options.normalizeToEnd;
+            }
+            return isChannelNormalizedToEnd(channelName);
+        })();
+
+        const targetMax = Number.isFinite(endValue) ? Math.max(0, Math.min(TOTAL, Math.round(endValue))) : 0;
+        if (shouldNormalize && targetMax > 0) {
+            let currentMax = 0;
+            for (let i = 0; i < arr.length; i += 1) {
+                const value = arr[i];
+                if (Number.isFinite(value) && value > currentMax) {
+                    currentMax = value;
+                }
+            }
+
+            if (currentMax > 0 && Math.abs(currentMax - targetMax) > 0.5) {
+                const scaleRatio = targetMax / currentMax;
+                if (debugEnabled) {
+                    console.log('[MAKE256] normalizeToEnd', { channelName, currentMax, targetMax, scaleRatio });
+                }
+                for (let i = 0; i < arr.length; i += 1) {
+                    const scaled = arr[i] * scaleRatio;
+                    arr[i] = Math.max(0, Math.min(TOTAL, Math.round(scaled)));
+                }
+            }
         }
 
         return arr;

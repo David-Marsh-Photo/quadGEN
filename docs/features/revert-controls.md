@@ -19,12 +19,14 @@
 1. **Global Revert**
    - Guard: only enabled when global measurement data (LAB/CGATS/manual) is applied.
    - On click: capture history, clear `LinearizationState` global data, remove Smart curves and metadata for every channel, restore original `.quad` curves (`loadedQuadData.originalCurves`), and reset ink limits from stored baselines.
+   - If a correction was previously rebased, `restoreChannelsToRebasedSources` pulls the baked curve back into the channel table so percent/End fields, Smart metadata, and baseline caches return to the rebased values instead of the pre-load `.quad` defaults.
    - UI updates: global toggle re-enabled (ON), filename/labels drop “Edited”, status toast `Reverted to measurement (global)`.
    - Edit Mode: previously selected channel is re-selected if still enabled so key-point panels stay in sync.
 
 2. **Per-Channel Revert**
    - Enabled when the channel has measurement data or an active Smart curve.
    - On click: guard for measurement/Smart presence, capture history, clear Smart key points and metadata, restore measurement data (`LinearizationState.setPerChannelData`) or original curve as appropriate, reset ink limit baseline, and update per-channel toggle state.
+   - Rebased channels reuse their stored `rebasedSources` curve so the ink limits shown in the table match the baked baseline the user was editing prior to the revert.
    - Status messages differentiate outcomes (“Reverted MK to measurement” vs “Cleared Smart on MK”).
    - Edit Mode selection preserved if the channel remains enabled.
 

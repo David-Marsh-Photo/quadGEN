@@ -3,12 +3,12 @@
 
 import { getStateManager } from './state-manager.js';
 import { elements, getLoadedQuadData, setLoadedQuadData, ensureLoadedQuadData, updateAppState, getAppState, setEditModeFlag } from './state.js';
-import { getCurrentScale, getLegacyScalingSnapshot, restoreLegacyScalingState, validateScalingStateSync } from './scaling-utils.js';
+import { getCurrentScale, getLegacyScalingSnapshot, restoreLegacyScalingState, updateScaleBaselineForChannel, validateScalingStateSync } from './scaling-utils.js';
 import { LinearizationState } from '../data/linearization-utils.js';
 import { setSmartKeyPoints, ControlPoints } from '../curves/smart-curves.js';
 import { InputValidator } from './validation.js';
 import { isEditModeEnabled } from '../ui/edit-mode.js';
-import { triggerInkChartUpdate, triggerPreviewUpdate, triggerProcessingDetail } from '../ui/ui-hooks.js';
+import { triggerInkChartUpdate, triggerPreviewUpdate, triggerProcessingDetail, triggerRevertButtonsUpdate } from '../ui/ui-hooks.js';
 
 const globalScope = typeof window !== 'undefined' ? window : globalThis;
 const isBrowser = typeof document !== 'undefined';
@@ -1017,11 +1017,15 @@ export class HistoryManager {
                 const percentInput = row.querySelector('.percent-input');
                 if (percentInput) {
                     percentInput.value = String(percentValue);
+                    percentInput.setAttribute('data-base-percent', String(percentValue));
+                    InputValidator.clearValidationStyling(percentInput);
                 }
 
                 const endInput = row.querySelector('.end-input');
                 if (endInput) {
                     endInput.value = String(resolvedEndValue);
+                    endInput.setAttribute('data-base-end', String(resolvedEndValue));
+                    InputValidator.clearValidationStyling(endInput);
                 }
 
                 const enabledFlag = (channelState.enabled !== undefined)
@@ -1066,6 +1070,8 @@ export class HistoryManager {
                         perChannelBtn.setAttribute('data-tooltip', 'Load LUT.cube, LABdata.txt, or .acv curve files');
                     }
                 }
+
+                updateScaleBaselineForChannel(channelName);
 
                 if (row.refreshDisplayFn && typeof row.refreshDisplayFn === 'function') {
                     try {

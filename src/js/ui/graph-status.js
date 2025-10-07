@@ -337,6 +337,11 @@ export class GraphStatus {
                 const displayName = getEditedDisplayName(globalInfo.data.filename || 'unknown file', !!globalInfo.data.edited);
                 const countLabel = getBasePointCountLabel(globalInfo.data);
                 segmentsApplied.push(`Global: ${format} • ${displayName} (${countLabel})`);
+            } else if (globalInfo.data && isBakedGlobal) {
+                const format = globalInfo.data.format || 'linearization';
+                const displayName = getEditedDisplayName(bakedFilename || globalInfo.data.filename || 'unknown file', !!globalInfo.data.edited);
+                const countLabel = getBasePointCountLabel(globalInfo.data);
+                segmentsApplied.push(`Global (baked): ${format} • ${displayName} (${countLabel})`);
             }
 
             const autoSegment = buildAutoLimitSegment(channelName);
