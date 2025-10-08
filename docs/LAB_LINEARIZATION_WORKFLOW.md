@@ -4,6 +4,7 @@
 - Goal: Convert step‑wedge L* measurements into a smooth ink‑space correction that linearizes tone.
 - Input: LAB `.txt` with GRAY% and L* (A/B optional). Header example: `GRAY\tLAB_L\tLAB_A\tLAB_B`.
 - Display in quadGEN: Mapping Y = output ink level (%) vs X = input ink level (%). The diagonal Y = X is “no correction”.
+- Normalization modes: quadGEN defaults to perceptual L* normalization; enable the “Use log-density…” toggle when you want the optical-density workflow described below.
 
 ## Input Format
 - Header: `GRAY  LAB_L  LAB_A  LAB_B` (tabs/whitespace accepted)
@@ -16,15 +17,16 @@
   - `100.00 0.00 0.00 0.00`
 
 ## quadGEN Interpretation (Processing)
-- Convert measurements to density (CIE‑exact):
+- Perceptual mode (default):
+  - Normalize L* directly: `actual = (L^*_{\max} - L^*) / (L^*_{\max} - L^*_{\min})`.
+  - Linear target: `expected = GRAY% / 100` (0 = paper white, 1 = solid black).
+  - Pointwise error (ink-space intent): `correction = expected − actual`.
+- Log-density mode (opt-in):
   - Compute relative luminance `Y` from each L* using the CIE inverse: `Y = ((L+16)/116)^3` if `L>8`, else `Y = L/903.3`.
   - Optical density `Draw = −log10(Y)` (clamped to avoid log(0)).
-  - Normalize by the dataset’s max density: `actual = Draw / max(Draw)`.
-- Linear target: `expected = GRAY% / 100` (0 = paper white, 1 = solid black).
-- Pointwise error (ink‑space intent): `correction = expected − actual`.
-  - Positive correction → lighten (use less ink)
-  - Negative correction → darken (use more ink)
-- Reconstruction: quadGEN blends the sparse corrections with an adaptive Gaussian kernel (σ(x) comes from local patch spacing) so the baseline solve stays smooth without any user-set smoothing slider. Endpoints are pinned at 0→0 and 1→1.
+  - Normalize by the dataset’s min/max density: `actual = (Draw - \min(Draw)) / (\max(Draw) - \min(Draw))`.
+  - Linear density target: `expected = GRAY% / 100`.
+- Reconstruction (shared): quadGEN blends the sparse corrections with an adaptive Gaussian kernel (σ(x) from local patch spacing) to keep the solve smooth without an exposed smoothing slider. Endpoints are pinned at 0→0 and 1→1.
 - Result: 256‑sample mapping `[0..1]` applied as a 1D LUT (interpolation per UI selection).
 
 ## Graph Semantics (quadGEN)

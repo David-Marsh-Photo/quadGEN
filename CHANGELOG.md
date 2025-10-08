@@ -20,6 +20,22 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Docs
 - _Nothing yet._
 
+## [v3.1.4] — 2025-10-07
+### Added
+- Log-density linearization toggle in the Global Correction panel and Manual L* modal, allowing quick switching between perceptual (L*) and optical-density workflows.
+
+### Changed
+- Perceptual (L*) normalization remains the default for direct prints; enabling the new toggle converts LAB/CGATS/manual data to CIE log-density with Dmax normalization to match digital-negative workflows.
+
+### Fixed
+- Global LAB/CGATS loads no longer mark the correction as baked when toggled on; the Global toggle now remains available for enable/disable testing.
+
+### Removed
+- _Nothing yet._
+
+### Docs
+- Updated `docs/print_linearization_guide.md`, Help → Version History, and internal guides to explain the L* vs log-density toggle, default behavior, and glossary addendum.
+
 ## [v3.1.3] — 2025-10-07
 ### Added
 - Vitest coverage for the rebased ink-limit workflow (`tests/history/restore_snapshot_rebase.test.js`, `tests/ui/edit-mode-baked-state.test.js`) guards undo/redo and baked-status regressions.

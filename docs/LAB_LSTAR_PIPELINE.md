@@ -14,15 +14,20 @@ Summary: Read the LAB file, keep only valid rows, and sort them so we have clean
   - Validate ranges; sort by `input` ascending.
   - Preserve `originalData` for overlays/metadata.
 
-## 2) L* → Density Target Mapping (per patch)
-Summary: Compare each measured tone to where it should land on a smooth, linear scale; compute how much darker or lighter the printer needs to be at that input.
-- Notation:
+## 2) L* → Target Mapping (per patch)
+Summary: Compare each measured tone to where it should land on a smooth, linear scale; compute how much darker or lighter the printer needs to be at that input. quadGEN supports two normalization modes:
+- **Perceptual (default)**
+  - `pos = clamp01(input / 100)`
+  - Normalize L* directly: `actual = (L^*_{\max} - L^*) / (L^*_{\max} - L^*_{\min})`
+  - `expected = pos`
+  - `correction = expected − actual`
+- **Log-density (opt-in)**
   - `pos = clamp01(input / 100)`
   - CIE luminance: `Y = ((L+16)/116)^3` if `L>8`, else `Y = L/903.3`
   - Optical density (unnormalized): `Draw = −log10(clamp(Y, ε, 1))`
-  - Normalize by dataset max: `actualDensity = Draw / max(Draw across dataset)`
-  - `expectedDensity = pos` (linear target ramp)
-  - `correction = expectedDensity − actualDensity`
+  - Normalize by dataset min/max: `actual = (Draw - \min(Draw)) / (\max(Draw) - \min(Draw))`
+  - `expected = pos`
+  - `correction = expected − actual`
 - Build `correctionPoints = [{ position: pos, correction, originalLab, originalInput }]`.
 
 ## 3) Base 256‑sample Reconstruction (Gaussian‑weighted, local bandwidth)

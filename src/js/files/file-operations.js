@@ -9,6 +9,7 @@ import { isLabLinearizationData } from '../data/lab-legacy-bypass.js';
 import { make256 } from '../core/processing-pipeline.js';
 import { APP_DISPLAY_VERSION } from '../core/version.js';
 import { CONTRAST_INTENT_PRESETS } from '../core/config.js';
+import { isDensityNormalizationEnabled } from '../core/lab-settings.js';
 
 const globalScope = typeof globalThis !== 'undefined' ? globalThis : {};
 
@@ -298,6 +299,11 @@ export function buildQuadFile() {
             perChannelLabEntries.forEach(({ channelName, filename, count }) => {
                 lines.push(`#   ${channelName}: ${filename} (${count} points)`);
             });
+        }
+
+        if (typeof isDensityNormalizationEnabled === 'function' && isDensityNormalizationEnabled()) {
+            lines.push('#   Normalization mode: log-density (optical)');
+            lines.push('#   Note: Exported curve reflects Dmax-normalized optical calibration.');
         }
     }
 

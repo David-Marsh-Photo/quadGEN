@@ -16,6 +16,35 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '3.1.4': {
+    date: '2025-10-07',
+    title: 'L* vs log-density normalization toggle',
+    sections: {
+      ADDED: [
+        'Log-density normalization toggle appears in both the Global Correction panel and Manual L* entry so operators can flip between perceptual (L*) and optical-density workflows.'
+      ],
+      CHANGED: [
+        'Perceptual L* remains the default for direct printer linearization; enabling the toggle converts LAB/CGATS/manual data to CIE log density (Dmax-normalized) for digital-negative calibration.'
+      ],
+      FIXED: [
+        'Global LAB/CGATS loads no longer mark the correction as baked just for toggling; the Global enable switch stays available for regression checks.'
+      ],
+      REMOVED: [],
+      DOCS: [
+        'Print linearization guide, Help Version History, and internal references updated to explain when to use L* versus log density and note the new default.'
+      ]
+    },
+    aboutDialog: [
+      {
+        label: 'Normalization Toggle',
+        desc: 'Switch between perceptual L* and log-density processing directly from the Global Correction panel or Manual L* entry.'
+      },
+      {
+        label: 'Digital-Negative Ready',
+        desc: 'Log-density mode converts LAB/CGATS/manual data with Dmax normalization so optical workflows land on the correct tone scale without double scaling.'
+      }
+    ]
+  },
   '3.1.3': {
     date: '2025-10-07',
     title: 'Baked ink-limit workflow refinements',
@@ -1303,7 +1332,7 @@ export function getHelpGlossaryHTML(){
         <dd>Mapping that adjusts output ink levels versus input to achieve a target response. In quadGEN, plotted as Y (output ink %) vs X (input %).</dd>
 
         <dt>Density</dt>
-        <dd>Measure of how much light a material absorbs or blocks. In photography and printing, higher density means darker areas that block more light. quadGEN converts L* measurements to density values for linearization calculations, as density provides a more linear relationship with ink amounts than L* alone.</dd>
+        <dd>Measure of how much light a material absorbs or blocks. In photography and printing, higher density means darker areas that block more light. Enable the log-density toggle when you want corrections based on optical density (digital negatives, contact printing); leave it off to stay in L* for perceptual printer linearization.</dd>
 
         <dt>Digital Negative</dt>
         <dd>A digitally created film negative used for alternative photographic processes like platinum/palladium printing, cyanotype, and silver gelatin contact printing. Created by inverting a positive digital image and printing it on transparent film with precise density control.</dd>
@@ -1357,7 +1386,7 @@ export function getHelpGlossaryHTML(){
         <dd>An editable control point of a Smart Curve. Identified by ordinal (1-based). Insert/adjust/delete supported; endpoints often guarded. Coordinates are defined in printer space with the origin at (0,0), where X = input % (0–100) and Y = output ink % (0–100).</dd>
 
         <dt>L* (L-star)</dt>
-        <dd>Lightness component of the LAB color space, ranging from 0 (pure black) to 100 (pure white). L* represents perceptual lightness as seen by human vision. In quadGEN workflows, L* measurements from printed step wedges are converted to density for linearization calculations.</dd>
+        <dd>Lightness component of the LAB color space, ranging from 0 (pure black) to 100 (pure white). quadGEN can linearize directly in L* (default) for perceptual prints, or convert to optical density when the log-density toggle is enabled.</dd>
 
         <dt>LAB data (<code>.txt</code>)</dt>
         <dd>Text file with measured L*, A*, B* (quadGEN expects GRAY and LAB columns). Used to compute or validate corrections.</dd>
@@ -1368,8 +1397,11 @@ export function getHelpGlossaryHTML(){
         <dt>Lab Tech</dt>
         <dd>The built-in assistant in quadGEN that can answer questions and perform actions (when networked). Optional; core editing/export features work offline.</dd>
 
+        <dt>Log-density linearization</dt>
+        <dd>Optional normalization mode that converts measured L* to optical density (−log<sub>10</sub>(Y)) before building the correction curve. Recommended for digital negatives and other through-light workflows where equal density steps translate to equal exposure. Enabled via the “Use log-density for LAB / Manual measurements” toggle in the Global Correction panel or Manual L* modal.</dd>
+
         <dt>Linearization</dt>
-        <dd>Process of adjusting printer output so that equal input steps (e.g., 0–100%) produce perceptually equal changes in print density or L*. In quadGEN and QuadToneRIP, linearization involves measuring printed step wedges, comparing them to the ideal response, and generating correction curves that enforce a near-linear relationship between input values and visual tone.</dd>
+        <dd>Process of adjusting printer output so that equal input steps (e.g., 0–100%) produce consistent tonal changes. quadGEN supports two normalizations: perceptual L* (default for direct prints) and log-density (optical) for through-light workflows. Both ingest measured L*, compare to the target curve, and generate a correction LUT that enforces a near-linear relationship between input values and visual tone.</dd>
 
         <dt>Linear ramp</dt>
         <dd>Identity mapping (input % = output %) used as a neutral baseline for tests/export and certain workflows.</dd>

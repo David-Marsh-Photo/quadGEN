@@ -232,6 +232,7 @@ export const elements = {
     globalLinearizationFilename: null,
     globalLinearizationInfo: null,
     revertGlobalToMeasurementBtn: null,
+    labDensityToggle: null,
 
     // Version and session elements
     appVersion: null,
@@ -255,6 +256,7 @@ export const elements = {
     cancelLstar: null,
     closeLstarModal: null,
     saveLstarTxt: null,
+    manualLstarDensityToggle: null,
 
     // Notes elements
     notesToggle: null,
@@ -298,6 +300,7 @@ export function initializeElements() {
     elements.globalLinearizationBtn = document.getElementById('globalLinearizationBtn');
     elements.globalLinearizationHint = document.getElementById('globalLinearizationHint');
     elements.globalLinearizationToggle = document.getElementById('globalLinearizationToggle');
+    elements.labDensityToggle = document.getElementById('labDensityModeToggle');
 
     // Auto limit controls
     elements.autoWhiteLimitToggle = document.getElementById('autoWhiteLimitToggle');
@@ -430,6 +433,7 @@ export function initializeElements() {
     elements.cancelLstar = document.getElementById('cancelLstar');
     elements.closeLstarModal = document.getElementById('closeLstarModal');
     elements.saveLstarTxt = document.getElementById('saveLstarTxt');
+    elements.manualLstarDensityToggle = document.getElementById('manualLstarDensityToggle');
 
     // Notes elements
     elements.notesToggle = document.getElementById('notesToggle');

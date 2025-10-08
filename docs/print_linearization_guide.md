@@ -7,28 +7,28 @@ Define a repeatable method to turn **measured L*** values from a printed step‑
 ## Workflow (concise)
 1. **Print** a step‑wedge with known nominal inputs (e.g., 0, 5, …, 100%).
 2. **Measure** each patch’s **L*** with a device (e.g., Color Muse, i1Pro2).
-3. **Normalize & orient** the data so that the working curve is monotone with X=input% → Y=response.
-4. **Compute target**: desired response is a straight line (linear in L*, typically 100→0 across 0→100% input).
-5. **Build correction** by **inverting** the measured response to map nominal input to the adjusted input that hits the linear target.
+3. **Choose normalization**: by default quadGEN normalizes directly in L*, preserving perceptual midpoints. Enable “Use log-density for LAB / Manual measurements” when you need optical density (\(D = -\log_{10}(Y)\), normalized so 0 ↔ paper white, 1 ↔ densest patch) for through-light workflows.
+4. **Compute target**: whichever space you selected, aim for a straight line (0→1 across 0→100% input), optionally shaped by contrast intent presets.
+5. **Build correction** by **inverting** the measured curve in that space to map nominal input to the adjusted input that hits the linear target.
 6. **Apply** the correction as a 1D LUT (e.g., 256 samples) during printing.
 7. **Iterate**: reprint the wedge with the correction applied, re‑measure, refine.
 
 ## Mathematical summary
-Let the nominal inputs be \(x_i \in [0,100]\) and measured lightness \(L^*_i\). We want output that is linear in L* versus input, i.e. a target function \(L^*_{\text{target}}(x) = 100 - x\).
+Let the nominal inputs be \(x_i \in [0,100]\) and measured lightness \(L^*_i\). In perceptual (default) mode we normalize L* directly so \(\tilde{L}_i = (L^*_{\max} - L^*_i)/(L^*_{\max} - L^*_{\min})\). In log-density mode we instead map each lightness to CIE luminance \(Y_i\), optical density \(D_i = -\log_{10}(Y_i)\), then normalize \(\tilde{D}_i = (D_i - D_{\min})/(D_{\max} - D_{\min})\).
 
-Convert discrete measurements into a monotone response function \(f\): \(x\mapsto L^*\). (Use interpolation between samples.) The required **correction** is the inverse mapping from target to the input that produces it:
+Convert these discrete measurements into a monotone response function \(f\): \(x\mapsto m\), where \(m\) is \(\tilde{L}\) or \(\tilde{D}\) depending on the chosen mode. (Use interpolation between samples.) The required **correction** is the inverse mapping from target to the input that produces it:
 
-\[ x_{\text{adj}}(x) = f^{-1}\big( L^*_{\text{target}}(x) \big). \]
+\[ x_{\text{adj}}(x) = f^{-1}\big( m_{\text{target}}(x) \big). \]
 
 In practice (discrete, noisy data), we:
 - Interpolate \(f\) (piecewise‑linear or PCHIP/monotone cubic).
 - Numerically invert by swapping axes and interpolating again.
 - Tabulate \(x_{\text{adj}}\) at uniform inputs to form the LUT.
 
-### Optional density mapping
-Some workflows transform L* to **relative optical density** to stabilize shadow behavior:
-\[ Y \approx \left(\frac{L^*}{100}\right)^\gamma \quad(\gamma\approx 2.4 \text{ for sRGB}),\quad D = -\log_{10}(Y),\quad D_{rel} = D/\max(D). \]
-You may perform the inversion in \(D_{rel}\) instead of L*. The code below provides both paths.
+### Density mapping (opt-in)
+Enabling the log-density toggle converts measurements to **relative optical density** before interpolation:
+\[ Y = f_{\text{CIE}}(L^*), \quad D = -\log_{10}(Y), \quad D_{rel} = \frac{D - \min(D)}{\max(D) - \min(D)}. \]
+Density emphasizes deep-shadow separation and matches QuadToneRIP’s digital-negative workflows. Leave the toggle off to stay in L* when calibrating direct positive prints. The checkbox lives in the Global Correction panel (for file imports) and inside the Manual L* modal.
 
 ## Algorithm (implementation notes)
 - Use **monotone interpolation**; if data are noisy, smooth minimally.
@@ -37,6 +37,7 @@ You may perform the inversion in \(D_{rel}\) instead of L*. The code below provi
 
 ### Active-range mapping (quadGEN feature flag)
 - QuadToneRIP reference workflows normalize linearization within each channel’s **active ink span**. quadGEN mirrors this behavior behind the `ENABLE_ACTIVE_RANGE_LINEARIZATION` flag (toggle via `enableActiveRangeLinearization(true)`).
+- The flag defaults to **disabled**, which is the intended production setting; treat active-range remapping as an opt-in experiment until wider field validation is complete.
 - The active-range path:
   - Detects the channel’s active indices (first/last non-zero ink samples) and the equivalent range in the LUT targets.
   - Reprojects the target curve across that span so delayed-onset channels can compress (later starts) and early channels can expand while the zero plateau stays untouched.
@@ -85,7 +86,7 @@ def build_correction(xs, Ls, use_density=False):
         m_grid = lstar_to_rel_density(L_grid)             # 0..1, increasing with ink
         target = np.linspace(0, 1, 256)                   # linear in density
     else:
-        # Linear target in L*: 100→0 across 0→100
+        # Perceptual target: linear in L*
         target = np.linspace(100.0, 0.0, 256)
         m_grid = L_grid
 
@@ -123,8 +124,8 @@ if __name__ == "__main__":
     xs = np.array([0, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100], float)
     Ls = np.array([100, 97, 94, 88, 82, 75, 67, 58, 48, 36, 22, 8], float)
 
-    # Compute correction in L* domain
-    x_grid, x_adj = build_correction(xs, Ls, use_density=False)
+    # Compute correction in density (default)
+    x_grid, x_adj = build_correction(xs, Ls)
 
     # Export 256-sample LUT (0..100% adjusted input per 0..100% nominal)
     with open("linearization_Lstar_LUT.csv", "w", newline="") as f:
@@ -133,9 +134,9 @@ if __name__ == "__main__":
         for x, a in zip(x_grid, x_adj):
             w.writerow([round(float(x), 4), round(float(a), 4)])
 
-    # Or compute using relative density
+    # Or enable density mode for through-light workflows
     _, x_adj_D = build_correction(xs, Ls, use_density=True)
-    with open("linearization_Drel_LUT.csv", "w", newline="") as f:
+    with open("linearization_log_density_LUT.csv", "w", newline="") as f:
         w = csv.writer(f)
         w.writerow(["nominal_input_percent", "adjusted_input_percent"])
         for x, a in zip(x_grid, x_adj_D):

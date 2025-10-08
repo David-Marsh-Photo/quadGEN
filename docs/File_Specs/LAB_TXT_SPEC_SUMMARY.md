@@ -22,12 +22,11 @@ Parsing & Validation
 
 Curve Construction (Adaptive Gaussian reconstruction)
 - Normalize GRAY to 0..1 → position x.
-- Convert L* to CIE‑exact optical density and normalize by dataset max:
-  - Relative luminance: `Y = ((L+16)/116)^3` if `L > 8`, else `Y = L/903.3`.
-  - Optical density: `Draw = −log10(clamp(Y, ε, 1))`.
-  - Normalized density: `D = Draw / max(Draw across dataset)`.
-- Expected linear density baseline is `x`.
-- Compute per‑point correction `C = x − D` and blend with an adaptive Gaussian kernel (σ(x) derived from median neighbor spacing). The kernel automatically smooths uneven data—no user slider required.
+- Perceptual vs log-density:
+  - **Perceptual (default)**: `actual = (L^*_{\max} - L^*) / (L^*_{\max} - L^*_{\min})`.
+  - **Log-density (toggle)**: convert to CIE luminance `Y`, optical density `Draw = −log10(clamp(Y, ε, 1))`, then normalize by dataset min/max `D = (Draw - \min(Draw)) / (\max(Draw) - \min(Draw))`.
+- Expected baseline is `x` in either case.
+- Compute per‑point correction `C = x − actual` and blend with an adaptive Gaussian kernel (σ(x) derived from median neighbor spacing). The kernel automatically smooths uneven data—no user slider required.
 - Build 256 samples, clamping to [0,1] and pinning endpoints (samples[0]=0, samples[255]=1).
 - Output object:
   - `{ domainMin: 0, domainMax: 1, samples, originalData, originalSamples, format: 'LAB Data', getSmoothingControlPoints(%) }`

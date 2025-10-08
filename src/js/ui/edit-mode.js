@@ -1117,14 +1117,19 @@ export function reinitializeChannelSmartCurves(channelName, options = {}) {
                     output: Math.max(0, Math.min(100, relative))
                 };
             });
+            const seededFromMeasurement = !!(seedMeta && seedMeta.measurementSeed);
+            if (seededFromMeasurement) {
+                bakedMetaPending = null;
+            }
             const persistOptions = {
                 ...(seedMeta || {}),
                 channelPercentOverride: channelPercent,
                 pointsAreRelative: true,
-                skipUiRefresh: false
+                skipUiRefresh: false,
+                includeBakedFlags: !seededFromMeasurement
             };
             persistSmartPoints(channelName, relativePoints, 'smooth', persistOptions);
-            if (bakedMetaPending) {
+            if (!seededFromMeasurement && bakedMetaPending) {
                 setGlobalBakedState(bakedMetaPending);
             }
             console.log(`[EDIT MODE] ✅ Reinitialized ${keyPoints.length} Smart key points for ${channelName}`);
@@ -1415,14 +1420,19 @@ function initializeEditModeForChannels() {
                             output: Math.max(0, Math.min(100, relative))
                         };
                     });
+                    const seededFromMeasurement = !!(seedMeta && seedMeta.measurementSeed);
+                    if (seededFromMeasurement) {
+                        bakedMetaPending = null;
+                    }
                     const persistOptions = {
                         ...(seedMeta || {}),
                         channelPercentOverride: channelPercentValid,
                         pointsAreRelative: true,
-                        skipUiRefresh: false
+                        skipUiRefresh: false,
+                        includeBakedFlags: !seededFromMeasurement
                     };
                     persistSmartPoints(channelName, relativePoints, 'smooth', persistOptions);
-                    if (bakedMetaPending) {
+                    if (!seededFromMeasurement && bakedMetaPending) {
                         setGlobalBakedState(bakedMetaPending);
                     }
                 } else {
@@ -1457,22 +1467,6 @@ function initializeEditModeForChannels() {
     });
 
     if (LinearizationState.isGlobalEnabled?.()) {
-        const bakedMeta = LinearizationState.getGlobalBakedMeta?.();
-        const globalDataCurrent = LinearizationState.getGlobalData?.();
-        if (globalDataCurrent && !bakedMeta) {
-            const representativeChannel = enabledChannels[0] || null;
-            const representativePoints = representativeChannel
-                ? ControlPoints.get(representativeChannel)?.points || null
-                : null;
-            const meta = {
-                scope: 'global',
-                filename: globalDataCurrent.filename || getCurrentGlobalFilename(),
-                pointCount: Array.isArray(representativePoints) ? representativePoints.length : null,
-                timestamp: Date.now()
-            };
-            setGlobalBakedState(meta);
-        }
-
         enabledChannels.forEach((channelName) => {
             try {
                 simplifySmartKeyPointsFromCurve(channelName, {
@@ -1482,7 +1476,7 @@ function initializeEditModeForChannels() {
                 });
             } catch (err) {
                 if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-                    console.warn('[EDIT MODE] Failed to resimplify Smart points after baking for', channelName, err);
+                    console.warn('[EDIT MODE] Failed to resimplify Smart points after measurement load for', channelName, err);
                 }
             }
         });

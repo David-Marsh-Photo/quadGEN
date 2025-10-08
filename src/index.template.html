@@ -186,6 +186,12 @@ Scope: This license applies to this HTML file (quadgen.html) only.
               <button id="revertGlobalToMeasurementBtn" class="px-3 py-2 text-xs bg-slate-600 hover:bg-slate-700 text-white rounded transition-colors font-bold whitespace-nowrap shrink-0 inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none" title="Revert to measurement source (global)" disabled>↺ Revert</button>
             </div>
             <p id="globalLinearizationHint" class="text-xs text-gray-500 mb-1">LUT (.cube), LAB data (.txt), or curves (.acv)</p>
+            <div class="flex items-center gap-2 text-xs text-gray-600 mb-2">
+              <label for="labDensityModeToggle" class="inline-flex items-center gap-2">
+                <input type="checkbox" id="labDensityModeToggle" class="h-3 w-3 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+                <span>Use log-density for LAB / Manual measurements</span>
+              </label>
+            </div>
             <div id="globalLinearizationInfo" class="text-xs text-gray-600 mb-2 hidden">
               <span id="globalLinearizationFilename" class="font-medium"></span>
               <span id="globalLinearizationDetails" class="text-gray-500"></span>
@@ -546,6 +552,14 @@ Scope: This license applies to this HTML file (quadgen.html) only.
             <li>Inspired by & compatible with data from the <a href="https://clayharmonblog.com/wedgie.html" target="_blank" rel="noopener noreferrer" class="text-green-700 underline">Wedgie tool</a> by Clay Harmon.</li>
             <li>A good resource for target images is <a href="https://clayharmonblog.com/downloads" target="_blank" rel="noopener noreferrer" class="text-green-700 underline">clayharmonblog.com/downloads</a>.</li>
           </ul>
+        </div>
+
+        <div class="flex items-center gap-2 mb-4 text-sm text-gray-600">
+          <label for="manualLstarDensityToggle" class="inline-flex items-center gap-2">
+            <input type="checkbox" id="manualLstarDensityToggle" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+            <span>Use log-density target (optical) for this linearization</span>
+          </label>
+          <span class="text-xs text-gray-500">Enable for digital negatives / through-light workflows.</span>
         </div>
 
         <div class="flex items-center justify-center gap-6 mb-4 p-3 bg-gray-50 rounded border">

@@ -2,18 +2,18 @@
 // Ports legacy quadgen.html behavior into the modular build
 
 import { elements, appState, updateAppState } from '../core/state.js';
-import { LAB_TUNING } from '../core/config.js';
 import { LinearizationState, normalizeLinearizationEntry, getBasePointCountLabel } from '../data/linearization-utils.js';
 import { DataSpace } from '../data/processing-utils.js';
 import { updatePreview } from './quad-preview.js';
 import { postLinearizationSummary } from './labtech-summaries.js';
 import { updateFilename, downloadFile } from '../files/file-operations.js';
-import { createPCHIPSpline } from '../math/interpolation.js';
 import { triggerRevertButtonsUpdate } from './ui-hooks.js';
 import { showStatus } from './status-service.js';
 import { registerDebugNamespace } from '../utils/debug-registry.js';
 import { invokeLegacyHelper } from '../legacy/legacy-helpers.js';
 import { getLegacyLinearizationBridge } from '../legacy/linearization-bridge.js';
+import { getLabNormalizationMode, setLabNormalizationMode, isDensityNormalizationEnabled, LAB_NORMALIZATION_MODES } from '../core/lab-settings.js';
+import { parseManualLstarData as coreParseManualLstarData } from '../parsers/file-parsers.js';
 
 const MIN_ROWS = 5;
 const MAX_ROWS = 50;
@@ -92,6 +92,11 @@ function setModalScrollLock(enabled) {
 function showModal() {
   if (!elements.lstarModal) return;
   updateRows();
+  if (elements.manualLstarDensityToggle) {
+    const isDensity = isDensityNormalizationEnabled();
+    elements.manualLstarDensityToggle.checked = isDensity;
+    elements.manualLstarDensityToggle.setAttribute('aria-checked', String(isDensity));
+  }
   elements.lstarModal.classList.remove('hidden');
   setModalScrollLock(true);
 }
@@ -297,7 +302,8 @@ function handleCountInput(event) {
 }
 
 function applyManualLinearization(validation) {
-  const correctionData = parseManualLstarData(validation);
+  const normalizationMode = getLabNormalizationMode();
+  const correctionData = parseManualLstarData(validation, { normalizationMode });
   correctionData.filename = `Manual-L-${validation.values.length}pts`;
   const normalized = normalizeLinearizationEntry(correctionData, DataSpace.SPACE.PRINTER);
 
@@ -349,7 +355,10 @@ function applyManualLinearization(validation) {
 
   hideModal();
 
-  showStatus(`Applied manual L* correction curve (${getBasePointCountLabel(correctionData)}) (CIE density; Gaussian-weighted reconstruction with PCHIP interpolation)`);
+  const modeLabel = normalizationMode === LAB_NORMALIZATION_MODES.DENSITY
+    ? 'CIE density (log)'
+    : 'CIE L* (perceptual)';
+  showStatus(`Applied manual L* correction curve (${getBasePointCountLabel(correctionData)}) (${modeLabel}; Gaussian-weighted reconstruction with PCHIP interpolation)`);
   invokeLegacyHelper('postGlobalDeltaChatSummary');
 
   const inputs = elements.lstarInputs ? Array.from(elements.lstarInputs.querySelectorAll('.lstar-input')) : [];
@@ -391,183 +400,7 @@ function handleSaveClick() {
 }
 
 export function parseManualLstarData(validation) {
-  const measuredPairs = Array.isArray(validation?.measuredPairs) ? validation.measuredPairs : [];
-  if (measuredPairs.length < MIN_ROWS) {
-    throw new Error('At least five L* measurements are required.');
-  }
-
-  const measuredXs = measuredPairs.map(pair => pair.x);
-  const measuredL = measuredPairs.map(pair => pair.l);
-  const maxLstar = measuredL.length ? Math.max(...measuredL) : 100;
-  const minLstar = measuredL.length ? Math.min(...measuredL) : 0;
-  const lstarSpan = Math.max(1e-6, maxLstar - minLstar);
-  const measuredInk = measuredL.map(L => Math.max(0, Math.min(1, (maxLstar - L) / lstarSpan)));
-  const maxInputValue = measuredXs.length ? Math.max(...measuredXs) : 0;
-  const divisor = maxInputValue > 100 ? 255 : 100;
-  const positions = measuredXs.map(value => Math.max(0, Math.min(divisor, value)) / divisor);
-  const positionsOnly = positions.slice();
-  const neighbors = LAB_TUNING.get('K_NEIGHBORS', 6);
-  const sigmaFloor = LAB_TUNING.get('SIGMA_FLOOR', 0.02);
-  const sigmaCeil = LAB_TUNING.get('SIGMA_CEIL', 0.15);
-  const sigmaAlpha = LAB_TUNING.get('SIGMA_ALPHA', 3.0);
-
-  function localSigmaAt(t) {
-    const n = positionsOnly.length;
-    if (n <= 1) return sigmaCeil;
-    let lo = 0;
-    let hi = n;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (positionsOnly[mid] < t) lo = mid + 1;
-      else hi = mid;
-    }
-    const distances = [];
-    let left = lo - 1;
-    let right = lo;
-    while ((left >= 0 || right < n) && distances.length < neighbors) {
-      const dl = left >= 0 ? Math.abs(t - positionsOnly[left]) : Infinity;
-      const dr = right < n ? Math.abs(t - positionsOnly[right]) : Infinity;
-      if (dl <= dr) {
-        if (Number.isFinite(dl)) distances.push(dl);
-        left -= 1;
-      } else {
-        if (Number.isFinite(dr)) distances.push(dr);
-        right += 1;
-      }
-    }
-    if (!distances.length) return sigmaCeil;
-    distances.sort((a, b) => a - b);
-    const midIdx = distances.length >> 1;
-    const median = distances.length % 2 === 0
-      ? 0.5 * (distances[midIdx - 1] + distances[midIdx])
-      : distances[midIdx];
-    return Math.min(sigmaCeil, Math.max(sigmaFloor, sigmaAlpha * median));
-  }
-
-  function interpolateMeasuredAt(t) {
-    if (!positionsOnly.length) return 0;
-    if (t <= positionsOnly[0]) return measuredInk[0];
-    const last = positionsOnly.length - 1;
-    if (t >= positionsOnly[last]) return measuredInk[last];
-    for (let i = 0; i < last; i++) {
-      const leftPos = positionsOnly[i];
-      const rightPos = positionsOnly[i + 1];
-      if (t >= leftPos && t <= rightPos) {
-        const span = rightPos - leftPos || 1;
-        const alpha = (t - leftPos) / span;
-        const leftVal = measuredInk[i];
-        const rightVal = measuredInk[i + 1];
-        return leftVal + alpha * (rightVal - leftVal);
-      }
-    }
-    return measuredInk[last];
-  }
-
-  function smoothMeasuredInkPoints(widenFactor = 1) {
-    const smoothedPoints = measuredInk.map((value, idx) => {
-      const pos = positionsOnly[idx];
-      const sigma = Math.min(sigmaCeil, Math.max(sigmaFloor, localSigmaAt(pos) * widenFactor));
-      const denom = Math.max(1e-9, 2 * sigma * sigma);
-      let numerator = 0;
-      let weightSum = 0;
-      for (let j = 0; j < positionsOnly.length; j++) {
-        const distance = Math.abs(pos - positionsOnly[j]);
-        const weight = Math.exp(-(distance * distance) / denom);
-        numerator += measuredInk[j] * weight;
-        weightSum += weight;
-      }
-      const averaged = weightSum > 0 ? numerator / weightSum : measuredInk[idx];
-      return Math.max(0, Math.min(1, averaged));
-    });
-
-    const epsilon = 1 / 4096;
-    if (smoothedPoints.length) {
-      smoothedPoints[0] = Math.max(0, Math.min(1, measuredInk[0]));
-      smoothedPoints[smoothedPoints.length - 1] = Math.max(0, Math.min(1, measuredInk[measuredInk.length - 1]));
-    }
-    for (let i = 1; i < smoothedPoints.length; i++) {
-      if (smoothedPoints[i] <= smoothedPoints[i - 1]) {
-        smoothedPoints[i] = Math.min(1, smoothedPoints[i - 1] + epsilon);
-      }
-    }
-    if (smoothedPoints.length >= 2) {
-      const last = smoothedPoints.length - 1;
-      smoothedPoints[last] = Math.max(smoothedPoints[last], smoothedPoints[last - 1]);
-    }
-    return smoothedPoints;
-  }
-
-  function buildInkInterpolator(widenFactor = 1) {
-    const smoothedPoints = smoothMeasuredInkPoints(widenFactor);
-    const xsPercent = positionsOnly.map(p => p * 100);
-    const spline = createPCHIPSpline(xsPercent, smoothedPoints);
-    return function evaluate(t) {
-      const clampedT = Math.max(0, Math.min(1, t));
-      const ink = spline(clampedT * 100);
-      return Math.max(0, Math.min(1, ink));
-    };
-  }
-
-  function buildInverseLUTFromInterpolator(evaluate) {
-    const lut = new Array(256);
-    for (let i = 0; i < 256; i++) {
-      const targetInk = i / 255;
-      let lo = 0;
-      let hi = 1;
-      for (let iter = 0; iter < 40; iter++) {
-        const mid = (lo + hi) / 2;
-        const value = evaluate(mid);
-        if (value < targetInk) {
-          lo = mid;
-        } else {
-          hi = mid;
-        }
-      }
-      lut[i] = Math.max(0, Math.min(1, hi));
-    }
-    lut[0] = 0;
-    lut[255] = 1;
-    for (let i = 1; i < 256; i++) {
-      if (lut[i] < lut[i - 1]) lut[i] = lut[i - 1];
-    }
-    return lut;
-  }
-
-  const evaluateInk = buildInkInterpolator(1);
-  const samples = buildInverseLUTFromInterpolator(evaluateInk);
-
-  function createSmoothedControlPoints(percent) {
-    const clampPercent = Math.max(0, Math.min(90, Number(percent) || 0));
-    const widen = 1 + clampPercent / 100;
-    const evaluate = buildInkInterpolator(widen);
-    const inverse = buildInverseLUTFromInterpolator(evaluate);
-    const controlPointCount = Math.max(3, 21 - Math.floor(clampPercent / 10));
-    const samplesOut = [];
-    const xCoords = [];
-    for (let i = 0; i < controlPointCount; i++) {
-      const x = i / (controlPointCount - 1);
-      const idx = Math.round(x * 255);
-      xCoords.push(x);
-      samplesOut.push(inverse[idx]);
-    }
-    return {
-      samples: samplesOut,
-      xCoords,
-      controlPointCount,
-      needsDualTransformation: false,
-      influenceRadius: null
-    };
-  }
-
-  return {
-    domainMin: 0,
-    domainMax: 1,
-    samples,
-    originalData: measuredPairs.map(pair => ({ input: pair.x, lab: pair.l })),
-    format: 'Manual L* Entry',
-    sourceSpace: DataSpace.SPACE.PRINTER,
-    getSmoothingControlPoints: createSmoothedControlPoints
-  };
+  return coreParseManualLstarData(validation, { normalizationMode: getLabNormalizationMode() });
 }
 
 function attachSharedHandlers() {
@@ -609,6 +442,12 @@ function attachSharedHandlers() {
   }
   if (elements.saveLstarTxt) {
     elements.saveLstarTxt.addEventListener('click', handleSaveClick);
+  }
+  if (elements.manualLstarDensityToggle) {
+    elements.manualLstarDensityToggle.addEventListener('change', (event) => {
+      const mode = event.target.checked ? LAB_NORMALIZATION_MODES.DENSITY : LAB_NORMALIZATION_MODES.LSTAR;
+      setLabNormalizationMode(mode);
+    });
   }
 }
 

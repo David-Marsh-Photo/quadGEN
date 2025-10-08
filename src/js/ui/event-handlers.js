@@ -33,11 +33,15 @@ import { showStatus } from './status-service.js';
 import { initializeHelpSystem } from './help-system.js';
 import { setPrinter, registerChannelRowSetup, syncPrinterForQuadData } from './printer-manager.js';
 import { make256 } from '../core/processing-pipeline.js';
+import { getLabNormalizationMode, setLabNormalizationMode, isDensityNormalizationEnabled, subscribeLabNormalizationMode, LAB_NORMALIZATION_MODES } from '../core/lab-settings.js';
+import { rebuildLabSamplesFromOriginal } from '../data/lab-parser.js';
+import { isLabLinearizationData } from '../data/lab-legacy-bypass.js';
 
 const globalScope = typeof window !== 'undefined' ? window : globalThis;
 const isBrowser = typeof document !== 'undefined';
 
 let unsubscribeScalingStateInput = null;
+let unsubscribeLabNormalizationMode = null;
 let scalingStateFlagListenerAttached = false;
 let lastScalingStateValue = null;
 let scaleHandlerRetryCount = 0;
@@ -160,6 +164,186 @@ const debouncedPreviewUpdate = debounce(() => {
     updatePreview();
 }, 300);
 
+function syncLabNormalizationCheckboxes(mode = getLabNormalizationMode()) {
+    const isDensity = mode === LAB_NORMALIZATION_MODES.DENSITY;
+    if (elements.labDensityToggle) {
+        elements.labDensityToggle.checked = isDensity;
+        elements.labDensityToggle.setAttribute('aria-checked', String(isDensity));
+    }
+    if (elements.manualLstarDensityToggle) {
+        elements.manualLstarDensityToggle.checked = isDensity;
+        elements.manualLstarDensityToggle.setAttribute('aria-checked', String(isDensity));
+    }
+}
+
+function rebuildLabEntryForNormalization(entry) {
+    if (!entry || !Array.isArray(entry.originalData) || entry.originalData.length < 2) {
+        return entry;
+    }
+
+    const mode = getLabNormalizationMode();
+    const baseSamples = rebuildLabSamplesFromOriginal(entry.originalData, {
+        normalizationMode: mode,
+        skipDefaultSmoothing: true
+    }) || entry.baseSamples || entry.samples;
+
+    const smoothingPercent = Number(entry.previewSmoothingPercent);
+    const hasSmoothing = Number.isFinite(smoothingPercent) && smoothingPercent > 0;
+    const widen = hasSmoothing ? 1 + (smoothingPercent / 100) : 1;
+    const previewSamples = hasSmoothing
+        ? rebuildLabSamplesFromOriginal(entry.originalData, {
+            normalizationMode: mode,
+            widenFactor: widen
+        }) || baseSamples.slice()
+        : baseSamples.slice();
+
+    const updated = {
+        ...entry,
+        samples: baseSamples.slice(),
+        baseSamples: baseSamples.slice(),
+        rawSamples: baseSamples.slice(),
+        previewSamples: previewSamples.slice()
+    };
+
+    if (!Array.isArray(updated.originalSamples)) {
+        updated.originalSamples = previewSamples.slice();
+    }
+
+    return updated;
+}
+
+function refreshLinearizationDataForNormalization() {
+    const mode = getLabNormalizationMode();
+    const printer = getCurrentPrinter();
+    const channels = printer?.channels || [];
+    const updatedChannels = [];
+
+    const globalData = LinearizationState.getGlobalData();
+    if (globalData && isLabLinearizationData(globalData)) {
+        const previousBakedMeta = typeof LinearizationState.getGlobalBakedMeta === 'function'
+            ? LinearizationState.getGlobalBakedMeta()
+            : null;
+        const updatedEntry = rebuildLabEntryForNormalization(globalData);
+        LinearizationState.setGlobalData(updatedEntry, LinearizationState.globalApplied);
+        if (previousBakedMeta && typeof LinearizationState.setGlobalBakedMeta === 'function') {
+            LinearizationState.setGlobalBakedMeta(previousBakedMeta);
+        }
+        updateAppState({
+            linearizationData: updatedEntry,
+            linearizationApplied: LinearizationState.globalApplied
+        });
+
+        if (elements.globalLinearizationBtn) {
+            const countLabel = getBasePointCountLabel(updatedEntry);
+            elements.globalLinearizationBtn.setAttribute('data-tooltip', `Loaded: ${updatedEntry.filename || 'LAB Data'} (${countLabel})`);
+        }
+        if (elements.globalLinearizationDetails) {
+            const countLabel = getBasePointCountLabel(updatedEntry);
+            const formatToken = String(updatedEntry.format || '')
+                .split(' ')
+                .filter(Boolean)
+                .shift() || '';
+            const formatLabel = formatToken ? formatToken.toUpperCase() : '';
+            const detailParts = [];
+            if (countLabel) detailParts.push(countLabel);
+            if (formatLabel) detailParts.push(`(${formatLabel})`);
+            elements.globalLinearizationDetails.textContent = detailParts.length
+                ? ` - ${detailParts.join(' ')}`
+                : '';
+        }
+
+        updatedChannels.push(...channels);
+    }
+
+    channels.forEach((channelName) => {
+        const entry = LinearizationState.getPerChannelData(channelName);
+        if (entry && isLabLinearizationData(entry)) {
+            const updatedEntry = rebuildLabEntryForNormalization(entry);
+            const enabled = LinearizationState.isPerChannelEnabled(channelName);
+            LinearizationState.setPerChannelData(channelName, updatedEntry, enabled);
+            syncPerChannelAppState(channelName, updatedEntry);
+            if (!updatedChannels.includes(channelName)) {
+                updatedChannels.push(channelName);
+            }
+        }
+    });
+
+    if (updatedChannels.length > 0) {
+        if (typeof LinearizationState.setGlobalBakedMeta === 'function') {
+            try {
+                LinearizationState.setGlobalBakedMeta(null);
+            } catch (err) {
+                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                    console.warn('[LabNormalization] Failed to clear global baked meta:', err);
+                }
+            }
+        }
+
+        try {
+            const loadedData = getLoadedQuadData?.();
+            if (loadedData && loadedData.keyPointsMeta) {
+                updatedChannels.forEach((channelName) => {
+                    const meta = loadedData.keyPointsMeta[channelName];
+                    if (meta && meta.bakedGlobal) {
+                        delete meta.bakedGlobal;
+                    }
+                });
+            }
+        } catch (err) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[LabNormalization] Failed to scrub baked metadata:', err);
+            }
+        }
+
+        rebaseChannelsToCorrectedCurves(updatedChannels, {
+            source: 'labNormalizationChange',
+            useOriginalBaseline: true
+        });
+        updateInkChart();
+        updateSessionStatus();
+        try {
+            postLinearizationSummary();
+        } catch (err) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[LabNormalization] Failed to post summary:', err);
+            }
+        }
+    }
+
+    const isDensity = mode === LAB_NORMALIZATION_MODES.DENSITY;
+    const modeLabel = isDensity ? 'log-density (optical)' : 'perceptual L*';
+    const extraNote = isDensity ? ' — .quad exports note optical-density mode.' : '';
+    showStatus(`Linearization normalization set to ${modeLabel}${extraNote}`);
+}
+
+function initializeLabNormalizationHandlers() {
+    syncLabNormalizationCheckboxes();
+
+    if (elements.labDensityToggle) {
+        elements.labDensityToggle.addEventListener('change', (event) => {
+            const mode = event.target.checked ? LAB_NORMALIZATION_MODES.DENSITY : LAB_NORMALIZATION_MODES.LSTAR;
+            setLabNormalizationMode(mode);
+        });
+    }
+
+    if (elements.manualLstarDensityToggle) {
+        elements.manualLstarDensityToggle.addEventListener('change', (event) => {
+            const mode = event.target.checked ? LAB_NORMALIZATION_MODES.DENSITY : LAB_NORMALIZATION_MODES.LSTAR;
+            setLabNormalizationMode(mode);
+        });
+    }
+
+    if (unsubscribeLabNormalizationMode) {
+        unsubscribeLabNormalizationMode();
+        unsubscribeLabNormalizationMode = null;
+    }
+
+    unsubscribeLabNormalizationMode = subscribeLabNormalizationMode((mode) => {
+        syncLabNormalizationCheckboxes(mode);
+        refreshLinearizationDataForNormalization();
+    });
+}
+
 /**
  * Initialize all UI event handlers
  * Should be called after DOM is ready and elements are initialized
@@ -184,6 +368,7 @@ export function initializeEventHandlers() {
     initializeContrastIntentHandlers();
     initializeEditModeHandlers();
     initializeHelpSystem();
+    initializeLabNormalizationHandlers();
 
     console.log('✅ UI event handlers initialized');
 }
@@ -821,6 +1006,7 @@ function rebaseChannelsToCorrectedCurves(channelNames = [], options = {}) {
     const updateQueue = [];
 
     const isGlobalSource = options.source === 'globalLoad' || options.source === 'globalToggle';
+    const useOriginalBaseline = !!options.useOriginalBaseline;
 
     channelNames.forEach((channelName) => {
         const row = getChannelRow(channelName);
@@ -831,7 +1017,13 @@ function rebaseChannelsToCorrectedCurves(channelNames = [], options = {}) {
         if (!percentInput || !endInput) return;
 
         const currentEnd = InputValidator.clampEnd(endInput.getAttribute('data-base-end') ?? endInput.value);
-        let curve = make256(currentEnd, channelName, true);
+
+        const preferOriginalBaseline = useOriginalBaseline && Array.isArray(loadedData?.originalCurves?.[channelName]);
+        const make256Options = preferOriginalBaseline
+            ? { preferOriginalBaseline: true, forceSmartApplied: false }
+            : undefined;
+
+        let curve = make256(currentEnd, channelName, true, make256Options);
         let effectiveEnd = Array.isArray(curve) && curve.length ? Math.max(...curve) : 0;
 
         const effectivePercent = InputValidator.computePercentFromEnd(effectiveEnd);
@@ -873,21 +1065,6 @@ function rebaseChannelsToCorrectedCurves(channelNames = [], options = {}) {
 
     if (!rebased.length) {
         return;
-    }
-
-    if (isGlobalSource) {
-        try {
-            LinearizationState.globalApplied = false;
-            const globalData = LinearizationState.getGlobalData?.();
-            if (globalData) {
-                globalData.applied = false;
-            }
-            if (manager) {
-                manager.set('linearization.global.applied', false, { skipHistory: true, allowDuringRestore: true });
-            }
-        } catch (err) {
-            console.warn('[INK REBASE] Failed to pre-toggle global applied state:', err);
-        }
     }
 
     updateQueue.forEach((entry) => {
@@ -968,10 +1145,15 @@ function rebaseChannelsToCorrectedCurves(channelNames = [], options = {}) {
     if (isGlobalSource) {
         try {
             const globalData = LinearizationState.getGlobalData?.();
-            const filename = options.filename || globalData?.filename || 'global correction';
-            setGlobalBakedState({ filename, reason: 'rebased' });
+            if (globalData) {
+                globalData.applied = true;
+            }
+            LinearizationState.globalApplied = true;
+            if (manager) {
+                manager.set('linearization.global.applied', true, { skipHistory: true, allowDuringRestore: true });
+            }
         } catch (err) {
-            console.warn('[INK REBASE] Failed to mark global correction baked:', err);
+            console.warn('[INK REBASE] Failed to ensure global applied state after rebase:', err);
         }
     }
 }

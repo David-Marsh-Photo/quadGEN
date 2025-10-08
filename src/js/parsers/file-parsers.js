@@ -17,6 +17,7 @@ import {
 import { parseCGATS17 } from '../data/cgats-parser.js';
 import { createPCHIPSpline, clamp01 } from '../math/interpolation.js';
 import { registerDebugNamespace } from '../utils/debug-registry.js';
+import { getLabNormalizationMode } from '../core/lab-settings.js';
 
 export {
     parseLabData,
@@ -594,13 +595,14 @@ export async function parseLinearizationFile(fileContentOrFile, filename) {
         }
 
         const textContent = typeof content === 'string' ? content : '';
+        const normalizationMode = getLabNormalizationMode();
 
         if (ext === 'ti3' || textContent.includes('CGATS') || textContent.includes('BEGIN_DATA')) {
-            const parsed = parseCGATS17(textContent, finalFilename);
-            return applyDefaultLabSmoothingToEntry(parsed);
+            const parsed = parseCGATS17(textContent, finalFilename, { normalizationMode });
+            return applyDefaultLabSmoothingToEntry(parsed, { normalizationMode });
         } else if (ext === 'txt' || ext === 'lab') {
-            const parsed = parseLabData(textContent, finalFilename);
-            return applyDefaultLabSmoothingToEntry(parsed);
+            const parsed = parseLabData(textContent, finalFilename, { normalizationMode });
+            return applyDefaultLabSmoothingToEntry(parsed, { normalizationMode });
         } else if (ext === 'cube') {
             // Determine if 1D or 3D CUBE
             if (textContent.includes('LUT_1D_SIZE')) {
@@ -610,8 +612,8 @@ export async function parseLinearizationFile(fileContentOrFile, filename) {
             }
         } else {
             // Default to LAB format
-            const parsed = parseLabData(textContent, finalFilename);
-            return applyDefaultLabSmoothingToEntry(parsed);
+            const parsed = parseLabData(textContent, finalFilename, { normalizationMode });
+            return applyDefaultLabSmoothingToEntry(parsed, { normalizationMode });
         }
 
     } catch (error) {
@@ -628,7 +630,7 @@ export async function parseLinearizationFile(fileContentOrFile, filename) {
  * @param {Object} validation - Validation result object
  * @returns {Object} Parsed manual L* data
  */
-export function parseManualLstarData(validation) {
+export function parseManualLstarData(validation, options = {}) {
     try {
         console.log('📝 parseManualLstarData: processing manual L* measurements');
 
@@ -676,8 +678,11 @@ export function parseManualLstarData(validation) {
             };
         }
 
+        const normalizationMode = options.normalizationMode || getLabNormalizationMode();
+
         const baseSamples = rebuildLabSamplesFromOriginal(usableData, {
-            widenFactor: 1
+            widenFactor: 1,
+            normalizationMode
         });
 
         if (!Array.isArray(baseSamples) || baseSamples.length === 0) {
@@ -691,7 +696,8 @@ export function parseManualLstarData(validation) {
             const sp = Math.max(0, Math.min(90, Number(smoothingPercent) || 0));
             const widen = 1 + sp / 100;
             const widenedSamples = rebuildLabSamplesFromOriginal(usableData, {
-                widenFactor: widen
+                widenFactor: widen,
+                normalizationMode
             }) || baseSamples;
 
             const controlPointCount = Math.max(3, 21 - Math.floor(sp / 10));

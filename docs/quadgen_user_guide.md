@@ -58,7 +58,7 @@ quadGEN plots how much ink the printer will output (Y) for each input percentage
 `.quad` files are 256-entry lookup tables consumed by QuadToneRIP. Channels map to ink positions (e.g., `K`, `C`, `M`, `Y`, or custom alt-process pigments). Summary of the format: see `docs/File_Specs/QTR_QUAD_SPEC_SUMMARY.md`.
 
 ### LAB Measurements
-LAB `.txt` measurement files list `GRAY%` and `L*` per patch. quadGEN converts L* to density, compares against an ideal linear ramp, and produces a smooth correction curve using the PCHIP interpolator. Details: `docs/LAB_LINEARIZATION_WORKFLOW.md` and `docs/LAB_LSTAR_PIPELINE.md`.
+LAB `.txt` measurement files list `GRAY%` and `L*` per patch. quadGEN can normalize directly in L* (default) for perceptual printer linearization, or convert to optical density when the log-density toggle is enabled. In either mode it compares the measured curve against the ideal ramp and produces a smooth correction using the PCHIP interpolator. Details: `docs/LAB_LINEARIZATION_WORKFLOW.md` and `docs/LAB_LSTAR_PIPELINE.md`.
 
 ### Smart Key Points & Edit Mode
 Smart Key Points are editable control points derived from the plotted curve. Edit Mode exposes these Key Points, supports insertion/deletion, and records every action for undo/redo. Recompute pulls fresh Key Points from the current curve while tagging baked metadata (`bakedGlobal`, `bakedAutoWhite`, `bakedAutoBlack`) when auto rolloff is active.

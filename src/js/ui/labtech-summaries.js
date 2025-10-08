@@ -9,6 +9,7 @@ import { LinearizationState, normalizeLinearizationEntry } from '../data/lineari
 import { getTargetRelAt } from '../data/lab-parser.js';
 import { createPCHIPSpline, createCubicSpline, createCatmullRomSpline, clamp01 } from '../math/interpolation.js';
 import { statusMessages } from './status-messages.js';
+import { isDensityNormalizationEnabled } from '../core/lab-settings.js';
 
 const globalScope = typeof window !== 'undefined' ? window : globalThis;
 
@@ -191,6 +192,10 @@ function buildChannelChangeSummary(clampMessages) {
 
 export function postLinearizationSummary() {
   const lines = [];
+  const densityModeActive = typeof isDensityNormalizationEnabled === 'function' && isDensityNormalizationEnabled();
+  if (densityModeActive) {
+    lines.push('Normalization: log-density mode active — exported .quad comments include this note.');
+  }
   const globalLine = buildGlobalDeltaSummary();
   if (globalLine) lines.push(globalLine);
   const clampMessages = [];

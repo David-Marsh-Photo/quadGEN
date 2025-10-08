@@ -386,7 +386,7 @@ export const AutoEndpointRolloff = {
  * @param {boolean} smartCurveDetected - Whether Smart Curve is detected
  * @returns {Object} Base curve result
  */
-export function buildBaseCurve(endValue, channelName, smartCurveDetected = false) {
+export function buildBaseCurve(endValue, channelName, smartCurveDetected = false, options = {}) {
     try {
         if (endValue === 0) {
             return {
@@ -396,6 +396,10 @@ export function buildBaseCurve(endValue, channelName, smartCurveDetected = false
         }
 
         const data = getLoadedQuadData();
+        const preferOriginalBaseline = !!(options && options.preferOriginalBaseline);
+        const originalCurve = Array.isArray(data?.originalCurves?.[channelName])
+            ? data.originalCurves[channelName]
+            : null;
 
         if (data && data.curves && data.curves[channelName]) {
             if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
@@ -417,10 +421,12 @@ export function buildBaseCurve(endValue, channelName, smartCurveDetected = false
                 };
             }
 
-            let treatAsSmart = smartCurveDetected;
+            const baselineCurve = preferOriginalBaseline && originalCurve ? originalCurve : loadedCurve;
+
+            let treatAsSmart = smartCurveDetected && !preferOriginalBaseline;
             if (!treatAsSmart) {
                 try {
-                    const curveMax = Math.max(...loadedCurve);
+                    const curveMax = Math.max(...baselineCurve);
                     const baseline = data?.baselineEnd?.[channelName];
                     if (curveMax >= TOTAL * 0.99 && typeof baseline === 'number' && baseline > 0) {
                         treatAsSmart = true;
@@ -435,27 +441,32 @@ export function buildBaseCurve(endValue, channelName, smartCurveDetected = false
                     console.log('[buildBaseCurve] treat as Smart (using stored Smart samples)', {
                         channelName,
                         endValue,
-                        curveMax: Math.max(...loadedCurve)
+                        curveMax: Math.max(...baselineCurve)
                     });
                 }
 
                 return {
                     shortCircuit: false,
-                    values: loadedCurve.slice()
+                    values: baselineCurve.slice()
                 };
             }
 
             if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-                console.log('[buildBaseCurve] treat as loaded measurement', { channelName, endValue });
+                console.log('[buildBaseCurve] treat as loaded measurement', {
+                    channelName,
+                    endValue,
+                    preferOriginalBaseline,
+                    hasOriginalCurve: !!originalCurve
+                });
             }
 
             const baseline = (data.baselineEnd && typeof data.baselineEnd[channelName] === 'number')
                 ? data.baselineEnd[channelName]
-                : Math.max(...loadedCurve);
+                : Math.max(...baselineCurve);
             const scale = baseline > 0 ? (endValue / baseline) : 0;
             return {
                 shortCircuit: false,
-                values: loadedCurve.map((v) => Math.round(v * scale))
+                values: baselineCurve.map((v) => Math.round(v * scale))
             };
         }
 
@@ -553,9 +564,11 @@ export function applyPerChannelLinearizationStep(values, options = {}) {
     const domainMin = typeof normalizedEntry.domainMin === 'number' ? normalizedEntry.domainMin : 0;
     const domainMax = typeof normalizedEntry.domainMax === 'number' ? normalizedEntry.domainMax : 1;
 
-    const previewSmoothing = typeof normalizedEntry.previewSmoothingPercent === 'number'
-        ? normalizedEntry.previewSmoothingPercent
-        : smoothingPercent;
+    const effectiveSmoothing = Number.isFinite(smoothingPercent)
+        ? smoothingPercent
+        : (typeof normalizedEntry.previewSmoothingPercent === 'number'
+            ? normalizedEntry.previewSmoothingPercent
+            : 0);
 
     captureMake256Step(channelName, 'per_baseValues', values);
 
@@ -575,7 +588,7 @@ export function applyPerChannelLinearizationStep(values, options = {}) {
         domainMax,
         endValue,
         interpolationType,
-        previewSmoothing
+        effectiveSmoothing
     );
 
     captureMake256Step(channelName, 'per_afterApply1DLUT', result);
@@ -591,7 +604,7 @@ export function applyPerChannelLinearizationStep(values, options = {}) {
             first: lutSource.samples[0],
             mid: lutSource.samples[Math.floor(lutSource.samples.length / 2)],
             last: lutSource.samples[lutSource.samples.length - 1],
-            previewSmoothing
+            effectiveSmoothing
         });
     }
 
@@ -639,12 +652,14 @@ export function applyGlobalLinearizationStep(values, options = {}) {
 
     const domainMin = typeof normalizedEntry.domainMin === 'number' ? normalizedEntry.domainMin : 0;
     const domainMax = typeof normalizedEntry.domainMax === 'number' ? normalizedEntry.domainMax : 1;
-    const previewSmoothing = typeof normalizedEntry.previewSmoothingPercent === 'number'
-        ? normalizedEntry.previewSmoothingPercent
-        : smoothingPercent;
+    const effectiveSmoothing = Number.isFinite(smoothingPercent)
+        ? smoothingPercent
+        : (typeof normalizedEntry.previewSmoothingPercent === 'number'
+            ? normalizedEntry.previewSmoothingPercent
+            : 0);
 
     let lutSource = normalizedEntry;
-    if (previewSmoothing > 0 && Array.isArray(normalizedEntry.baseSamples)) {
+    if (effectiveSmoothing > 0 && Array.isArray(normalizedEntry.baseSamples)) {
         lutSource = {
             ...normalizedEntry,
             samples: normalizedEntry.baseSamples.slice()
@@ -658,7 +673,7 @@ export function applyGlobalLinearizationStep(values, options = {}) {
         domainMax,
         endValue,
         interpolationType,
-        previewSmoothing
+        effectiveSmoothing
     );
 }
 
@@ -728,7 +743,7 @@ export function make256(endValue, channelName, applyLinearization = false, optio
         }
 
         // Build base curve
-        const base = buildBaseCurve(endValue, channelName, smartApplied);
+        const base = buildBaseCurve(endValue, channelName, smartApplied, opts);
         if (base.shortCircuit) {
             return base.values;
         }
