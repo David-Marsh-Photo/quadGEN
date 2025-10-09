@@ -7,8 +7,13 @@ export const LAB_NORMALIZATION_MODES = Object.freeze({
     DENSITY: 'density'
 });
 
+export const DEFAULT_LAB_SMOOTHING_PERCENT = 50;
+
+const SMOOTHING_STORAGE_KEY = 'quadgen.labSmoothingPercent';
+
 const STORAGE_KEY = 'quadgen.labNormalizationMode';
 const listeners = new Set();
+const smoothingListeners = new Set();
 
 function sanitizeMode(mode) {
     return mode === LAB_NORMALIZATION_MODES.DENSITY ? LAB_NORMALIZATION_MODES.DENSITY : LAB_NORMALIZATION_MODES.LSTAR;
@@ -28,6 +33,28 @@ function loadInitialMode() {
 
 let currentMode = loadInitialMode();
 
+function sanitizeSmoothingPercent(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) {
+        return DEFAULT_LAB_SMOOTHING_PERCENT;
+    }
+    return Math.max(0, Math.min(300, Math.round(numeric)));
+}
+
+function loadInitialSmoothingPercent() {
+    try {
+        const stored = typeof localStorage !== 'undefined' ? localStorage.getItem(SMOOTHING_STORAGE_KEY) : null;
+        if (stored == null) {
+            return DEFAULT_LAB_SMOOTHING_PERCENT;
+        }
+        return sanitizeSmoothingPercent(stored);
+    } catch (error) {
+        return DEFAULT_LAB_SMOOTHING_PERCENT;
+    }
+}
+
+let currentSmoothingPercent = loadInitialSmoothingPercent();
+
 function persistMode() {
     try {
         if (typeof localStorage !== 'undefined') {
@@ -38,12 +65,32 @@ function persistMode() {
     }
 }
 
+function persistSmoothingPercent() {
+    try {
+        if (typeof localStorage !== 'undefined') {
+            localStorage.setItem(SMOOTHING_STORAGE_KEY, String(currentSmoothingPercent));
+        }
+    } catch (error) {
+        // Ignore storage failures
+    }
+}
+
 function notify(mode) {
     listeners.forEach((listener) => {
         try {
             listener(mode);
         } catch (error) {
             console.warn('[lab-settings] listener error:', error);
+        }
+    });
+}
+
+function notifySmoothing(percent) {
+    smoothingListeners.forEach((listener) => {
+        try {
+            listener(percent);
+        } catch (error) {
+            console.warn('[lab-settings] smoothing listener error:', error);
         }
     });
 }
@@ -82,12 +129,46 @@ export function subscribeLabNormalizationMode(listener) {
     };
 }
 
+export function getLabSmoothingPercent() {
+    return currentSmoothingPercent;
+}
+
+export function getLabWidenFactor() {
+    return 1 + (currentSmoothingPercent / 100);
+}
+
+export function setLabSmoothingPercent(percent) {
+    const sanitized = sanitizeSmoothingPercent(percent);
+    if (sanitized === currentSmoothingPercent) {
+        return currentSmoothingPercent;
+    }
+    currentSmoothingPercent = sanitized;
+    persistSmoothingPercent();
+    notifySmoothing(currentSmoothingPercent);
+    return currentSmoothingPercent;
+}
+
+export function subscribeLabSmoothingPercent(listener) {
+    if (typeof listener !== 'function') {
+        return () => {};
+    }
+    smoothingListeners.add(listener);
+    return () => {
+        smoothingListeners.delete(listener);
+    };
+}
+
 registerDebugNamespace('labSettings', {
     getLabNormalizationMode,
     setLabNormalizationMode,
     toggleLabNormalizationMode,
     isDensityNormalizationEnabled,
-    LAB_NORMALIZATION_MODES
+    LAB_NORMALIZATION_MODES,
+    getLabSmoothingPercent,
+    setLabSmoothingPercent,
+    subscribeLabSmoothingPercent,
+    getLabWidenFactor,
+    DEFAULT_LAB_SMOOTHING_PERCENT
 }, {
     exposeOnWindow: typeof window !== 'undefined',
     windowAliases: ['setLabNormalizationMode', 'toggleLabNormalizationMode']

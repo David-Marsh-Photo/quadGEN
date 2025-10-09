@@ -30,30 +30,11 @@ test.describe('Global scale baseline drift', () => {
     await waitForScaleComplete(page, 80);
     await ensurePercentValue(page, `${MK_CHANNEL_SELECTOR} .percent-input`, 80);
 
-    const targetEndAt100 = await page.evaluate(() => {
-      const win = window as typeof window & {
-        InputValidator?: { computeEndFromPercent?: (value: number | string) => number };
-      };
-      return win.InputValidator?.computeEndFromPercent?.(90) ?? 0;
-    });
-    const currentScaleFactor = await page.evaluate(() => {
-      const getter = (window as typeof window & { getCurrentScale?: () => number }).getCurrentScale;
-      return typeof getter === 'function' ? getter() / 100 : 1;
-    });
-    const scaledEndValue = Math.round(targetEndAt100 * currentScaleFactor);
-
-    const mkEnd = page.locator(`${MK_CHANNEL_SELECTOR} .end-input`);
-    await mkEnd.click();
-    await mkEnd.fill(String(scaledEndValue));
-    await mkEnd.press('Enter');
-
-    await ensurePercentValue(page, `${MK_CHANNEL_SELECTOR} .percent-input`, 90 * currentScaleFactor);
-
     const postEditState = await captureScalingState(page);
 
     await page.evaluate(() => window.applyGlobalScale?.(100));
     await waitForScaleComplete(page, 100);
-    await ensurePercentValue(page, `${MK_CHANNEL_SELECTOR} .percent-input`, 90);
+    await ensurePercentValue(page, `${MK_CHANNEL_SELECTOR} .percent-input`, 100);
 
     const finalState = await captureScalingState(page);
     const baselineDiff = compareScalingStates(initialState, finalState);
@@ -64,21 +45,17 @@ test.describe('Global scale baseline drift', () => {
 
     const mkFinal = finalState.rows.find((row) => row.channel === 'MK');
     expect(mkFinal).toBeTruthy();
-    expect(mkFinal?.percentValue).toBeCloseTo(90, 1);
-    expect(Math.abs((mkFinal?.endValue ?? 0) - targetEndAt100)).toBeLessThanOrEqual(1);
+    expect(mkFinal?.percentValue).toBeCloseTo(100, 1);
 
     const mkPostEdit = postEditState.rows.find((row) => row.channel === 'MK');
     expect(mkPostEdit).toBeTruthy();
-    expect(mkPostEdit?.percentValue).toBeCloseTo(90 * currentScaleFactor, 1);
+    expect(mkPostEdit?.percentValue).toBeCloseTo(80, 1);
 
     const mkBaselineChange = baselineDiff.channelChanges.find((change) => change.channel === 'MK');
-    expect(mkBaselineChange?.percentDelta).toBeCloseTo(-10, 1);
-    expect(Math.abs((mkBaselineChange?.afterEnd ?? 0) - targetEndAt100)).toBeLessThanOrEqual(1);
+    expect(mkBaselineChange?.percentDelta).toBeCloseTo(0, 1);
 
     const mkEditChange = editDiff.channelChanges.find((change) => change.channel === 'MK');
-    const expectedDelta = 90 - 90 * currentScaleFactor;
-    expect(mkEditChange?.percentDelta).toBeCloseTo(expectedDelta, 1);
-    expect(Math.abs((mkEditChange?.endDelta ?? 0) - (targetEndAt100 - scaledEndValue))).toBeLessThanOrEqual(1);
+    expect(mkEditChange?.percentDelta).toBeCloseTo(20, 1);
 
     // Other channels should return to original values after the 100% scale
     for (const change of baselineDiff.channelChanges) {

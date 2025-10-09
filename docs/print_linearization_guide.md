@@ -7,7 +7,7 @@ Define a repeatable method to turn **measured L*** values from a printed step‑
 ## Workflow (concise)
 1. **Print** a step‑wedge with known nominal inputs (e.g., 0, 5, …, 100%).
 2. **Measure** each patch’s **L*** with a device (e.g., Color Muse, i1Pro2).
-3. **Choose normalization**: by default quadGEN normalizes directly in L*, preserving perceptual midpoints. Enable “Use log-density for LAB / Manual measurements” when you need optical density (\(D = -\log_{10}(Y)\), normalized so 0 ↔ paper white, 1 ↔ densest patch) for through-light workflows.
+3. **Choose normalization**: by default quadGEN normalizes directly in L*, preserving perceptual midpoints. Enable “Use log-density for LAB / Manual measurements” from the ⚙️ Options panel (or within the Manual L* modal) when you need optical density (\(D = -\log_{10}(Y)\), normalized so 0 ↔ paper white, 1 ↔ densest patch) for through-light workflows.
 4. **Compute target**: whichever space you selected, aim for a straight line (0→1 across 0→100% input), optionally shaped by contrast intent presets.
 5. **Build correction** by **inverting** the measured curve in that space to map nominal input to the adjusted input that hits the linear target.
 6. **Apply** the correction as a 1D LUT (e.g., 256 samples) during printing.
@@ -28,7 +28,7 @@ In practice (discrete, noisy data), we:
 ### Density mapping (opt-in)
 Enabling the log-density toggle converts measurements to **relative optical density** before interpolation:
 \[ Y = f_{\text{CIE}}(L^*), \quad D = -\log_{10}(Y), \quad D_{rel} = \frac{D - \min(D)}{\max(D) - \min(D)}. \]
-Density emphasizes deep-shadow separation and matches QuadToneRIP’s digital-negative workflows. Leave the toggle off to stay in L* when calibrating direct positive prints. The checkbox lives in the Global Correction panel (for file imports) and inside the Manual L* modal.
+Density emphasizes deep-shadow separation and matches QuadToneRIP’s digital-negative workflows. Leave the toggle off to stay in L* when calibrating direct positive prints. The checkbox lives in the ⚙️ Options panel (for file imports) and inside the Manual L* modal.
 
 ## Algorithm (implementation notes)
 - Use **monotone interpolation**; if data are noisy, smooth minimally.
@@ -113,6 +113,7 @@ def build_correction(xs, Ls, use_density=False):
     inv_x[0] = 0.0
     inv_x[-1] = 100.0
     # Optional: slight smoothing to remove stair-steps while preserving monotonicity
+    # quadGEN now applies a 50% (≈1.5× sigma) smoothing profile by default when rebuilding LAB data; adjust it in the Options panel if needed.
     # Here we just clip to be non-decreasing
     inv_x = np.maximum.accumulate(inv_x)
 

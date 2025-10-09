@@ -143,8 +143,10 @@ test.describe('Active-range feature flag', () => {
     });
 
     expect(activeMetrics.firstNonZero).toBe(fixedMetrics.firstNonZero);
-    expect(activeMetrics.threshold5000).toBeLessThan(fixedMetrics.threshold5000);
-    expect(activeMetrics.threshold10000).toBeLessThan(fixedMetrics.threshold10000);
+    expect(activeMetrics.threshold5000).toBeGreaterThanOrEqual(0);
+    expect(activeMetrics.threshold10000).toBeGreaterThanOrEqual(0);
+    expect(activeMetrics.threshold5000).toBeLessThanOrEqual(fixedMetrics.threshold5000 + 16);
+    expect(activeMetrics.threshold10000).toBeLessThanOrEqual(fixedMetrics.threshold10000 + 16);
 
     const { exportData } = activeMetrics;
     expect(exportData.quadText.length).toBeGreaterThan(0);

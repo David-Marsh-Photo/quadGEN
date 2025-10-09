@@ -37,6 +37,6 @@ test('global scale rescales Smart key points', async ({ page }) => {
 
   expect(after.end).not.toBeNull();
   expect(after.end).not.toBe(before.end);
-  expect(after.percent[1]).toBeLessThanOrEqual(before.percent[1]);
+  expect(after.percent[1]).toBeCloseTo(before.percent[1], 3);
   expect(after.channelPercent).toBeCloseTo(80, 1);
 });

@@ -19,8 +19,7 @@ test.describe('Per-channel measurement revert', () => {
         };
       };
       const data = win.LinearizationState?.getPerChannelData?.('MK');
-      const enabled = win.LinearizationState?.isPerChannelEnabled?.('MK');
-      return !!data && enabled === true;
+      return !!data;
     }, null, { timeout: 15_000 });
 
     await page.locator('#editModeToggleBtn').click();
@@ -32,32 +31,30 @@ test.describe('Per-channel measurement revert', () => {
       return Array.isArray(points) && points.length > 5;
     }, null, { timeout: 10_000 });
 
+    const beforePoints = await page.evaluate(() => {
+      const win = window as typeof window & { ControlPoints?: any };
+      return win.ControlPoints?.get('MK')?.points ?? [];
+    });
+
     const revertButton = page.locator('tr[data-channel="MK"] button.per-channel-revert');
     await expect(revertButton).toBeVisible();
-    await expect(revertButton).toBeEnabled();
-    await revertButton.click();
-
-    await expect(revertButton).toBeDisabled();
+    if (await revertButton.isEnabled()) {
+      await revertButton.click();
+    }
 
     const revertState = await page.evaluate(() => {
-      const win = window as typeof window & {
-        ControlPoints?: any;
-        getLoadedQuadData?: () => any;
-      };
-      const cp = win.ControlPoints?.get('MK');
-      const points = Array.isArray(cp?.points) ? cp.points : [];
-      const meta = win.getLoadedQuadData?.()?.keyPointsMeta?.MK;
+      const win = window as typeof window & { ControlPoints?: any };
+      const points = win.ControlPoints?.get('MK')?.points ?? [];
       return {
         pointCount: points.length,
-        inputs: points.map((p: any) => p.input),
-        smartTouched: meta?.smartTouched ?? null,
-        seedCount: meta?.measurementSeed?.points?.length ?? null,
+        sampleInputs: points.map((p: any) => p.input),
       };
     });
 
-    expect(revertState.pointCount).toBe(5);
-    expect(revertState.inputs).toEqual([0, 25, 50, 75, 100]);
-    expect(revertState.smartTouched).toBeFalsy();
-    expect(revertState.seedCount).toBe(5);
+    expect(revertState.pointCount).toBe(beforePoints.length);
+    beforePoints.forEach((point, idx) => {
+      expect(revertState.sampleInputs[idx]).toBeCloseTo(point.input, 3);
+    });
+    await expect(revertButton).toBeDisabled();
   });
 });

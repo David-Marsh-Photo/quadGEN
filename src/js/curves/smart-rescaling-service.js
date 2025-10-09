@@ -45,7 +45,8 @@ function enforceMonotonicOutputs(points) {
   return points;
 }
 
-export function normalizeKeyPoints(points) {
+export function normalizeKeyPoints(points, options = {}) {
+  const enforceMonotonic = options.enforceMonotonic !== false;
   if (!Array.isArray(points) || points.length === 0) {
     return [];
   }
@@ -86,7 +87,9 @@ export function normalizeKeyPoints(points) {
   }
 
   enforceStrictlyIncreasingInputs(deduped);
-  enforceMonotonicOutputs(deduped);
+  if (enforceMonotonic) {
+    enforceMonotonicOutputs(deduped);
+  }
 
   return deduped.map((point) => ({
     input: Number(point.input.toFixed(6)),
@@ -157,7 +160,8 @@ export function rescaleKeyPointsForInkLimit(channelName, fromPercent, toPercent,
     return { ...result, error: 'Cannot rescale when previous percent is zero' };
   }
 
-  const baseNormalized = normalizeKeyPoints(points);
+  const enforceMonotonic = mode !== 'preserveRelative';
+  const baseNormalized = normalizeKeyPoints(points, { enforceMonotonic });
   if (baseNormalized.length < 2) {
     return { ...result, error: 'Normalized key points must contain at least two entries' };
   }
@@ -181,7 +185,7 @@ export function rescaleKeyPointsForInkLimit(channelName, fromPercent, toPercent,
       };
     });
 
-    const normalizedScaled = normalizeKeyPoints(scaled);
+    const normalizedScaled = normalizeKeyPoints(scaled, { enforceMonotonic: true });
 
     if (normalizedScaled.length < 2) {
       return { ...result, error: 'Rescaled key points collapsed below minimum count' };

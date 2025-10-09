@@ -244,6 +244,8 @@ function setSelectedOrdinalState(ordinal) {
 let EDIT_CONTROLS_BOUND = false;
 let EDIT_DROPDOWN_BOUND = false;
 const DIRECT_SEED_LAB_MAX_POINTS = 64;
+const MEASUREMENT_ADAPTIVE_ERROR = 0.1;
+const MEASUREMENT_ADAPTIVE_MAX_POINTS = 42;
 
 function resolveMake256Helper() {
     try {
@@ -1007,6 +1009,7 @@ export function reinitializeChannelSmartCurves(channelName, options = {}) {
                             const outputPercent = Math.max(0, Math.min(100, (curveValue / TOTAL) * 100));
                             return { input: inputPercent, output: outputPercent };
                         });
+                        keyPointsAreRelative = false;
 
                         seedMeta = {
                             measurementSeed: {
@@ -1028,40 +1031,89 @@ export function reinitializeChannelSmartCurves(channelName, options = {}) {
             }
         } else if (hasMeasurementData && LinearizationState.globalApplied) {
             const DIRECT_SEED_MAX_POINTS = 25;
-            const globalOriginalPoints = Array.isArray(globalEntry?.originalData)
-                ? globalEntry.originalData.slice(0, DIRECT_SEED_LAB_MAX_POINTS)
-                : null;
 
-            if (globalOriginalPoints && globalOriginalPoints.length > 0 &&
-                globalOriginalPoints.length <= DIRECT_SEED_MAX_POINTS) {
-                console.log(`[EDIT MODE] 🎯 Directly mapping ${globalOriginalPoints.length} global measurement points for ${channelName}`);
-
+            if (globalEntry && Array.isArray(globalEntry.originalData) &&
+                globalEntry.originalData.length > 0) {
+                const measurementCount = globalEntry.originalData.length;
                 const TOTAL = 65535;
-                const values = sampleLinearizedCurve(channelName, endValue, true);
+                const curveValues = sampleLinearizedCurve(channelName, endValue, true);
 
-                if (values && values.length === 256) {
-                    const lastIndex = values.length - 1;
-                    keyPoints = globalOriginalPoints.map(point => {
-                        const rawInput = Number(point.input ?? point.GRAY ?? point.gray ?? point.Gray ?? 0);
-                        const inputPercent = Math.max(0, Math.min(100, rawInput));
-                        const t = (inputPercent / 100) * lastIndex;
+                if (curveValues && curveValues.length === 256) {
+                    const curveArray = Array.from(curveValues);
+                    const lastIndex = curveArray.length - 1;
+
+                    const sampleCurvePercent = (inputPercent) => {
+                        const clampedInput = Math.max(0, Math.min(100, inputPercent));
+                        const t = (clampedInput / 100) * lastIndex;
                         const i0 = Math.floor(t);
                         const i1 = Math.min(lastIndex, Math.ceil(t));
                         const alpha = t - i0;
-                        const curveValue = (1 - alpha) * values[i0] + alpha * values[i1];
-                        const outputPercent = Math.max(0, Math.min(100, (curveValue / TOTAL) * 100));
-                        return { input: inputPercent, output: outputPercent };
+                        const curveValue = (1 - alpha) * curveArray[i0] + alpha * curveArray[i1];
+                        const absolutePercent = TOTAL > 0 ? (curveValue / TOTAL) * 100 : 0;
+                        return Math.max(0, Math.min(100, absolutePercent));
+                    };
+
+                    const measurementPoints = globalEntry.originalData.map((point) => {
+                        const rawInput = Number(point.input ?? point.GRAY ?? point.gray ?? point.Gray ?? 0);
+                        const inputPercent = Math.max(0, Math.min(100, rawInput));
+                        const outputPercent = sampleCurvePercent(inputPercent);
+                        const entry = {
+                            input: inputPercent,
+                            output: outputPercent
+                        };
+                        if (typeof point.LAB_L === 'number') {
+                            entry.labL = point.LAB_L;
+                        }
+                        return entry;
                     });
 
-                    seedMeta = {
-                        measurementSeed: {
-                            scope: 'global',
-                            format: globalFormat,
-                            count: globalEntry.originalData.length || 0
+                    if (measurementCount <= DIRECT_SEED_MAX_POINTS) {
+                        console.log(`[EDIT MODE] 🎯 Directly mapping ${measurementCount} global measurement points for ${channelName}`);
+                        keyPoints = measurementPoints;
+                        seedMeta = {
+                            measurementSeed: {
+                                scope: 'global',
+                                format: globalFormat,
+                                count: measurementCount,
+                                originalPoints: measurementPoints
+                            }
+                        };
+                    } else {
+                        const targetPoints = Math.max(25, Math.min(100, curveArray.length));
+                        const uniformPoints = [];
+                        for (let i = 0; i < targetPoints; i += 1) {
+                            const input = targetPoints === 1 ? 0 : (i / (targetPoints - 1)) * 100;
+                            const indexFloat = targetPoints === 1 ? 0 : (i / (targetPoints - 1)) * lastIndex;
+                            const idx0 = Math.floor(indexFloat);
+                            const idx1 = Math.min(lastIndex, Math.ceil(indexFloat));
+                            const t = indexFloat - idx0;
+                            const value0 = curveArray[idx0] ?? 0;
+                            const value1 = curveArray[idx1] ?? value0;
+                            const blended = ((1 - t) * value0) + (t * value1);
+                            const relativeOutput = endValue > 0 ? (blended / endValue) * 100 : 0;
+                            uniformPoints.push({
+                                input,
+                                output: Math.max(0, Math.min(100, relativeOutput))
+                            });
                         }
-                    };
+
+                        keyPoints = uniformPoints;
+                        seedMeta = {
+                            measurementSeed: {
+                                scope: 'global',
+                                format: globalFormat,
+                                count: measurementCount,
+                                originalPoints: measurementPoints
+                            }
+                        };
+
+                        console.log(`[EDIT MODE] ✅ Extracted ${keyPoints.length} Smart key points for ${channelName} from corrected curve samples`);
+                        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                            console.log('[EDIT MODE] Global measurement fallback count (reinitialize)', keyPoints.length, channelName);
+                        }
+                    }
                 }
-            } else if (globalEntry && globalEntry.originalData &&
+            } else if (globalEntry &&
                 Array.isArray(globalEntry.originalData) &&
                 globalEntry.originalData.length <= DIRECT_SEED_MAX_POINTS &&
                 typeof globalEntry.getSmoothingControlPoints === 'function') {
@@ -1209,6 +1261,7 @@ function initializeEditModeForChannels() {
                 let keyPoints = null;
                 let seedMeta = null;
                 let bakedMetaPending = null;
+                let keyPointsAreRelative = false;
 
                 const channelRow = Array.from(elements.rows.children).find(tr =>
                     tr.getAttribute('data-channel') === channelName
@@ -1236,7 +1289,19 @@ function initializeEditModeForChannels() {
                     if (origPoints && origPoints.length > 0) {
                         const limited = origPoints.slice(0, DIRECT_SEED_LAB_MAX_POINTS);
 
-                        keyPoints = limited.map(point => {
+                        const adaptivePoints = extractAdaptiveKeyPointsFromValues(values, {
+                            maxErrorPercent: MEASUREMENT_ADAPTIVE_ERROR,
+                            maxPoints: MEASUREMENT_ADAPTIVE_MAX_POINTS,
+                            scaleMax: endValue > 0 ? endValue : TOTAL
+                        });
+
+                        keyPoints = adaptivePoints.map((pt) => ({
+                            input: Math.max(0, Math.min(100, Number(pt.input))),
+                            output: Math.max(0, Math.min(100, Number(pt.output)))
+                        }));
+                        keyPointsAreRelative = true;
+
+                        const measurementPoints = limited.map((point) => {
                             const rawInput = Number(point.input ?? point.GRAY ?? point.gray ?? point.Gray ?? 0);
                             const inputPercent = Math.max(0, Math.min(100, rawInput));
                             const t = (inputPercent / 100) * lastIndex;
@@ -1245,7 +1310,6 @@ function initializeEditModeForChannels() {
                             const alpha = t - i0;
                             const curveValue = (1 - alpha) * values[i0] + alpha * values[i1];
                             const outputPercent = Math.max(0, Math.min(100, (curveValue / TOTAL) * 100));
-
                             return {
                                 input: inputPercent,
                                 output: outputPercent
@@ -1256,139 +1320,176 @@ function initializeEditModeForChannels() {
                             measurementSeed: {
                                 scope: 'per',
                                 format: perFormat,
-                                count: perChannelData.originalData.length || 0
+                                count: perChannelData.originalData.length || 0,
+                                originalPoints: measurementPoints
                             }
                         };
 
-                        console.log(`[EDIT MODE] ✅ Directly mapped ${keyPoints.length} measurement points for ${channelName}`);
+                        console.log(`[EDIT MODE] ✅ Adaptive per-channel measurement points for ${channelName} (${keyPoints.length})`);
                     } else {
-                        keyPoints = extractAdaptiveKeyPointsFromValues(values, {
-                            maxErrorPercent: 0.25,
-                            maxPoints: 21
+                        const adaptivePoints = extractAdaptiveKeyPointsFromValues(values, {
+                            maxErrorPercent: MEASUREMENT_ADAPTIVE_ERROR,
+                            maxPoints: MEASUREMENT_ADAPTIVE_MAX_POINTS,
+                            scaleMax: endValue > 0 ? endValue : TOTAL
                         });
+                        keyPoints = adaptivePoints.map((pt) => ({
+                            input: Math.max(0, Math.min(100, Number(pt.input))),
+                            output: Math.max(0, Math.min(100, Number(pt.output)))
+                        }));
+                        keyPointsAreRelative = true;
                         console.log(`[EDIT MODE] ✅ Created ${keyPoints.length} adaptive key points for ${channelName} from measurement curve`);
                     }
                 }
-            } else if (hasMeasurementData && LinearizationState.globalApplied) {
-                // Check if global linearization has original measurement data for direct seeding
-                const DIRECT_SEED_MAX_POINTS = 25; // Legacy quadgen.html constant
+        } else if (hasMeasurementData && LinearizationState.globalApplied) {
+            // Check if global linearization has original measurement data for direct seeding
+            const DIRECT_SEED_MAX_POINTS = 25; // Legacy quadgen.html constant
 
-                if (globalData && Array.isArray(globalData.originalData) &&
-                    globalData.originalData.length > 0 &&
-                    globalData.originalData.length <= DIRECT_SEED_MAX_POINTS) {
+            if (globalData && Array.isArray(globalData.originalData) &&
+                globalData.originalData.length > 0) {
 
-                    console.log(`[EDIT MODE] 🎯 Direct seeding ${channelName} from ${globalData.originalData.length} global measurement points`);
-                    console.log('[EDIT MODE] 💡 This replicates legacy quadgen.html LAB → Smart Curves workflow');
+                const measurementCount = globalData.originalData.length;
+                const TOTAL = 65535;
+                const curveValues = sampleLinearizedCurve(channelName, endValue, true);
+                const normalizedSamples = Array.isArray(globalData.samples) ? globalData.samples : null;
 
-                    const TOTAL = 65535;
+                if (curveValues && curveValues.length === 256) {
+                    const curveArray = Array.from(curveValues);
+                    const lastIndex = curveArray.length - 1;
 
-                    const curveValues = sampleLinearizedCurve(channelName, endValue, true);
-                    const normalizedSamples = Array.isArray(globalData.samples) ? globalData.samples : null;
+                    const sampleCurvePercent = (inputPercent) => {
+                        const clampedInput = Math.max(0, Math.min(100, inputPercent));
+                        const t = (clampedInput / 100) * lastIndex;
+                        const i0 = Math.floor(t);
+                        const i1 = Math.min(lastIndex, Math.ceil(t));
+                        const alpha = t - i0;
+                        const curveValue = (1 - alpha) * curveArray[i0] + alpha * curveArray[i1];
+                        const absolutePercent = TOTAL > 0 ? (curveValue / TOTAL) * 100 : 0;
+                        return Math.max(0, Math.min(100, absolutePercent));
+                    };
 
-                    if (curveValues && curveValues.length === 256) {
-                        const curveArray = Array.from(curveValues);
-                        const lastIndex = curveArray.length - 1;
-
-                        const sampleCurvePercent = (inputPercent) => {
-                            const clampedInput = Math.max(0, Math.min(100, inputPercent));
-                            const t = (clampedInput / 100) * lastIndex;
-                            const i0 = Math.floor(t);
-                            const i1 = Math.min(lastIndex, Math.ceil(t));
-                            const alpha = t - i0;
-                            const curveValue = (1 - alpha) * curveArray[i0] + alpha * curveArray[i1];
-                            const absolutePercent = TOTAL > 0 ? (curveValue / TOTAL) * 100 : 0;
-                            return Math.max(0, Math.min(100, absolutePercent));
+                    const measurementPoints = globalData.originalData.map((d) => {
+                        const inputPercent = Math.max(0, Math.min(100, Number(d.input ?? d.GRAY ?? d.gray ?? 0)));
+                        const outputPercent = sampleCurvePercent(inputPercent);
+                        const entry = {
+                            input: inputPercent,
+                            output: outputPercent
                         };
 
-                        const adaptiveOptions = {
-                            maxErrorPercent: 0.0005,
-                            maxPoints: Math.max(32, Math.min(50, Math.ceil(curveArray.length / 4))),
-                            scaleMax: TOTAL
-                        };
-
-                        const measurementPoints = Array.isArray(globalData.originalData)
-                            ? globalData.originalData.map((d) => {
-                                const inputPercent = Math.max(0, Math.min(100, Number(d.input ?? d.GRAY ?? d.gray ?? 0)));
-                                const clampedPercent = sampleCurvePercent(inputPercent);
-                                const entry = {
-                                    input: inputPercent,
-                                    output: clampedPercent
-                                };
-
-                                if (typeof d.LAB_L === 'number') {
-                                    entry.labL = d.LAB_L;
-                                }
-
-                                return entry;
-                            })
-                            : [];
-
-                        keyPoints = extractAdaptiveKeyPointsFromValues(curveArray, adaptiveOptions).map((point) => {
-                            const input = Number(point.input);
-                            const output = Math.max(0, Math.min(100, sampleCurvePercent(input)));
-                            return { input, output };
-                        });
-
-                        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-                            console.log('[EDIT MODE] Global adaptive key points count', keyPoints.length, channelName);
+                        if (typeof d.LAB_L === 'number') {
+                            entry.labL = d.LAB_L;
                         }
 
-                        const bakedMeta = {
-                            scope: 'global',
-                            filename: globalData?.filename || getCurrentGlobalFilename(),
-                            pointCount: keyPoints.length,
-                            timestamp: Date.now()
-                        };
-                        bakedMetaPending = bakedMeta;
+                        return entry;
+                    });
+
+                    if (measurementCount <= DIRECT_SEED_MAX_POINTS) {
+                        console.log(`[EDIT MODE] 🎯 Direct seeding ${channelName} from ${measurementCount} global measurement points`);
+                        console.log('[EDIT MODE] 💡 This replicates legacy quadgen.html LAB → Smart Curves workflow');
+
+                        const adaptivePoints = extractAdaptiveKeyPointsFromValues(curveArray, {
+                            maxErrorPercent: 0.1,
+                            maxPoints: 42,
+                            scaleMax: endValue > 0 ? endValue : TOTAL
+                        });
+
+                        keyPoints = adaptivePoints.map((pt) => ({
+                            input: Math.max(0, Math.min(100, Number(pt.input))),
+                            output: Math.max(0, Math.min(100, Number(pt.output)))
+                        }));
+                        keyPointsAreRelative = true;
 
                         seedMeta = {
                             measurementSeed: {
                                 scope: 'global',
                                 format: globalFormat,
-                                count: globalData.originalData.length || 0,
+                                count: measurementCount,
+                                originalPoints: measurementPoints
+                            }
+                        };
+
+                        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                            console.log('[EDIT MODE] Global measurement adaptive count', keyPoints.length, channelName);
+                        }
+                    } else {
+                        const targetPoints = Math.max(25, Math.min(MEASUREMENT_ADAPTIVE_MAX_POINTS, curveArray.length));
+                        const uniformPoints = [];
+                        for (let i = 0; i < targetPoints; i += 1) {
+                            const input = targetPoints === 1 ? 0 : (i / (targetPoints - 1)) * 100;
+                            const indexFloat = targetPoints === 1 ? 0 : (i / (targetPoints - 1)) * lastIndex;
+                            const idx0 = Math.floor(indexFloat);
+                            const idx1 = Math.min(lastIndex, Math.ceil(indexFloat));
+                            const t = indexFloat - idx0;
+                            const value0 = curveArray[idx0] ?? 0;
+                            const value1 = curveArray[idx1] ?? value0;
+                            const blended = ((1 - t) * value0) + (t * value1);
+                            const relativeOutput = endValue > 0 ? (blended / endValue) * 100 : 0;
+                            uniformPoints.push({
+                                input,
+                                output: Math.max(0, Math.min(100, relativeOutput))
+                            });
+                        }
+
+                        keyPoints = uniformPoints;
+                        keyPointsAreRelative = true;
+                        bakedMetaPending = {
+                            scope: 'global',
+                            filename: globalData?.filename || getCurrentGlobalFilename(),
+                            pointCount: keyPoints.length,
+                            timestamp: Date.now()
+                        };
+
+                        seedMeta = {
+                            measurementSeed: {
+                                scope: 'global',
+                                format: globalFormat,
+                                count: measurementCount,
                                 originalPoints: measurementPoints
                             }
                         };
 
                         console.log(`[EDIT MODE] ✅ Extracted ${keyPoints.length} Smart key points for ${channelName} from corrected curve samples`);
-                    } else if (normalizedSamples && normalizedSamples.length === 256) {
-                        const Nvals = normalizedSamples.length - 1;
-                        keyPoints = globalData.originalData.map(d => {
-                            const inputPercent = Math.max(0, Math.min(100, Number(d.input ?? d.GRAY ?? d.gray ?? 0)));
-                            const t = (inputPercent / 100) * Nvals;
-                            const i0 = Math.floor(t);
-                            const i1 = Math.min(Nvals, Math.ceil(t));
-                            const a = t - i0;
-                            const vNorm = (1 - a) * normalizedSamples[i0] + a * normalizedSamples[i1];
-                            const outputValue = vNorm * endValue;
-                            const outputPercent = Math.max(0, Math.min(100, (outputValue / TOTAL) * 100));
-                            return { input: inputPercent, output: outputPercent };
-                        });
 
                         if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-                            console.log('[EDIT MODE] Global normalized key points count', keyPoints.length, channelName);
+                            console.log('[EDIT MODE] Global measurement fallback count', keyPoints.length, channelName);
                         }
-
-                        const bakedMeta = {
-                            scope: 'global',
-                            filename: globalData?.filename || getCurrentGlobalFilename(),
-                            pointCount: keyPoints.length,
-                            timestamp: Date.now()
-                        };
-                        bakedMetaPending = bakedMeta;
-
-                        seedMeta = {
-                            measurementSeed: {
-                                scope: 'global',
-                                format: globalFormat,
-                                count: globalData.originalData.length || 0
-                            }
-                        };
-
-                        console.log(`[EDIT MODE] ✅ Generated ${keyPoints.length} key points for ${channelName} using normalized measurement fallback`);
                     }
+                } else if (normalizedSamples && normalizedSamples.length === 256) {
+                    const Nvals = normalizedSamples.length - 1;
+                    keyPoints = globalData.originalData.map(d => {
+                        const inputPercent = Math.max(0, Math.min(100, Number(d.input ?? d.GRAY ?? d.gray ?? 0)));
+                        const t = (inputPercent / 100) * Nvals;
+                        const i0 = Math.floor(t);
+                        const i1 = Math.min(Nvals, Math.ceil(t));
+                        const a = t - i0;
+                        const vNorm = (1 - a) * normalizedSamples[i0] + a * normalizedSamples[i1];
+                        const outputValue = vNorm * endValue;
+                        const outputPercent = Math.max(0, Math.min(100, (outputValue / TOTAL) * 100));
+                        return { input: inputPercent, output: outputPercent };
+                    });
+
+                    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                        console.log('[EDIT MODE] Global normalized key points count', keyPoints.length, channelName);
+                    }
+
+                    bakedMetaPending = {
+                        scope: 'global',
+                        filename: globalData?.filename || getCurrentGlobalFilename(),
+                        pointCount: keyPoints.length,
+                        timestamp: Date.now()
+                    };
+
+                    seedMeta = {
+                        measurementSeed: {
+                            scope: 'global',
+                            format: globalFormat,
+                            count: measurementCount
+                        }
+                    };
+
+                    console.log(`[EDIT MODE] ✅ Generated ${keyPoints.length} key points for ${channelName} using normalized measurement fallback`);
                 }
-            } else {
+            }
+        } else {
                     // Fallback: extract key points from curve using algorithm
                     const channelRow = Array.from(elements.rows.children).find(tr =>
                         tr.getAttribute('data-channel') === channelName
@@ -1410,30 +1511,59 @@ function initializeEditModeForChannels() {
                 // Apply the key points if we have them
                 if (keyPoints && keyPoints.length >= 2) {
                     const channelPercentValid = Number.isFinite(channelPercent) && channelPercent > 0 ? channelPercent : null;
-                    const relativePoints = keyPoints.map((point) => {
-                        const absolute = Number(point.output);
-                        const relative = channelPercentValid
-                            ? (absolute / channelPercentValid) * 100
-                            : absolute;
+                   const seededFromMeasurement = !!(seedMeta && seedMeta.measurementSeed);
+                   const persistOptions = {
+                       ...(seedMeta || {}),
+                       channelPercentOverride: channelPercentValid,
+                       pointsAreRelative: true,
+                       skipUiRefresh: false,
+                       includeBakedFlags: true
+                   };
+
+                   const basePercent = channelPercentValid && channelPercentValid > 0
+                       ? channelPercentValid
+                       : null;
+
+                   const relativePoints = keyPoints.map((point) => {
+                       const absolute = Number(point.output);
+                       let relativeValue;
+                       if (persistOptions.pointsAreRelative) {
+                           if (keyPointsAreRelative) {
+                               relativeValue = absolute;
+                           } else if (basePercent) {
+                               relativeValue = (absolute / basePercent) * 100;
+                           } else {
+                               relativeValue = absolute;
+                           }
+                       } else {
+                           relativeValue = absolute;
+                       }
                         return {
                             input: Number(point.input),
-                            output: Math.max(0, Math.min(100, relative))
+                            output: Math.max(0, Math.min(100, relativeValue))
                         };
                     });
-                    const seededFromMeasurement = !!(seedMeta && seedMeta.measurementSeed);
+                   persistSmartPoints(channelName, relativePoints, 'smooth', persistOptions);
+                    let bakeMeta = null;
                     if (seededFromMeasurement) {
-                        bakedMetaPending = null;
+                        if (measurementContext?.scope === 'global') {
+                            const filename = (
+                                measurementContext?.data?.filename
+                                || LinearizationState.getGlobalData?.()?.filename
+                                || getCurrentGlobalFilename()
+                            ) || undefined;
+                            bakeMeta = {
+                                scope: 'global',
+                                filename,
+                                pointCount: relativePoints.length,
+                                timestamp: Date.now()
+                            };
+                        }
+                    } else if (bakedMetaPending) {
+                        bakeMeta = bakedMetaPending;
                     }
-                    const persistOptions = {
-                        ...(seedMeta || {}),
-                        channelPercentOverride: channelPercentValid,
-                        pointsAreRelative: true,
-                        skipUiRefresh: false,
-                        includeBakedFlags: !seededFromMeasurement
-                    };
-                    persistSmartPoints(channelName, relativePoints, 'smooth', persistOptions);
-                    if (!seededFromMeasurement && bakedMetaPending) {
-                        setGlobalBakedState(bakedMetaPending);
+                    if (bakeMeta) {
+                        setGlobalBakedState(bakeMeta);
                     }
                 } else {
                     // Final fallback: create simple linear points
@@ -1466,12 +1596,47 @@ function initializeEditModeForChannels() {
         }
     });
 
+    if (hasMeasurementData && LinearizationState.isGlobalEnabled?.()) {
+        try {
+            const globalData = LinearizationState.getGlobalData?.();
+            if (globalData) {
+                const firstChannel = enabledChannels[0] || null;
+                const pointCount = firstChannel
+                    ? (ControlPoints.get(firstChannel)?.points?.length || 0)
+                    : 0;
+                setGlobalBakedState({
+                    scope: 'global',
+                    filename: globalData.filename || getCurrentGlobalFilename(),
+                    pointCount,
+                    timestamp: Date.now()
+                }, { skipHistory: true });
+            }
+        } catch (err) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[EDIT MODE] Unable to mark global correction baked during initialization:', err);
+            }
+        }
+    }
+
     if (LinearizationState.isGlobalEnabled?.()) {
+        const loadedData = getLoadedQuadData?.() || null;
         enabledChannels.forEach((channelName) => {
+            const meta = loadedData?.keyPointsMeta?.[channelName] || {};
+            const hasMeasurementSeed = !!meta.measurementSeed;
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.log('[EDIT MODE] Simplify check', channelName, meta);
+            }
+            if (hasMeasurementSeed) {
+                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                    console.log('[EDIT MODE] Skipping Smart simplification for', channelName, 'due to measurement seed');
+                }
+                return;
+            }
             try {
                 simplifySmartKeyPointsFromCurve(channelName, {
                     maxErrorPercent: 0.05,
                     maxPoints: 50,
+                    minPoints: 20,
                     skipUiRefresh: true
                 });
             } catch (err) {
@@ -1802,7 +1967,8 @@ function handleRecompute() {
 
         const result = simplifySmartKeyPointsFromCurve(channelName, {
             maxErrorPercent: maxError,
-            maxPoints: maxPoints
+            maxPoints: maxPoints,
+            allowMeasurementResimplify: true
         });
 
         if (result.success) {

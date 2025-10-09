@@ -26,13 +26,13 @@ Curve Construction (Adaptive Gaussian reconstruction)
   - **Perceptual (default)**: `actual = (L^*_{\max} - L^*) / (L^*_{\max} - L^*_{\min})`.
   - **Log-density (toggle)**: convert to CIE luminance `Y`, optical density `Draw = −log10(clamp(Y, ε, 1))`, then normalize by dataset min/max `D = (Draw - \min(Draw)) / (\max(Draw) - \min(Draw))`.
 - Expected baseline is `x` in either case.
-- Compute per‑point correction `C = x − actual` and blend with an adaptive Gaussian kernel (σ(x) derived from median neighbor spacing). The kernel automatically smooths uneven data—no user slider required.
+- Compute per‑point correction `C = x − actual` and blend with an adaptive Gaussian kernel (σ(x) derived from median neighbor spacing). The kernel automatically smooths uneven data; the Options panel slider lets you widen or tighten the kernel (0–300 %).
 - Build 256 samples, clamping to [0,1] and pinning endpoints (samples[0]=0, samples[255]=1).
 - Output object:
   - `{ domainMin: 0, domainMax: 1, samples, originalData, originalSamples, format: 'LAB Data', getSmoothingControlPoints(%) }`
 
 Smoothing Control (pipeline hook)
-- `getSmoothingControlPoints(%)` remains available for tooling/tests. When invoked with `sp>0`, it widens the kernel (legacy 0.08→0.25 range) and emits a reduced control-point set. The main UI no longer exposes a smoothing slider; the adaptive kernel keeps curves stable out of the box.
+- `getSmoothingControlPoints(%)` remains available for tooling/tests. When invoked with `sp>0`, it widens the kernel (legacy 0.08→0.25 range) and emits a reduced control-point set. The Options panel slider writes the same parameter, so production users can dial in additional smoothing without leaving the UI.
 
 Implementation Notes
 - Only LAB_L is used; LAB_A/B are ignored for linearization.

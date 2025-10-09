@@ -90,7 +90,10 @@ Scope: This license applies to this HTML file (quadgen.html) only.
                 <option value="P4-6-8000">P4-6-8000</option>
               </select>
               <p id="channelInfo" class="flex-1 text-xs text-gray-600 ml-1"></p>
-              <button id="helpBtn" class="text-sm bg-blue-600 hover:bg-blue-700 text-white rounded px-3 py-1 transition-colors ml-auto font-bold" title="Help and quick start">
+              <button id="optionsBtn" class="text-sm bg-gray-100 hover:bg-gray-200 text-gray-800 rounded px-3 py-1 transition-colors ml-auto font-bold" title="Application options">
+                ⚙️ Options
+              </button>
+              <button id="helpBtn" class="text-sm bg-blue-600 hover:bg-blue-700 text-white rounded px-3 py-1 transition-colors font-bold" title="Help and quick start">
                 📖 Help
               </button>
               <button id="themeToggle" class="ml-2 text-sm rounded px-2 py-1 font-bold border border-gray-300 bg-white hover:bg-gray-50 transition-colors" title="Toggle dark mode" aria-pressed="false">🌙</button>
@@ -186,12 +189,6 @@ Scope: This license applies to this HTML file (quadgen.html) only.
               <button id="revertGlobalToMeasurementBtn" class="px-3 py-2 text-xs bg-slate-600 hover:bg-slate-700 text-white rounded transition-colors font-bold whitespace-nowrap shrink-0 inline-flex items-center disabled:opacity-50 disabled:cursor-not-allowed disabled:pointer-events-none" title="Revert to measurement source (global)" disabled>↺ Revert</button>
             </div>
             <p id="globalLinearizationHint" class="text-xs text-gray-500 mb-1">LUT (.cube), LAB data (.txt), or curves (.acv)</p>
-            <div class="flex items-center gap-2 text-xs text-gray-600 mb-2">
-              <label for="labDensityModeToggle" class="inline-flex items-center gap-2">
-                <input type="checkbox" id="labDensityModeToggle" class="h-3 w-3 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
-                <span>Use log-density for LAB / Manual measurements</span>
-              </label>
-            </div>
             <div id="globalLinearizationInfo" class="text-xs text-gray-600 mb-2 hidden">
               <span id="globalLinearizationFilename" class="font-medium"></span>
               <span id="globalLinearizationDetails" class="text-gray-500"></span>
@@ -238,7 +235,7 @@ Scope: This license applies to this HTML file (quadgen.html) only.
               </button>
               <button id="editModeHelpBtn" class="text-xs text-gray-400 hover:text-gray-600 bg-gray-100 hover:bg-gray-200 rounded px-2 py-1 transition-colors font-bold" title="Edit Mode Help" aria-label="Edit Mode Help">?</button>
             </div>
-            <div id="editPanelBody">
+            <div id="editPanelBody" class="pt-2">
 
             <!-- (Removed) Edit-panel smoothing: moved to Global Correction panel -->
 
@@ -411,7 +408,7 @@ Scope: This license applies to this HTML file (quadgen.html) only.
 
   <!-- Contrast Intent Modal -->
   <div id="intentModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
-    <div class="bg-white rounded-lg max-w-2xl w-full mx-4 max-h-[90vh] flex flex-col">
+    <div class="bg-white rounded-lg max-w-3xl w-full mx-4 max-h-[90vh] flex flex-col">
       <div class="p-5 pb-3 flex-shrink-0 flex items-center justify-between">
         <h3 class="text-lg font-semibold">Contrast Intent</h3>
         <button id="closeIntentModal" class="text-gray-500 hover:text-gray-700 text-xl">&times;</button>
@@ -629,6 +626,48 @@ Scope: This license applies to this HTML file (quadgen.html) only.
         <button id="helpTabHistory" class="px-3 py-1 text-sm font-bold text-gray-500 hover:text-gray-700 border-b-2 border-transparent ml-auto">Version History</button>
       </div>
       <div id="helpContent" class="text-sm text-gray-700 space-y-4 max-h-[70vh] overflow-y-auto"></div>
+    </div>
+  </div>
+
+  <!-- Options Modal -->
+  <div id="optionsModal" class="fixed inset-0 bg-black bg-opacity-30 hidden z-50 flex items-start justify-center md:justify-end px-4 py-8 md:py-16" role="dialog" aria-modal="true" aria-labelledby="optionsModalTitle">
+    <div class="bg-white border border-gray-200 rounded-xl shadow-2xl w-full max-w-[420px] max-h-[90vh] flex flex-col" data-options-panel>
+      <div class="px-4 py-3 border-b border-gray-200 flex items-center gap-3">
+        <h2 id="optionsModalTitle" class="text-sm font-semibold flex items-center gap-2 text-gray-900">
+          <span aria-hidden="true">⚙️</span>
+          <span>Options</span>
+        </h2>
+      </div>
+      <div id="optionsContent" class="flex-1 overflow-y-auto px-4 py-3 text-sm text-gray-700 space-y-3">
+        <div class="border border-gray-200 rounded-lg p-3 bg-gray-50 space-y-3">
+          <div class="flex items-start gap-3">
+            <button type="button" class="tooltip-trigger mt-0.5 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-200 text-xs font-semibold text-gray-400 hover:text-gray-600 hover:border-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" data-tooltip="Convert LAB measurements to optical density before computing corrections. Recommended for negatives or through-light workflows." aria-label="What does log-density normalization do?">
+              <span aria-hidden="true">?</span>
+            </button>
+            <label for="labDensityModeToggle" class="flex items-center gap-2 text-sm font-medium text-gray-800" aria-describedby="labDensityModeHelp">
+              <input type="checkbox" id="labDensityModeToggle" class="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500">
+              <span>Use log-density for LAB / Manual</span>
+            </label>
+          </div>
+          <span id="labDensityModeHelp" class="sr-only">Converts LAB measurements to optical density before computing corrections; recommended for negatives or through-light workflows. Leave unchecked for direct positive prints.</span>
+          <div class="space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <button type="button" class="tooltip-trigger inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-200 text-xs font-semibold text-gray-400 hover:text-gray-600 hover:border-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" data-tooltip="Adjust the Gaussian kernel width when rebuilding LAB/manual measurements. Higher values smooth noisy data; lower values follow the raw curve." aria-label="What does LAB smoothing change?">
+                  <span aria-hidden="true">?</span>
+                </button>
+                <span id="labSmoothingPercentLabel" class="text-sm font-medium text-gray-800">LAB smoothing</span>
+              </div>
+              <span id="labSmoothingPercentValue" class="text-sm font-semibold text-gray-900">50%</span>
+            </div>
+            <input type="range" id="labSmoothingPercentSlider" min="0" max="300" step="1" value="50" aria-labelledby="labSmoothingPercentLabel" aria-describedby="labSmoothingPercentHelp" class="w-full accent-blue-600">
+          </div>
+          <span id="labSmoothingPercentHelp" class="sr-only">Applies a Gaussian-widened smoothing pass from 0 to 300 percent. The default 50 percent balances smoothing against fidelity for typical highlight and shadow noise.</span>
+        </div>
+      </div>
+      <div class="px-4 py-3 border-t border-gray-200 flex justify-end">
+        <button id="closeOptionsBtn" class="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded font-bold">Close</button>
+      </div>
     </div>
   </div>
 

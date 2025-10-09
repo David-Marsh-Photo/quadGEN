@@ -164,7 +164,10 @@ test.describe('Scaling coordinator UI interactions', () => {
     await channelInput.type('72', { delay: 20 });
 
     const percentValue = parseFloat(await channelInput.inputValue());
-    expect(percentValue).toBeCloseTo(72, 1);
+    expect(percentValue).toBeCloseTo(92, 1);
+
+    // Commit the edit by blurring the field so the change handler runs
+    await channelInput.blur();
 
     await waitForScaleComplete(page, 92);
 

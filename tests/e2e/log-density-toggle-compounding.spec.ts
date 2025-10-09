@@ -23,6 +23,13 @@ test.describe('Log-density mode toggle', () => {
     });
 
     await page.goto(indexUrl);
+
+    const optionsButton = page.locator('#optionsBtn');
+    await optionsButton.click();
+
+    const optionsModal = page.locator('#optionsModal');
+    await expect(optionsModal).toBeVisible();
+
     await page.waitForSelector('#labDensityModeToggle', { timeout: 15000 });
 
     const initialDiagnostics = await page.evaluate(() => {

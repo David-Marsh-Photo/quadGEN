@@ -57,7 +57,7 @@ Summary: Build a smooth curve from the sparse measurements by blending nearby po
 ```
 
 ## 4) Optional Smoothing Path (Pipeline only)
-Summary: The LAB pipeline still exposes `getSmoothingControlPoints(sp)` for tooling/tests, but the main UI no longer surfaces a smoothing slider. The adaptive Gaussian kernel in §3 keeps curves stable without extra input.
+Summary: The LAB pipeline still exposes `getSmoothingControlPoints(sp)` for tooling/tests, and the Options panel now surfaces a LAB smoothing slider (0–300 %) that feeds the same widening logic described here. The adaptive Gaussian kernel in §3 keeps curves stable when left at the 50 % default.
 - Provider: `getSmoothingControlPoints(sp)` on the returned LAB object. When `sp>0`, it widens the blending radius and emits a smaller control-point set for interpolation consumers.
 - Dynamic radius (legacy defaults retained):
   - `baseRadius = 0.08`, `maxRadius = 0.25`

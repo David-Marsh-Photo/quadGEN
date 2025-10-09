@@ -33,7 +33,16 @@ import { showStatus } from './status-service.js';
 import { initializeHelpSystem } from './help-system.js';
 import { setPrinter, registerChannelRowSetup, syncPrinterForQuadData } from './printer-manager.js';
 import { make256 } from '../core/processing-pipeline.js';
-import { getLabNormalizationMode, setLabNormalizationMode, isDensityNormalizationEnabled, subscribeLabNormalizationMode, LAB_NORMALIZATION_MODES } from '../core/lab-settings.js';
+import {
+    getLabNormalizationMode,
+    setLabNormalizationMode,
+    isDensityNormalizationEnabled,
+    subscribeLabNormalizationMode,
+    LAB_NORMALIZATION_MODES,
+    getLabSmoothingPercent,
+    setLabSmoothingPercent,
+    subscribeLabSmoothingPercent
+} from '../core/lab-settings.js';
 import { rebuildLabSamplesFromOriginal } from '../data/lab-parser.js';
 import { isLabLinearizationData } from '../data/lab-legacy-bypass.js';
 
@@ -42,6 +51,7 @@ const isBrowser = typeof document !== 'undefined';
 
 let unsubscribeScalingStateInput = null;
 let unsubscribeLabNormalizationMode = null;
+let unsubscribeLabSmoothingPercent = null;
 let scalingStateFlagListenerAttached = false;
 let lastScalingStateValue = null;
 let scaleHandlerRetryCount = 0;
@@ -176,16 +186,33 @@ function syncLabNormalizationCheckboxes(mode = getLabNormalizationMode()) {
     }
 }
 
+function syncLabSmoothingControls(percent = getLabSmoothingPercent()) {
+    const numeric = Number(percent);
+    const clamped = Number.isFinite(numeric) ? Math.max(0, Math.min(300, Math.round(numeric))) : getLabSmoothingPercent();
+    if (elements.labSmoothingSlider) {
+        if (Number(elements.labSmoothingSlider.value) !== clamped) {
+            elements.labSmoothingSlider.value = String(clamped);
+        }
+    }
+    if (elements.labSmoothingValue) {
+        elements.labSmoothingValue.textContent = `${clamped}%`;
+    }
+}
+
 function rebuildLabEntryForNormalization(entry) {
     if (!entry || !Array.isArray(entry.originalData) || entry.originalData.length < 2) {
         return entry;
     }
 
     const mode = getLabNormalizationMode();
-    const baseSamples = rebuildLabSamplesFromOriginal(entry.originalData, {
+    const rawSamples = rebuildLabSamplesFromOriginal(entry.originalData, {
         normalizationMode: mode,
         skipDefaultSmoothing: true
     }) || entry.baseSamples || entry.samples;
+
+    const baseSamples = rebuildLabSamplesFromOriginal(entry.originalData, {
+        normalizationMode: mode
+    }) || rawSamples;
 
     const smoothingPercent = Number(entry.previewSmoothingPercent);
     const hasSmoothing = Number.isFinite(smoothingPercent) && smoothingPercent > 0;
@@ -201,7 +228,7 @@ function rebuildLabEntryForNormalization(entry) {
         ...entry,
         samples: baseSamples.slice(),
         baseSamples: baseSamples.slice(),
-        rawSamples: baseSamples.slice(),
+        rawSamples: rawSamples.slice(),
         previewSamples: previewSamples.slice()
     };
 
@@ -318,6 +345,7 @@ function refreshLinearizationDataForNormalization() {
 
 function initializeLabNormalizationHandlers() {
     syncLabNormalizationCheckboxes();
+    syncLabSmoothingControls();
 
     if (elements.labDensityToggle) {
         elements.labDensityToggle.addEventListener('change', (event) => {
@@ -333,6 +361,14 @@ function initializeLabNormalizationHandlers() {
         });
     }
 
+    if (elements.labSmoothingSlider) {
+        elements.labSmoothingSlider.addEventListener('input', (event) => {
+            const percent = Number(event.target.value);
+            const applied = setLabSmoothingPercent(percent);
+            syncLabSmoothingControls(applied);
+        });
+    }
+
     if (unsubscribeLabNormalizationMode) {
         unsubscribeLabNormalizationMode();
         unsubscribeLabNormalizationMode = null;
@@ -341,6 +377,18 @@ function initializeLabNormalizationHandlers() {
     unsubscribeLabNormalizationMode = subscribeLabNormalizationMode((mode) => {
         syncLabNormalizationCheckboxes(mode);
         refreshLinearizationDataForNormalization();
+    });
+
+    if (unsubscribeLabSmoothingPercent) {
+        unsubscribeLabSmoothingPercent();
+        unsubscribeLabSmoothingPercent = null;
+    }
+
+    unsubscribeLabSmoothingPercent = subscribeLabSmoothingPercent((percent) => {
+        syncLabSmoothingControls(percent);
+        refreshLinearizationDataForNormalization();
+        const widen = 1 + (Number(percent) / 100);
+        showStatus(`LAB smoothing set to ${percent}% (widen ≈ ${widen.toFixed(2)}×).`);
     });
 }
 
@@ -812,9 +860,9 @@ function initializeChannelRowHandlers() {
         const target = e.target;
 
         if (target.classList.contains('percent-input')) {
-            handlePercentInput(target);
+            handlePercentInput(target, { commit: false });
         } else if (target.classList.contains('end-input')) {
-            handleEndInput(target);
+            handleEndInput(target, { commit: false });
         }
     });
 
@@ -822,9 +870,9 @@ function initializeChannelRowHandlers() {
         const target = e.target;
 
         if (target.classList.contains('percent-input')) {
-            handlePercentInput(target);
+            handlePercentInput(target, { commit: true });
         } else if (target.classList.contains('end-input')) {
-            handleEndInput(target);
+            handleEndInput(target, { commit: true });
         }
     });
 
@@ -905,9 +953,64 @@ function ensureOriginalInkSnapshot(row, channelName) {
     }
 }
 
+function markPendingCommitHold(input, numericValue) {
+    if (!input) return;
+    input.dataset.pendingCommitValue = String(numericValue);
+    input.dataset.pendingCommitTimestamp = String(Date.now());
+}
+
+function clearPendingCommitHold(input) {
+    if (!input) return;
+    delete input.dataset.pendingCommitValue;
+    delete input.dataset.pendingCommitTimestamp;
+}
+
+function formatPercentDisplay(value) {
+    if (!Number.isFinite(value)) return '0';
+    const roundedInt = Math.round(value);
+    if (Math.abs(value - roundedInt) < 0.05) {
+        return String(roundedInt);
+    }
+    return Number(value.toFixed(1)).toString();
+}
+
+function resolvePendingCommitHold(input, computedValue, tolerance = 0.5) {
+    if (!input) {
+        return { hold: false, value: null };
+    }
+
+    if (input.dataset.userEditing === 'true') {
+        const current = Number(input.value);
+        return {
+            hold: true,
+            value: Number.isFinite(current) ? current : computedValue
+        };
+    }
+
+    const pendingValueRaw = input.dataset.pendingCommitValue;
+    if (pendingValueRaw == null) {
+        return { hold: false, value: null };
+    }
+
+    const pendingValue = Number(pendingValueRaw);
+    if (!Number.isFinite(pendingValue)) {
+        clearPendingCommitHold(input);
+        return { hold: false, value: null };
+    }
+
+    const delta = Math.abs(pendingValue - Number(computedValue));
+    if (delta <= tolerance) {
+        clearPendingCommitHold(input);
+        return { hold: false, value: null };
+    }
+
+    return { hold: true, value: pendingValue };
+}
+
 function refreshEffectiveInkDisplays() {
     if (!elements.rows) return;
     const rows = elements.rows.querySelectorAll('tr.channel-row[data-channel]');
+    const activeElement = typeof document !== 'undefined' ? document.activeElement : null;
     rows.forEach((row) => {
         const channelName = row.getAttribute('data-channel');
         if (!channelName) return;
@@ -915,7 +1018,14 @@ function refreshEffectiveInkDisplays() {
         const endInput = row.querySelector('.end-input');
         if (!percentInput || !endInput) return;
 
+        const percentActive = percentInput?.dataset.userEditing === 'true';
+        const endActive = endInput?.dataset.userEditing === 'true';
+
         ensureOriginalInkSnapshot(row, channelName);
+
+        if (percentActive || endActive) {
+            return;
+        }
 
         const basePercent = getBasePercentFromInput(percentInput);
         const baseEnd = getBaseEndFromInput(endInput);
@@ -923,10 +1033,25 @@ function refreshEffectiveInkDisplays() {
         if (baseEnd <= 0 || basePercent <= 0) {
             const clampedPercent = InputValidator.clampPercent(basePercent);
             const clampedEnd = InputValidator.clampEnd(baseEnd);
-            percentInput.value = clampedPercent.toFixed(1);
-            endInput.value = String(clampedEnd);
-            setBasePercentOnInput(percentInput, clampedPercent);
-            setBaseEndOnInput(endInput, clampedEnd);
+
+            const percentDecision = resolvePendingCommitHold(percentInput, clampedPercent, 0.01);
+            const endDecision = resolvePendingCommitHold(endInput, clampedEnd, 0.25);
+
+            const percentForState = Number.isFinite(percentDecision.value)
+                ? percentDecision.value
+                : clampedPercent;
+            const endForState = Number.isFinite(endDecision.value)
+                ? endDecision.value
+                : clampedEnd;
+
+            if (!percentActive && !percentDecision.hold) {
+                percentInput.value = formatPercentDisplay(percentForState);
+            }
+            if (!endActive && !endDecision.hold) {
+                endInput.value = String(Math.round(endForState));
+            }
+            setBasePercentOnInput(percentInput, percentForState);
+            setBaseEndOnInput(endInput, endForState);
             return;
         }
 
@@ -936,27 +1061,56 @@ function refreshEffectiveInkDisplays() {
             const effectiveEnd = InputValidator.clampEnd(Math.round(peakValue));
             const effectivePercent = InputValidator.computePercentFromEnd(effectiveEnd);
 
-            percentInput.value = effectivePercent.toFixed(1);
-            endInput.value = String(effectiveEnd);
+            const percentDecision = resolvePendingCommitHold(percentInput, effectivePercent, 0.01);
+            const endDecision = resolvePendingCommitHold(endInput, effectiveEnd, 0.25);
 
-            setBasePercentOnInput(percentInput, effectivePercent);
-            setBaseEndOnInput(endInput, effectiveEnd);
+            const percentForState = Number.isFinite(percentDecision.value)
+                ? percentDecision.value
+                : effectivePercent;
+            const endForState = Number.isFinite(endDecision.value)
+                ? endDecision.value
+                : effectiveEnd;
+
+            if (!percentActive && !percentDecision.hold) {
+                percentInput.value = formatPercentDisplay(percentForState);
+            }
+            if (!endActive && !endDecision.hold) {
+                endInput.value = String(Math.round(endForState));
+            }
+
+            setBasePercentOnInput(percentInput, percentForState);
+            setBaseEndOnInput(endInput, endForState);
 
             try {
                 const loadedData = ensureLoadedQuadData(() => ({ curves: {}, baselineEnd: {}, sources: {}, keyPoints: {}, keyPointsMeta: {}, rebasedCurves: {}, rebasedSources: {} }));
                 if (loadedData) {
+                    const originalCurve = Array.isArray(curveValues) ? curveValues.slice() : [];
+                    let normalizedCurve = originalCurve.slice();
+                    if (endDecision.hold && Array.isArray(normalizedCurve) && normalizedCurve.length) {
+                        const currentMax = Math.max(...normalizedCurve);
+                        const targetMax = Number.isFinite(endForState) ? endForState : currentMax;
+                        if (currentMax > 0 && Number.isFinite(targetMax) && targetMax >= 0 && Math.abs(currentMax - targetMax) > 0.25) {
+                            const scaleRatio = targetMax / currentMax;
+                            normalizedCurve = normalizedCurve.map((value) => {
+                                if (!Number.isFinite(value)) return 0;
+                                const scaled = value * scaleRatio;
+                                return Math.max(0, Math.min(TOTAL, Math.round(scaled)));
+                            });
+                        }
+                    }
+
                     loadedData.curves = loadedData.curves || {};
-                    loadedData.curves[channelName] = Array.isArray(curveValues) ? curveValues.slice() : curveValues;
+                    loadedData.curves[channelName] = normalizedCurve;
 
                     loadedData.baselineEnd = loadedData.baselineEnd || {};
-                    loadedData.baselineEnd[channelName] = effectiveEnd;
+                    loadedData.baselineEnd[channelName] = endForState;
 
                     loadedData.rebasedCurves = loadedData.rebasedCurves || {};
-                    loadedData.rebasedCurves[channelName] = Array.isArray(curveValues) ? curveValues.slice() : [];
+                    loadedData.rebasedCurves[channelName] = Array.isArray(normalizedCurve) ? normalizedCurve.slice() : [];
 
                     loadedData.rebasedSources = loadedData.rebasedSources || {};
                     if (!Array.isArray(loadedData.rebasedSources[channelName]) || !loadedData.rebasedSources[channelName].length) {
-                        loadedData.rebasedSources[channelName] = Array.isArray(curveValues) ? curveValues.slice() : [];
+                        loadedData.rebasedSources[channelName] = Array.isArray(normalizedCurve) ? normalizedCurve.slice() : [];
                     }
                 }
             } catch (stateErr) {
@@ -966,16 +1120,16 @@ function refreshEffectiveInkDisplays() {
             }
 
             if (typeof getStateManager === 'function') {
-                try {
-                    const manager = getStateManager();
-                    manager.setChannelValue(channelName, 'percentage', Number(effectivePercent));
-                    manager.setChannelValue(channelName, 'endValue', effectiveEnd);
-                    manager.setChannelEnabled(channelName, effectiveEnd > 0);
-                } catch (err) {
-                    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-                        console.warn('[INK DISPLAY] Failed to sync state for', channelName, err);
-                    }
+            try {
+                const manager = getStateManager();
+                manager.setChannelValue(channelName, 'percentage', Number(percentForState));
+                manager.setChannelValue(channelName, 'endValue', Math.round(endForState));
+                manager.setChannelEnabled(channelName, endForState > 0);
+            } catch (err) {
+                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                    console.warn('[INK DISPLAY] Failed to sync state for', channelName, err);
                 }
+            }
             }
         } catch (err) {
             if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
@@ -1006,7 +1160,9 @@ function rebaseChannelsToCorrectedCurves(channelNames = [], options = {}) {
     const updateQueue = [];
 
     const isGlobalSource = options.source === 'globalLoad' || options.source === 'globalToggle';
+    const globalAppliedState = typeof options.globalAppliedState === 'boolean' ? options.globalAppliedState : undefined;
     const useOriginalBaseline = !!options.useOriginalBaseline;
+    const skipScaleBaselineUpdate = !!options.skipScaleBaselineUpdate;
 
     channelNames.forEach((channelName) => {
         const row = getChannelRow(channelName);
@@ -1079,7 +1235,7 @@ function rebaseChannelsToCorrectedCurves(channelNames = [], options = {}) {
             perChannelDataEntry
         } = entry;
 
-        percentInput.value = effectivePercent.toFixed(1);
+        percentInput.value = formatPercentDisplay(effectivePercent);
         percentInput.setAttribute('data-base-percent', String(effectivePercent));
         InputValidator.clearValidationStyling(percentInput);
 
@@ -1101,7 +1257,9 @@ function rebaseChannelsToCorrectedCurves(channelNames = [], options = {}) {
             }
         }
 
-        updateScaleBaselineForChannelCore(channelName);
+        if (!skipScaleBaselineUpdate) {
+            updateScaleBaselineForChannelCore(channelName);
+        }
 
         if (options.source === 'perChannelLoad') {
             if (perChannelDataEntry) {
@@ -1144,13 +1302,24 @@ function rebaseChannelsToCorrectedCurves(channelNames = [], options = {}) {
 
     if (isGlobalSource) {
         try {
-            const globalData = LinearizationState.getGlobalData?.();
+            const currentGlobalData = LinearizationState.getGlobalData?.();
+            const shouldMarkApplied = globalAppliedState !== undefined ? globalAppliedState : true;
             if (globalData) {
-                globalData.applied = true;
+                globalData.applied = shouldMarkApplied;
             }
-            LinearizationState.globalApplied = true;
+            LinearizationState.globalApplied = shouldMarkApplied;
             if (manager) {
-                manager.set('linearization.global.applied', true, { skipHistory: true, allowDuringRestore: true });
+                manager.set('linearization.global.applied', shouldMarkApplied, { skipHistory: true, allowDuringRestore: true });
+            }
+            if (shouldMarkApplied && typeof LinearizationState.setGlobalCorrectedCurves === 'function') {
+                try {
+                    LinearizationState.setGlobalCorrectedCurves(loadedData.curves);
+                    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                        console.log('[INK REBASE] Captured corrected snapshot');
+                    }
+                } catch (snapshotErr) {
+                    console.warn('[INK REBASE] Failed to capture corrected snapshot:', snapshotErr);
+                }
             }
         } catch (err) {
             console.warn('[INK REBASE] Failed to ensure global applied state after rebase:', err);
@@ -1163,7 +1332,7 @@ function restoreChannelsToRebasedSources(channelNames = [], options = {}) {
         return [];
     }
 
-    const { skipRefresh = false } = typeof options === 'object' && options !== null ? options : {};
+    const { skipRefresh = false, skipScaleBaselineUpdate = false } = typeof options === 'object' && options !== null ? options : {};
 
     const loadedData = ensureLoadedQuadData(() => ({
         curves: {},
@@ -1200,7 +1369,7 @@ function restoreChannelsToRebasedSources(channelNames = [], options = {}) {
             const endInput = row.querySelector('.end-input');
 
             if (percentInput) {
-                percentInput.value = effectivePercent.toFixed(1);
+                percentInput.value = formatPercentDisplay(effectivePercent);
                 percentInput.setAttribute('data-base-percent', String(effectivePercent));
                 InputValidator.clearValidationStyling(percentInput);
             }
@@ -1234,11 +1403,45 @@ function restoreChannelsToRebasedSources(channelNames = [], options = {}) {
             }
         }
 
-        updateScaleBaselineForChannelCore(channelName);
+        if (!skipScaleBaselineUpdate) {
+            updateScaleBaselineForChannelCore(channelName);
+        }
         restoredChannels.push(channelName);
     });
 
     return restoredChannels;
+}
+
+function applyCurveSnapshot(curveMap = {}, options = {}) {
+    if (!curveMap || typeof curveMap !== 'object') {
+        return false;
+    }
+
+    const loadedData = getLoadedQuadData?.();
+    if (!loadedData) {
+        return false;
+    }
+
+    const channels = Object.keys(curveMap).filter((channelName) => Array.isArray(curveMap[channelName]));
+    if (!channels.length) {
+        return false;
+    }
+
+    if (!loadedData.rebasedSources || typeof loadedData.rebasedSources !== 'object') {
+        loadedData.rebasedSources = {};
+    }
+
+    channels.forEach((channelName) => {
+        const curve = curveMap[channelName];
+        loadedData.rebasedSources[channelName] = curve.slice();
+    });
+
+    restoreChannelsToRebasedSources(channels, {
+        skipRefresh: !!options.skipRefresh,
+        skipScaleBaselineUpdate: !!options.skipScaleBaselineUpdate
+    });
+
+    return true;
 }
 
 function isDefaultSmartRamp(points) {
@@ -1327,10 +1530,72 @@ function preserveQuadCurveForInkLimit(channelName, newEndValue) {
  * Handle percentage input changes with validation
  * @param {HTMLInputElement} input - The percentage input element
  */
-function handlePercentInput(input) {
-    const validatedPercent = InputValidator.validatePercentInput(input);
+function handlePercentInput(input, options = {}) {
+    const commit = typeof options === 'object' && options !== null ? !!options.commit : true;
+    let rawValue = input ? input.value : '';
+    if (commit && input) {
+        const initialValue = input.dataset.initialNumericValue || '';
+        const normalizedInitial = initialValue !== '' ? String(InputValidator.clampPercent(initialValue)) : '';
+        if (normalizedInitial && rawValue && rawValue !== normalizedInitial && rawValue.startsWith(normalizedInitial)) {
+            const remainder = rawValue.slice(normalizedInitial.length);
+            if (remainder && !Number.isNaN(Number(remainder))) {
+                rawValue = remainder;
+                input.value = remainder;
+            }
+        }
+    }
+    let validatedPercent = commit
+        ? InputValidator.validatePercentInput(input)
+        : InputValidator.clampPercent(rawValue);
 
+    if (!commit) {
+        const rawScalePercent = typeof getCurrentScale === 'function' ? getCurrentScale() : 100;
+        const activeScalePercent = Number(rawScalePercent);
+        const activeScale = Number.isFinite(activeScalePercent) && Math.abs(activeScalePercent - 100) > 1e-6;
+        if (activeScale) {
+            const basePercent = getBasePercentFromInput(input);
+            const row = input?.closest('tr');
+            if (input) {
+                InputValidator.clearValidationStyling(input);
+                input.value = formatPercentDisplay(basePercent);
+            }
+            if (row) {
+                const siblingEnd = row.querySelector('.end-input');
+                if (siblingEnd) {
+                    const baseEnd = getBaseEndFromInput(siblingEnd);
+                    InputValidator.clearValidationStyling(siblingEnd);
+                    siblingEnd.value = String(Math.round(baseEnd));
+                }
+            }
+            if (input) {
+                setBasePercentOnInput(input, basePercent);
+            }
+            return basePercent;
+        }
+        if (input) {
+            InputValidator.clearValidationStyling(input);
+            if (input.dataset.userEditing === 'true') {
+                markPendingCommitHold(input, validatedPercent);
+                setBasePercentOnInput(input, validatedPercent);
+                const row = input.closest('tr');
+                const siblingEnd = row?.querySelector('.end-input');
+                if (siblingEnd) {
+                    const siblingEndValue = InputValidator.computeEndFromPercent(validatedPercent);
+                    markPendingCommitHold(siblingEnd, siblingEndValue);
+                    setBaseEndOnInput(siblingEnd, siblingEndValue);
+                }
+            }
+        }
+        return validatedPercent;
+    }
+
+    if (input) {
+        delete input.dataset.userEditing;
+    }
     const row = input.closest('tr');
+    if (row) {
+        delete row.dataset.userEditing;
+    }
     const channelName = row?.getAttribute('data-channel');
 
     if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
@@ -1358,6 +1623,29 @@ function handlePercentInput(input) {
         previousEnd = baselines.end;
     }
 
+    const requestedPercent = validatedPercent;
+    const globalScalePercentRaw = typeof getCurrentScale === 'function' ? getCurrentScale() : 100;
+    const globalScalePercent = Number(globalScalePercentRaw);
+    const globalScaleActive = Number.isFinite(globalScalePercent) && Math.abs(globalScalePercent - 100) > 1e-6;
+    let forcedEndValue = null;
+
+    if (globalScaleActive) {
+        const baselinePercent = Number.isFinite(previousPercent) && previousPercent > 0
+            ? previousPercent
+            : (Number.isFinite(globalScalePercent) && globalScalePercent > 0 ? globalScalePercent : null);
+        if (baselinePercent !== null && Math.abs(requestedPercent - baselinePercent) > 1e-6) {
+            validatedPercent = baselinePercent;
+            if (Number.isFinite(previousEnd) && previousEnd > 0) {
+                forcedEndValue = previousEnd;
+            } else {
+                const computedBaselineEnd = InputValidator.computeEndFromPercent(baselinePercent);
+                if (Number.isFinite(computedBaselineEnd) && computedBaselineEnd > 0) {
+                    forcedEndValue = computedBaselineEnd;
+                }
+            }
+        }
+    }
+
     let manager = null;
     if (channelName) {
         try {
@@ -1378,10 +1666,15 @@ function handlePercentInput(input) {
     if (row) {
         const endInput = row.querySelector('.end-input');
         if (endInput) {
-            newEndValue = InputValidator.computeEndFromPercent(validatedPercent);
+            if (forcedEndValue !== null) {
+                newEndValue = forcedEndValue;
+            } else {
+                newEndValue = InputValidator.computeEndFromPercent(validatedPercent);
+            }
             setBaseEndOnInput(endInput, newEndValue);
             endInput.value = newEndValue;
             InputValidator.clearValidationStyling(endInput);
+            clearPendingCommitHold(endInput);
 
             if (channelName && manager) {
                 try {
@@ -1396,6 +1689,7 @@ function handlePercentInput(input) {
         if (globalScope) {
             globalScope.__percentDebug.push({ stage: 'setBasePercent', channelName, value: validatedPercent });
         }
+        clearPendingCommitHold(input);
 
         // Update scale baseline for global scale integration
         const rowChannelName = row.getAttribute('data-channel');
@@ -1407,6 +1701,14 @@ function handlePercentInput(input) {
         if (row.refreshDisplayFn && typeof row.refreshDisplayFn === 'function') {
             row.refreshDisplayFn();
         }
+    }
+
+    if (input) {
+        input.value = formatPercentDisplay(validatedPercent);
+        if (typeof input.valueAsNumber === 'number') {
+            input.valueAsNumber = Number(input.value);
+        }
+        clearPendingCommitHold(input);
     }
 
     if (channelName && manager) {
@@ -1441,7 +1743,8 @@ function handlePercentInput(input) {
         }
     }
 
-    const currentScalePercent = typeof getCurrentScale === 'function' ? getCurrentScale() : 100;
+    const currentScalePercentRaw = typeof getCurrentScale === 'function' ? getCurrentScale() : 100;
+    const currentScalePercent = Number(currentScalePercentRaw);
     if (Number.isFinite(currentScalePercent) && Math.abs(currentScalePercent - 100) > 1e-6) {
         scalingCoordinator
             .scale(currentScalePercent, 'ui-resync', {
@@ -1479,15 +1782,99 @@ function handlePercentInput(input) {
  * Handle end value input changes with validation
  * @param {HTMLInputElement} input - The end value input element
  */
-function handleEndInput(input) {
-    const validatedEnd = InputValidator.validateEndInput(input);
+function handleEndInput(input, options = {}) {
+    const commit = typeof options === 'object' && options !== null ? !!options.commit : true;
+    let rawValue = input ? input.value : '';
+    if (commit && input) {
+        const initialValue = input.dataset.initialNumericValue || '';
+        const normalizedInitial = initialValue !== '' ? String(InputValidator.clampEnd(initialValue)) : '';
+        if (normalizedInitial && rawValue && rawValue !== normalizedInitial && rawValue.startsWith(normalizedInitial)) {
+            const remainder = rawValue.slice(normalizedInitial.length);
+            if (remainder && !Number.isNaN(Number(remainder))) {
+                rawValue = remainder;
+                input.value = remainder;
+            }
+        }
+    }
+    let validatedEnd = commit
+        ? InputValidator.validateEndInput(input)
+        : InputValidator.clampEnd(rawValue);
 
+    if (!commit) {
+        const rawScalePercent = typeof getCurrentScale === 'function' ? getCurrentScale() : 100;
+        const activeScalePercent = Number(rawScalePercent);
+        const activeScale = Number.isFinite(activeScalePercent) && Math.abs(activeScalePercent - 100) > 1e-6;
+        if (activeScale) {
+            const baseEnd = getBaseEndFromInput(input);
+            const row = input?.closest('tr');
+            if (input) {
+                InputValidator.clearValidationStyling(input);
+                input.value = String(Math.round(baseEnd));
+            }
+            if (row) {
+                const siblingPercent = row.querySelector('.percent-input');
+                if (siblingPercent) {
+                    const basePercent = getBasePercentFromInput(siblingPercent);
+                    InputValidator.clearValidationStyling(siblingPercent);
+                    siblingPercent.value = formatPercentDisplay(basePercent);
+                }
+            }
+            if (input) {
+                setBaseEndOnInput(input, baseEnd);
+            }
+            return baseEnd;
+        }
+        if (input) {
+            InputValidator.clearValidationStyling(input);
+            if (input.dataset.userEditing === 'true') {
+                markPendingCommitHold(input, validatedEnd);
+                setBaseEndOnInput(input, validatedEnd);
+                const row = input.closest('tr');
+                const siblingPercent = row?.querySelector('.percent-input');
+                if (siblingPercent) {
+                    const siblingPercentValue = InputValidator.computePercentFromEnd(validatedEnd);
+                    markPendingCommitHold(siblingPercent, siblingPercentValue);
+                    setBasePercentOnInput(siblingPercent, siblingPercentValue);
+                }
+            }
+        }
+        return validatedEnd;
+    }
+
+    if (input) {
+        delete input.dataset.userEditing;
+    }
     const row = input.closest('tr');
+    if (row) {
+        delete row.dataset.userEditing;
+    }
     const channelName = row?.getAttribute('data-channel');
 
     const baselines = row ? getRowBaselines(row) : { percent: null, end: null };
     let previousPercent = baselines.percent;
     let previousEnd = baselines.end;
+
+    const requestedEnd = validatedEnd;
+    const globalScalePercent = typeof getCurrentScale === 'function' ? getCurrentScale() : 100;
+    const globalScaleActive = Number.isFinite(globalScalePercent) && Math.abs(globalScalePercent - 100) > 1e-6;
+
+    if (globalScaleActive) {
+        let baselineEnd = Number.isFinite(previousEnd) && previousEnd > 0 ? previousEnd : null;
+        if (baselineEnd == null) {
+            const fallbackPercent = Number.isFinite(previousPercent) && previousPercent > 0
+                ? previousPercent
+                : (Number.isFinite(globalScalePercent) && globalScalePercent > 0 ? globalScalePercent : null);
+            if (fallbackPercent !== null) {
+                const computed = InputValidator.computeEndFromPercent(fallbackPercent);
+                if (Number.isFinite(computed) && computed > 0) {
+                    baselineEnd = computed;
+                }
+            }
+        }
+        if (baselineEnd !== null && Math.abs(requestedEnd - baselineEnd) > 0.5) {
+            validatedEnd = baselineEnd;
+        }
+    }
 
     let manager = null;
     if (channelName) {
@@ -1512,8 +1899,9 @@ function handleEndInput(input) {
             if (globalScope) {
                 globalScope.__percentDebug.push({ stage: 'syncPercent', channelName, value: newPercentValue });
             }
-            percentInput.value = newPercentValue.toFixed(1);
+            percentInput.value = formatPercentDisplay(newPercentValue);
             InputValidator.clearValidationStyling(percentInput);
+            clearPendingCommitHold(percentInput);
 
             if (channelName && manager) {
                 try {
@@ -1525,6 +1913,7 @@ function handleEndInput(input) {
         }
 
         setBaseEndOnInput(input, validatedEnd);
+        clearPendingCommitHold(input);
 
         // Update scale baseline for global scale integration
         const rowChannelName = row.getAttribute('data-channel');
@@ -1571,7 +1960,8 @@ function handleEndInput(input) {
         }
     }
 
-    const currentScalePercent = typeof getCurrentScale === 'function' ? getCurrentScale() : 100;
+    const currentScalePercentRaw = typeof getCurrentScale === 'function' ? getCurrentScale() : 100;
+    const currentScalePercent = Number(currentScalePercentRaw);
     if (Number.isFinite(currentScalePercent) && Math.abs(currentScalePercent - 100) > 1e-6) {
         scalingCoordinator
             .scale(currentScalePercent, 'ui-resync', {
@@ -1870,14 +2260,47 @@ function initializeFileHandlers() {
                 }
             }
 
-            if (applied) {
-                const printer = getCurrentPrinter();
-                const channels = printer?.channels || [];
-                const globalData = LinearizationState.getGlobalData?.();
-                rebaseChannelsToCorrectedCurves(channels, {
-                    source: 'globalToggle',
-                    filename: globalData?.filename || null
-                });
+            const printer = getCurrentPrinter();
+            const channels = printer?.channels || [];
+            const currentGlobalData = LinearizationState.getGlobalData?.();
+            const correctedSnapshot = LinearizationState.getGlobalCorrectedCurves?.();
+            const baselineSnapshot = LinearizationState.getGlobalBaselineCurves?.();
+            let usedSnapshot = false;
+
+            if (channels.length) {
+                if (applied) {
+                    if (correctedSnapshot) {
+                        usedSnapshot = applyCurveSnapshot(correctedSnapshot, {
+                            skipScaleBaselineUpdate: true
+                        });
+                    }
+                } else if (baselineSnapshot) {
+                    usedSnapshot = applyCurveSnapshot(baselineSnapshot, {
+                        skipScaleBaselineUpdate: true
+                    });
+                }
+
+                if (!usedSnapshot) {
+                    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                        console.log('[Global Toggle] Falling back to rebase', { applied, hasCorrectedSnapshot: !!correctedSnapshot, hasBaselineSnapshot: !!baselineSnapshot });
+                    }
+                    rebaseChannelsToCorrectedCurves(channels, {
+                        source: 'globalToggle',
+                        filename: currentGlobalData?.filename || null,
+                        useOriginalBaseline: true,
+                        globalAppliedState: applied,
+                        skipScaleBaselineUpdate: true
+                    });
+                } else if (applied && typeof LinearizationState.setGlobalCorrectedCurves === 'function') {
+                    try {
+                        const loadedData = getLoadedQuadData?.();
+                        if (loadedData?.curves) {
+                            LinearizationState.setGlobalCorrectedCurves(loadedData.curves);
+                        }
+                    } catch (snapshotErr) {
+                        console.warn('[Global Toggle] Failed to refresh corrected snapshot after restore:', snapshotErr);
+                    }
+                }
             }
 
             try {
@@ -2023,6 +2446,15 @@ function initializeFileHandlers() {
 
                         const countLabel = getBasePointCountLabel(normalized);
                         showStatus(`Loaded global correction: ${file.name} (${countLabel})`);
+
+                        try {
+                            const baselineData = getLoadedQuadData?.();
+                            if (baselineData?.curves) {
+                                LinearizationState.setGlobalBaselineCurves(baselineData.curves);
+                            }
+                        } catch (snapshotErr) {
+                            console.warn('Failed to capture global baseline snapshot:', snapshotErr);
+                        }
 
                         applyGlobalLinearizationToggle(true);
 
@@ -2884,7 +3316,7 @@ export function setupChannelRow(tr) {
                         const endInput = tr.querySelector('.end-input');
 
                         if (percentInput) {
-                            percentInput.value = originalPercent.toFixed(1);
+                percentInput.value = formatPercentDisplay(originalPercent);
                             percentInput.setAttribute('data-base-percent', String(originalPercent));
                             InputValidator.clearValidationStyling(percentInput);
                         }
@@ -3005,6 +3437,43 @@ export function setupChannelRow(tr) {
     registerChannelRow(channelName, tr);
 
     // Store original values for restoration when re-enabling
+    const markEditing = (input, commitFn) => {
+        if (!input) return;
+        input.addEventListener('focus', () => {
+            clearPendingCommitHold(input);
+            input.dataset.userEditing = 'true';
+            input.dataset.userEditingNew = 'true';
+            tr.dataset.userEditing = 'true';
+            input.dataset.initialNumericValue = input.value ?? '';
+        });
+        input.addEventListener('keydown', (event) => {
+            if (input.dataset.userEditing !== 'true') {
+                return;
+            }
+            if (event.key && event.key.length === 1 && /[0-9]/.test(event.key)) {
+                if (input.dataset.userEditingNew === 'true') {
+                    input.value = event.key;
+                    input.dataset.userEditingNew = 'false';
+                    event.preventDefault();
+                    return;
+                }
+            } else if (event.key !== 'Shift') {
+                input.dataset.userEditingNew = 'false';
+            }
+        });
+        input.addEventListener('blur', () => {
+            delete input.dataset.userEditing;
+            delete input.dataset.userEditingNew;
+            delete tr.dataset.userEditing;
+            if (typeof commitFn === 'function') {
+                commitFn();
+            }
+        });
+    };
+
+    markEditing(percentInput, () => handlePercentInput(percentInput, { commit: true }));
+    markEditing(endInput, () => handleEndInput(endInput, { commit: true }));
+
     const originalPercent = parseFloat((percentInput?.getAttribute('data-base-percent') ?? percentInput?.value) || 0);
     const originalEnd = parseFloat((endInput?.getAttribute('data-base-end') ?? endInput?.value) || 0);
 
@@ -3094,7 +3563,12 @@ export function setupChannelRow(tr) {
         }
 
         // Handle ultra-compact layout for disabled channels
-        if (isAtZero) {
+        const inputsEditing = (percentInput?.dataset.userEditing === 'true') || (endInput?.dataset.userEditing === 'true');
+
+        if (inputsEditing) {
+            tr.setAttribute('data-compact', 'false');
+            tr.style.display = '';
+        } else if (isAtZero) {
             tr.setAttribute('data-compact', 'true');
             tr.style.display = 'none';
         } else {

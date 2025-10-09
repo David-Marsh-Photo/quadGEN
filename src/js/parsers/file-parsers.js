@@ -17,7 +17,10 @@ import {
 import { parseCGATS17 } from '../data/cgats-parser.js';
 import { createPCHIPSpline, clamp01 } from '../math/interpolation.js';
 import { registerDebugNamespace } from '../utils/debug-registry.js';
-import { getLabNormalizationMode } from '../core/lab-settings.js';
+import {
+    getLabNormalizationMode,
+    getLabSmoothingPercent
+} from '../core/lab-settings.js';
 
 export {
     parseLabData,
@@ -680,10 +683,16 @@ export function parseManualLstarData(validation, options = {}) {
 
         const normalizationMode = options.normalizationMode || getLabNormalizationMode();
 
-        const baseSamples = rebuildLabSamplesFromOriginal(usableData, {
-            widenFactor: 1,
-            normalizationMode
+        const defaultSmoothingPercent = getLabSmoothingPercent();
+
+        const rawSamples = rebuildLabSamplesFromOriginal(usableData, {
+            normalizationMode,
+            skipDefaultSmoothing: true
         });
+
+        const baseSamples = rebuildLabSamplesFromOriginal(usableData, {
+            normalizationMode
+        }) || rawSamples;
 
         if (!Array.isArray(baseSamples) || baseSamples.length === 0) {
             return {
@@ -693,7 +702,7 @@ export function parseManualLstarData(validation, options = {}) {
         }
 
         const buildControlPoints = (smoothingPercent) => {
-            const sp = Math.max(0, Math.min(90, Number(smoothingPercent) || 0));
+            const sp = Math.max(0, Math.min(300, Number(smoothingPercent) || 0));
             const widen = 1 + sp / 100;
             const widenedSamples = rebuildLabSamplesFromOriginal(usableData, {
                 widenFactor: widen,
@@ -729,9 +738,9 @@ export function parseManualLstarData(validation, options = {}) {
             domainMax: 1,
             samples: baseSamples.slice(),
             baseSamples: baseSamples.slice(),
-            rawSamples: baseSamples.slice(),
+            rawSamples: (rawSamples || baseSamples).slice(),
             previewSamples: baseSamples.slice(),
-            previewSmoothingPercent: 0,
+            previewSmoothingPercent: defaultSmoothingPercent,
             originalData: usableData.map((point) => ({
                 input: point.input,
                 lab: point.lab,

@@ -1019,8 +1019,8 @@ export function simplifySmartKeyPointsFromCurve(channelName, options = {}) {
         return { success: false, message: 'Channel name required' };
     }
 
-    const maxErrorPercent = Math.max(0.05, Math.min(5, options.maxErrorPercent || KP_SIMPLIFY.maxErrorPercent));
-    const maxPoints = Math.max(2, Math.min(21, options.maxPoints || KP_SIMPLIFY.maxPoints));
+    const maxErrorPercent = Math.max(0.0005, Math.min(5, options.maxErrorPercent || KP_SIMPLIFY.maxErrorPercent));
+    const requestedMaxPoints = Math.max(2, Math.min(64, options.maxPoints || KP_SIMPLIFY.maxPoints));
 
     try {
         if (typeof isEditModeEnabled === 'function') {
@@ -1043,10 +1043,88 @@ export function simplifySmartKeyPointsFromCurve(channelName, options = {}) {
         const endValue = row ? InputValidator.clampEnd(row.querySelector('.end-input')?.value || TOTAL) : TOTAL;
         const rawCurveValues = make256(endValue, channelName, true, { normalizeToEnd: isChannelNormalizedToEnd(channelName) });
 
-        const keyPoints = extractAdaptiveKeyPointsFromValues(rawCurveValues, {
+        const loadedData = getLoadedQuadData();
+        const measurementSeed = loadedData?.keyPointsMeta?.[channelName]?.measurementSeed || null;
+        const hasMeasurementSeed = !!measurementSeed && (
+            (Array.isArray(measurementSeed.points) && measurementSeed.points.length >= 2)
+            || (Number.isFinite(Number(measurementSeed.count)) && Number(measurementSeed.count) >= 2)
+        );
+        const allowMeasurementResimplify = options?.allowMeasurementResimplify === true;
+
+        if (hasMeasurementSeed && !allowMeasurementResimplify) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.log('[SMART CURVES] Skipping simplification for measurement-seeded channel', channelName);
+            }
+            return {
+                success: true,
+                message: 'Measurement-seeded Smart curve preserved'
+            };
+        }
+
+        const measurementCount = Number.isFinite(Number(measurementSeed?.count))
+            ? Math.max(0, Math.floor(Number(measurementSeed.count)))
+            : (Array.isArray(measurementSeed?.points) ? measurementSeed.points.length : 0);
+        const minPointsOption = Number.isFinite(Number(options.minPoints))
+            ? Math.max(2, Math.floor(Number(options.minPoints)))
+            : 0;
+        const maxPoints = requestedMaxPoints;
+        const minPointTarget = Math.min(
+            maxPoints,
+            Math.max(minPointsOption, measurementCount >= 2 ? measurementCount : 0)
+        );
+
+        let keyPoints = extractAdaptiveKeyPointsFromValues(rawCurveValues, {
             maxErrorPercent,
             maxPoints
         });
+
+        if (minPointTarget >= 2 && keyPoints.length < minPointTarget) {
+            let tightenedError = Math.max(0.01, maxErrorPercent / 2);
+            let attempts = keyPoints;
+            while (tightenedError >= 0.0005) {
+                const refined = extractAdaptiveKeyPointsFromValues(rawCurveValues, {
+                    maxErrorPercent: tightenedError,
+                    maxPoints
+                });
+                if (refined.length >= minPointTarget) {
+                    attempts = refined;
+                    break;
+                }
+                if (refined.length > attempts.length) {
+                    attempts = refined;
+                }
+                if (refined.length >= minPointTarget || tightenedError <= 0.001) {
+                    break;
+                }
+                tightenedError = Math.max(0.0005, tightenedError / 2);
+            }
+
+            if (attempts.length >= minPointTarget) {
+                keyPoints = attempts;
+            } else {
+                const uniform = [];
+                const lastIndex = rawCurveValues.length - 1;
+                if (lastIndex >= 1) {
+                    for (let i = 0; i < minPointTarget; i += 1) {
+                        const t = minPointTarget === 1 ? 0 : i / (minPointTarget - 1);
+                        const indexFloat = t * lastIndex;
+                        const i0 = Math.floor(indexFloat);
+                        const i1 = Math.min(lastIndex, Math.ceil(indexFloat));
+                        const alpha = indexFloat - i0;
+                        const sample0 = rawCurveValues[i0] ?? 0;
+                        const sample1 = rawCurveValues[i1] ?? sample0;
+                        const blended = (1 - alpha) * sample0 + alpha * sample1;
+                        const input = t * 100;
+                        const outputRaw = TOTAL > 0 ? (blended / TOTAL) * 100 : 0;
+                        const output = Math.max(0, Math.min(100, outputRaw));
+                        uniform.push({ input, output });
+                    }
+                } else {
+                    uniform.push({ input: 0, output: 0 }, { input: 100, output: 100 });
+                }
+                keyPoints = ControlPoints.normalize(uniform);
+            }
+        }
 
         if (!keyPoints || keyPoints.length < 2) {
             return { success: false, message: 'Failed to generate sufficient key points' };

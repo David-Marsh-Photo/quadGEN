@@ -20,6 +20,28 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Docs
 - _Nothing yet._
 
+## [v3.1.5] — 2025-10-08
+### Added
+- Added a dedicated ⚙️ Options panel beside Help to collect global settings without crowding the Global Correction and Edit panels.
+- Introduced a floating tooltip system so Options help icons render above every panel (Safari-safe) while keeping keyboard focus support.
+
+### Changed
+- The “Use log-density for LAB / Manual measurements” toggle now lives in the Options panel (and remains in the Manual L* modal) with concise tooltip guidance.
+- LAB and Manual L* imports default to 50 % smoothing, and the Options panel slider now spans 0–300 % so you can dial in additional cleanup when noisy highlights or shadows appear.
+
+### Fixed
+- Prevented channel ink limit inputs from snapping back while typing; changes now apply on commit instead of every keystroke.
+- Resolved tooltip clipping on macOS Safari by lifting help overlays above the Options panel.
+- Restored spacing in the Edit panel so the “Calculate points” legend no longer clips against the card border.
+- Smart curve points now stay aligned with the plotted curve when nudging channel percent ink limits (regression observed with `TRIFORCE_V2.quad`).
+
+### Removed
+- _Nothing yet._
+
+### Docs
+- Documented the Options panel, relocated log-density toggle, and floating tooltips across the user guide, linearization guide, LAB workflow notes, and in-app help.
+- Updated linearization references to note the adjustable LAB smoothing slider (0–300 %) and new Options workflow.
+
 ## [v3.1.4] — 2025-10-07
 ### Added
 - Log-density linearization toggle in the Global Correction panel and Manual L* modal, allowing quick switching between perceptual (L*) and optical-density workflows.
@@ -301,19 +323,19 @@ This changelog follows a concise, user-facing format. Engineering details live i
 - “Apply to Loaded Curve” button lets you bake the active intent into a loaded .quad without re-running LAB corrections.
 
 ### Changed
-- Measurement rebuild now defaults to POPS-like smoothing (PCHIP, 30% smoothing + 1×30% post smoothing with smoothing splines) and LAB bandwidth overrides K=2, σ_floor=0.036, σ_ceil=0.15, σ_alpha=2.0 across both the app and tuning panel.
-- Removed the experimental intent blend slider from the debug tuning panel while we revisit a more faithful POPS-style blend; tuning now focuses solely on smoothing and LAB bandwidth controls.
+- Measurement rebuild now defaults to the intent-simulator smoothing recipe (PCHIP, 30% smoothing + 1×30% post smoothing with smoothing splines) and LAB bandwidth overrides K=2, σ_floor=0.036, σ_ceil=0.15, σ_alpha=2.0 across both the app and tuning panel.
+- Removed the experimental intent blend slider from the debug tuning panel while we revisit a more faithful legacy blend; tuning now focuses solely on smoothing and LAB bandwidth controls.
 - Updated automated intent regression tolerance to 8% to align with the new smoothing defaults.
 - Intent dropdown now previews the selected curve on the graph before you apply it to a loaded .quad.
 - Centralized all image→printer conversions through the new `DataSpace` helper in `quadgen.html`. ACV/LUT/LAB/manual builders, Smart seeding, intents, and LUT application now tag `sourceSpace` metadata and normalize automation targets across the board.
-- Populated the POPS intent simulator with equivalent smoothing defaults so the POPS vs quadGEN comparison charts overlay correctly.
+- Populated the legacy intent simulator with equivalent smoothing defaults so the comparison charts overlay correctly.
 
 ### Fixed
-- Restored intent dropdown focus after sampling from the POPS simulator or applying manual LAB linearization to a loaded `.quad`.
+- Restored intent dropdown focus after sampling from the legacy simulator or applying manual LAB linearization to a loaded `.quad`.
 - Resolved history manager double-pop bug when loading INTENT only adjustments.
 
 ### Docs
-- Documented density math, smoothing defaults, and intent blending equivalence in `POPS_intent_pipeline.md` and `POPS_vs_quadGEN_formula_map.md`.
+- Documented density math, smoothing defaults, and intent blending equivalence in the intent pipeline reference notes.
 
 ## [v2.3.1] — 2025-09-15
 

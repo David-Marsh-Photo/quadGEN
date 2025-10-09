@@ -183,8 +183,8 @@ LAB → Smart conversion preserves plotted shape:
 - Critical: Do not replace with other interpolation methods
 
 **Smoothing Control**:
-- Live measurement smoothing slider has been deprecated. LAB/LUT processing uses inherent Gaussian reconstruction + decimation to ~21 control points and PCHIP; there is no user-facing live smoothing control.
-- Fidelity is controlled via Recompute (Max error %, Max points). To iterate from measurement, use the Revert buttons (global/per‑channel) then Recompute.
+- LAB/LUT processing uses an adaptive Gaussian reconstruction (defaults to 50 % ≈1.5× widen). The Options panel exposes a 0–300 % slider that feeds the same kernel; values persist across sessions.
+- Fidelity is still governed by Recompute (Max error %, Max points) for Smart curves. To iterate from measurement, use the Revert buttons (global/per‑channel) then Recompute, adjusting smoothing if needed.
 
 **EDN Intent + ACV/LUT Parity**
 - Problem: ACV curves loaded from EDN did not match 1D LUTs at midtones; .acv path missed the orientation transforms applied in the .cube path. Print Intent toggle did not refresh the effective mapping.

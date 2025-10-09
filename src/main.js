@@ -70,6 +70,8 @@ import {
 } from './js/ui/quad-preview.js';
 
 import { initializeManualLstar } from './js/ui/manual-lstar.js';
+import { initializeOptionsModal } from './js/ui/options-modal.js';
+import { initializeTooltipSystem } from './js/ui/tooltips.js';
 
 import {
     initializeTheme
@@ -845,6 +847,8 @@ function initializeApplication() {
     initializeEventHandlers();
     initializeAutoLimitHandlers();
     initializeManualLstar();
+    initializeOptionsModal();
+    initializeTooltipSystem();
     initializeEditMode();
     initializeChart();
     setupStateSynchronization();
@@ -947,7 +951,9 @@ function initializeApplication() {
         const selectedChannel = editNamespace?.EDIT?.selectedChannel;
         if (selectedChannel) {
             console.log(`Recomputing for channel: ${selectedChannel}`);
-            const result = simplifySmartKeyPointsFromCurve(selectedChannel);
+            const result = simplifySmartKeyPointsFromCurve(selectedChannel, {
+                allowMeasurementResimplify: true
+            });
             console.log('Recompute result:', result);
             updateInkChart();
             console.log('✅ Chart updated');

@@ -16,6 +16,40 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '3.1.5': {
+    date: '2025-10-08',
+    title: 'Options panel & smoothing controls',
+    sections: {
+      ADDED: [
+        '⚙️ Options panel now sits beside Help, centralizing global settings without crowding the Global Correction and Edit panels.',
+        'Floating tooltip manager renders help text above every panel (including Safari) while preserving keyboard focus.'
+      ],
+      CHANGED: [
+        'The “Use log-density for LAB / Manual measurements” toggle moved into the Options panel (and remains inside the Manual L* modal) with concise tooltip guidance.',
+        'LAB smoothing defaults to 50 % and the Options slider now spans 0–300 % so noisy highlights or shadows can be smoothed without editing config files.'
+      ],
+      FIXED: [
+        'Channel percent/end inputs no longer revert while you type; values commit after blur, enter, or spinner adjustments.',
+        'Options tooltips now float above the panel, so macOS Safari no longer clips the descriptions.',
+        'Edit panel spacing restored so the “Calculate points” legend stays visible.',
+        'Smart points stay glued to the plotted curve after channel-percent nudges (e.g., TRIFORCE_V2 C channel).'
+      ],
+      REMOVED: [],
+      DOCS: [
+        'Help tabs, user guide, and linearization references updated to cover the Options panel workflow, tooltip behavior, and 0–300 % smoothing range.'
+      ]
+    },
+    aboutDialog: [
+      {
+        label: 'Options Panel',
+        desc: 'Group global preferences (log-density mode, LAB smoothing, more to come) in one overlay so feature panels stay laser-focused.'
+      },
+      {
+        label: 'Floating Tooltips',
+        desc: 'New body-level tooltips keep help text readable above modals and cards on every browser.'
+      }
+    ]
+  },
   '3.1.4': {
     date: '2025-10-07',
     title: 'L* vs log-density normalization toggle',
@@ -261,7 +295,9 @@ export const VERSION_HISTORY = {
         'Benefits: cleaner project tree keeps builds/tests/docs aligned with the modular distribution.',
         'Benefits: modular structure improves portability; the same source can be bundled for web, packaged for desktop, or embedded in other tooling.'
       ],
-      FIXED: [],
+      FIXED: [
+        'Channel percent/end inputs no longer revert while you type; values commit on change instead of every keystroke.'
+      ],
       REMOVED: [],
       DOCS: []
     },
@@ -333,7 +369,9 @@ export const VERSION_HISTORY = {
       CHANGED: [
         '1D .cube parser now accepts up to 256 samples even without a LUT_1D_SIZE header.'
       ],
-      FIXED: [],
+      FIXED: [
+        'Channel percent/end inputs no longer revert while you type; values commit on change instead of every keystroke.'
+      ],
       REMOVED: [],
       DOCS: []
     },
@@ -390,7 +428,9 @@ export const VERSION_HISTORY = {
         'Glossary now covers Colorimeters, Spectrophotometers, and the Epson P900, with direct links to recommended devices.'
       ],
       CHANGED: [],
-      FIXED: [],
+      FIXED: [
+        'Channel percent/end inputs no longer revert while you type; values commit on change instead of every keystroke.'
+      ],
       REMOVED: [],
       DOCS: [
         'ReadMe and Help updated with Epson trademark notice plus Nix Spectro L guidance for spectrophotometer workflows.'
@@ -460,7 +500,9 @@ export const VERSION_HISTORY = {
         'Lab Tech assistant can call apply_intent_to_loaded_quad() to bake the current preset without manual clicks.'
       ],
       CHANGED: [],
-      FIXED: [],
+      FIXED: [
+        'Channel percent/end inputs no longer revert while you type; values commit on change instead of every keystroke.'
+      ],
       REMOVED: [],
       DOCS: []
     },
@@ -471,7 +513,7 @@ export const VERSION_HISTORY = {
   },
   'v2.4.0': {
     date: '2025-09-16',
-    title: 'Centralized printer-space pipeline + POPS smoothing defaults',
+    title: 'Centralized printer-space pipeline + smoothing defaults',
     sections: {
       ADDED: [
         'Printer-space sanity fixtures with FEATURE_EXPECTATIONS guide so you can spot curve regressions quickly.',
@@ -481,7 +523,7 @@ export const VERSION_HISTORY = {
       ],
       CHANGED: [
         'Auto white/black limit rolloff controls are temporarily hidden and no longer apply knees while we retune the detector for consistency.',
-        'Measurement rebuild now defaults to POPS-style smoothing (PCHIP with 30% primary + 1×30% post) and LAB bandwidth overrides (K=2, σ_floor=0.036, σ_ceil=0.15, σ_alpha=2.0).',
+        'Measurement rebuild now defaults to the intent-simulator smoothing recipe (PCHIP with a 50% widen ≈1.5× sigma) and LAB bandwidth overrides (K=2, σ_floor=0.036, σ_ceil=0.15, σ_alpha=2.0); adjust the smoothing slider in the Options panel for other responses.',
         'DataSpace now owns every image→printer conversion; loaders tag missing sourceSpace metadata and make256 helpers were split out for clarity.',
         'Undo/redo shares a single timeline so intent swaps, channel edits, and history snapshots stay in sync.',
         'Debug tuning panel drops the experimental intent blend slider to focus on smoothing/LAB controls, and automated intent tolerance is now 8% to match the new defaults.',
@@ -503,7 +545,7 @@ export const VERSION_HISTORY = {
     aboutDialog: [
       { label: 'Auto Rolloff Hidden', desc: 'White/black auto limit toggles are offline while we recalibrate the detector.' },
       { label: 'Printer-space Pipeline', desc: 'DataSpace now owns every conversion and the new fixtures/tests catch double-flip regressions early.' },
-      { label: 'POPS Smoothing Defaults', desc: '30% primary + 30% post smoothing with LAB bandwidth overrides keep LAB rebuilds print-ready out of the box.' },
+      { label: 'Smoothing Defaults', desc: 'LAB rebuilds apply a 50% smoothing profile (≈1.5× Gaussian widen) by default, and the Options panel slider lets you dial it between 0–300% as needed.' },
       { label: 'Intent Remap', desc: 'Use Apply to Loaded Curve to bake the selected intent into a linearized .quad—no external LUT required. Intent previews now render as soon as you pick a preset.' }
     ]
   },
@@ -1211,6 +1253,7 @@ Scope: This license applies to this HTML file (quadgen.html) only.</div>
         <li>Quickly export linear ramps with any single ink channel or combination.</li>
         <li>Inputs: <code>.quad</code>, LAB <code>.txt</code>, LUT <code>.cube</code>, <code>.acv</code>, Manual L*.</li>
         <li>Apply intent remaps directly to a loaded <code>.quad</code> via “Apply to Loaded Curve”.</li>
+        <li>⚙️ Options panel centralizes app-wide preferences (e.g., log-density normalization) without cluttering workflow panels.</li>
         <li>Evenly spaced or irregular targets supported.</li>
         <li>Edit Mode: point-based edits at any time.</li>
         <li>Undo/Redo: full history of edits, LAB/LUT loads, global scaling, and per-channel slider changes.</li>
@@ -1398,7 +1441,7 @@ export function getHelpGlossaryHTML(){
         <dd>The built-in assistant in quadGEN that can answer questions and perform actions (when networked). Optional; core editing/export features work offline.</dd>
 
         <dt>Log-density linearization</dt>
-        <dd>Optional normalization mode that converts measured L* to optical density (−log<sub>10</sub>(Y)) before building the correction curve. Recommended for digital negatives and other through-light workflows where equal density steps translate to equal exposure. Enabled via the “Use log-density for LAB / Manual measurements” toggle in the Global Correction panel or Manual L* modal.</dd>
+        <dd>Optional normalization mode that converts measured L* to optical density (−log<sub>10</sub>(Y)) before building the correction curve. Recommended for digital negatives and other through-light workflows where equal density steps translate to equal exposure. Enable it from the Options panel’s “Use log-density for LAB / Manual measurements” toggle (also available inside the Manual L* modal).</dd>
 
         <dt>Linearization</dt>
         <dd>Process of adjusting printer output so that equal input steps (e.g., 0–100%) produce consistent tonal changes. quadGEN supports two normalizations: perceptual L* (default for direct prints) and log-density (optical) for through-light workflows. Both ingest measured L*, compare to the target curve, and generate a correction LUT that enforces a near-linear relationship between input values and visual tone.</dd>
@@ -1414,6 +1457,9 @@ export function getHelpGlossaryHTML(){
 
         <dt>Monotonic</dt>
         <dd>Property of a curve where values either never decrease (monotonic increasing) or never increase (monotonic decreasing) as you move along the X-axis. quadGEN enforces monotonic curves to ensure predictable printer behavior—no ink output reversals that could cause banding or unstable prints.</dd>
+
+        <dt>Options panel</dt>
+        <dd>The ⚙️ Options modal opened from the toolbar beside Help. Centralizes quadGEN-wide preferences—including the log-density normalization toggle—so feature panels stay focused on their workflows.</dd>
 
         <dt>Reference curve</dt>
         <dd>A fully linearized <code>.quad</code> kept as the authoritative baseline for a printer/process. Branch contrast variants from this reference (Apply Intent or upstream edits) while preserving the trusted linear response.</dd>

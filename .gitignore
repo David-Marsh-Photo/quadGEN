@@ -24,6 +24,7 @@ scripts/push-with-token.sh
 AGENTS.md
 CLAUDE.md
 CLAUDE_ARCHITECTURE.md
+jan/
 
 # Local agent logs
 logs/

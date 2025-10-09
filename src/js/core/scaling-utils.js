@@ -759,7 +759,7 @@ export function scaleChannelEndsByPercent(percent, options = {}) {
                 const newPercent = InputValidator.computePercentFromEnd(newEnd);
                 const percentInput = row.querySelector('.percent-input');
                 if (percentInput) {
-                    percentInput.value = newPercent.toFixed(1);
+                    percentInput.value = Number(newPercent.toFixed(1)).toString();
                     percentInput.setAttribute('data-base-percent', String(newPercent));
                     InputValidator.clearValidationStyling(percentInput);
                 }

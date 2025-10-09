@@ -46,6 +46,7 @@ quadGEN’s UI is organized around a few panels:
 - **Edit Curves Panel (Edit Mode)**: Toggle Edit Mode to expose Smart Key Points for fine tuning. Recompute regenerates Smart Key Points from the currently plotted curve using the adaptive simplifier.
 - **Chart Area**: Displays Y = output ink % vs X = input %. The diagonal Y = X is the “no correction” reference. Zoom controls sit at the lower left. Cursor readouts follow the selected channel.
 - **Help Drawer**: ReadMe, Glossary, and Version History live here. This guide is a supplemental document and does not replace in-app help.
+- **Options Panel**: Open the ⚙️ Options button beside Help to manage global preferences (e.g., the log-density normalization toggle).
 
 Keep the manual regression checklist handy (`docs/manual_tests.md`) when verifying undo toggles, Edit Mode states, and other UX details after changes.
 
@@ -58,7 +59,7 @@ quadGEN plots how much ink the printer will output (Y) for each input percentage
 `.quad` files are 256-entry lookup tables consumed by QuadToneRIP. Channels map to ink positions (e.g., `K`, `C`, `M`, `Y`, or custom alt-process pigments). Summary of the format: see `docs/File_Specs/QTR_QUAD_SPEC_SUMMARY.md`.
 
 ### LAB Measurements
-LAB `.txt` measurement files list `GRAY%` and `L*` per patch. quadGEN can normalize directly in L* (default) for perceptual printer linearization, or convert to optical density when the log-density toggle is enabled. In either mode it compares the measured curve against the ideal ramp and produces a smooth correction using the PCHIP interpolator. Details: `docs/LAB_LINEARIZATION_WORKFLOW.md` and `docs/LAB_LSTAR_PIPELINE.md`.
+LAB `.txt` measurement files list `GRAY%` and `L*` per patch. quadGEN can normalize directly in L* (default) for perceptual printer linearization, or convert to optical density when the log-density toggle is enabled in the ⚙️ Options panel (also mirrored inside the Manual L* modal). In either mode it compares the measured curve against the ideal ramp and produces a smooth correction using the PCHIP interpolator; a 50 % smoothing profile (widen factor ≈ 1.5) now loads by default, and the Options panel slider lets you adjust it between 0–300 %. Details: `docs/LAB_LINEARIZATION_WORKFLOW.md` and `docs/LAB_LSTAR_PIPELINE.md`.
 
 ### Smart Key Points & Edit Mode
 Smart Key Points are editable control points derived from the plotted curve. Edit Mode exposes these Key Points, supports insertion/deletion, and records every action for undo/redo. Recompute pulls fresh Key Points from the current curve while tagging baked metadata (`bakedGlobal`, `bakedAutoWhite`, `bakedAutoBlack`) when auto rolloff is active.

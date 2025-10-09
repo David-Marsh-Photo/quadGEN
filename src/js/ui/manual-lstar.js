@@ -1,7 +1,7 @@
 // Manual L* entry parity module
 // Ports legacy quadgen.html behavior into the modular build
 
-import { elements, appState, updateAppState } from '../core/state.js';
+import { elements, appState, updateAppState, getLoadedQuadData } from '../core/state.js';
 import { LinearizationState, normalizeLinearizationEntry, getBasePointCountLabel } from '../data/linearization-utils.js';
 import { DataSpace } from '../data/processing-utils.js';
 import { updatePreview } from './quad-preview.js';
@@ -306,6 +306,15 @@ function applyManualLinearization(validation) {
   const correctionData = parseManualLstarData(validation, { normalizationMode });
   correctionData.filename = `Manual-L-${validation.values.length}pts`;
   const normalized = normalizeLinearizationEntry(correctionData, DataSpace.SPACE.PRINTER);
+
+  try {
+    const baselineData = getLoadedQuadData?.();
+    if (baselineData?.curves) {
+      LinearizationState.setGlobalBaselineCurves(baselineData.curves);
+    }
+  } catch (snapshotErr) {
+    console.warn('[Manual L*] Failed to capture baseline snapshot:', snapshotErr);
+  }
 
   LinearizationState.setGlobalData(normalized, true);
   if (typeof window !== 'undefined' && typeof window.__quadSetGlobalBakedState === 'function') {

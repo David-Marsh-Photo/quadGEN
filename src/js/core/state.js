@@ -214,6 +214,7 @@ export const elements = {
     helpTabHistory: null,
     helpTabGlossary: null,
     editModeHelpBtn: null,
+    editModeHelpPopup: null,
     globalCorrectionHelpBtn: null,
     globalCorrectionHelpPopup: null,
     closeGlobalCorrectionHelpBtn: null,
@@ -233,6 +234,8 @@ export const elements = {
     globalLinearizationInfo: null,
     revertGlobalToMeasurementBtn: null,
     labDensityToggle: null,
+    labSmoothingSlider: null,
+    labSmoothingValue: null,
 
     // Version and session elements
     appVersion: null,
@@ -243,6 +246,12 @@ export const elements = {
 
     // Theme and settings
     themeToggle: null,
+
+    // Options modal elements
+    optionsBtn: null,
+    optionsModal: null,
+    optionsContent: null,
+    closeOptionsBtn: null,
 
     // L* modal elements
     lstarModal: null,
@@ -301,6 +310,8 @@ export function initializeElements() {
     elements.globalLinearizationHint = document.getElementById('globalLinearizationHint');
     elements.globalLinearizationToggle = document.getElementById('globalLinearizationToggle');
     elements.labDensityToggle = document.getElementById('labDensityModeToggle');
+    elements.labSmoothingSlider = document.getElementById('labSmoothingPercentSlider');
+    elements.labSmoothingValue = document.getElementById('labSmoothingPercentValue');
 
     // Auto limit controls
     elements.autoWhiteLimitToggle = document.getElementById('autoWhiteLimitToggle');
@@ -392,6 +403,7 @@ export function initializeElements() {
     elements.helpTabHistory = document.getElementById('helpTabHistory');
     elements.helpTabGlossary = document.getElementById('helpTabGlossary');
     elements.editModeHelpBtn = document.getElementById('editModeHelpBtn');
+    elements.editModeHelpPopup = document.getElementById('editModeHelpPopup');
     elements.globalCorrectionHelpBtn = document.getElementById('globalCorrectionHelpBtn');
     elements.globalCorrectionHelpPopup = document.getElementById('globalCorrectionHelpPopup');
     elements.closeGlobalCorrectionHelpBtn = document.getElementById('closeGlobalCorrectionHelpBtn');
@@ -420,6 +432,10 @@ export function initializeElements() {
 
     // Theme and settings
     elements.themeToggle = document.getElementById('themeToggle');
+    elements.optionsBtn = document.getElementById('optionsBtn');
+    elements.optionsModal = document.getElementById('optionsModal');
+    elements.optionsContent = document.getElementById('optionsContent');
+    elements.closeOptionsBtn = document.getElementById('closeOptionsBtn');
 
     // L* modal elements
     elements.lstarModal = document.getElementById('lstarModal');

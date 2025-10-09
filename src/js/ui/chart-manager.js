@@ -38,6 +38,15 @@ import { updateProcessingDetail, updateAllProcessingDetails } from './processing
 const globalScope = typeof window !== 'undefined' ? window : globalThis;
 const isBrowser = typeof document !== 'undefined';
 
+function formatPercentDisplay(value) {
+  if (!Number.isFinite(value)) return '0';
+  const rounded = Math.round(value);
+  if (Math.abs(value - rounded) < 0.05) {
+    return String(rounded);
+  }
+  return Number(value.toFixed(1)).toString();
+}
+
 let unsubscribeScalingStateChart = null;
 let scalingStateChartListenerAttached = false;
 
@@ -892,8 +901,14 @@ function renderChannelCurves(ctx, geom, colors, fontScale) {
             const baseEndValue = InputValidator.clampEnd(endInput.getAttribute('data-base-end') ?? endInput.value);
 
             if (basePercent === 0 || baseEndValue === 0) {
-                percentInput.value = basePercent.toFixed(1);
-                endInput.value = String(baseEndValue);
+                const percentHold = percentInput.dataset.userEditing === 'true' || percentInput.dataset.pendingCommitValue != null;
+                const endHold = endInput.dataset.userEditing === 'true' || endInput.dataset.pendingCommitValue != null;
+                if (!percentHold) {
+                percentInput.value = formatPercentDisplay(basePercent);
+                }
+                if (!endHold) {
+                    endInput.value = String(baseEndValue);
+                }
                 continue;
             }
 
@@ -937,10 +952,17 @@ function renderChannelCurves(ctx, geom, colors, fontScale) {
             const endToDisplay = shouldUseEffective ? effectiveEnd : baseEndValue;
             const endY = mapPercentToY(Math.max(0, Math.min(100, effectivePercent)), geom);
 
-            percentInput.value = percentToDisplay.toFixed(1);
-            percentInput.setAttribute('data-base-percent', String(percentToDisplay));
-            endInput.value = String(endToDisplay);
-            endInput.setAttribute('data-base-end', String(endToDisplay));
+            const percentHold = percentInput.dataset.userEditing === 'true' || percentInput.dataset.pendingCommitValue != null;
+            const endHold = endInput.dataset.userEditing === 'true' || endInput.dataset.pendingCommitValue != null;
+
+            if (!percentHold) {
+            percentInput.value = formatPercentDisplay(percentToDisplay);
+                percentInput.setAttribute('data-base-percent', String(percentToDisplay));
+            }
+            if (!endHold) {
+                endInput.value = String(endToDisplay);
+                endInput.setAttribute('data-base-end', String(endToDisplay));
+            }
 
             labels.push({
                 channelName,

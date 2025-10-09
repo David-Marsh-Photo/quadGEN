@@ -4,7 +4,7 @@
 - Goal: Convert step‑wedge L* measurements into a smooth ink‑space correction that linearizes tone.
 - Input: LAB `.txt` with GRAY% and L* (A/B optional). Header example: `GRAY\tLAB_L\tLAB_A\tLAB_B`.
 - Display in quadGEN: Mapping Y = output ink level (%) vs X = input ink level (%). The diagonal Y = X is “no correction”.
-- Normalization modes: quadGEN defaults to perceptual L* normalization; enable the “Use log-density…” toggle when you want the optical-density workflow described below.
+- Normalization modes: quadGEN defaults to perceptual L* normalization; enable the “Use log-density…” toggle from the ⚙️ Options panel (or Manual L* modal) when you want the optical-density workflow described below.
 
 ## Input Format
 - Header: `GRAY  LAB_L  LAB_A  LAB_B` (tabs/whitespace accepted)
@@ -26,7 +26,7 @@
   - Optical density `Draw = −log10(Y)` (clamped to avoid log(0)).
   - Normalize by the dataset’s min/max density: `actual = (Draw - \min(Draw)) / (\max(Draw) - \min(Draw))`.
   - Linear density target: `expected = GRAY% / 100`.
-- Reconstruction (shared): quadGEN blends the sparse corrections with an adaptive Gaussian kernel (σ(x) from local patch spacing) to keep the solve smooth without an exposed smoothing slider. Endpoints are pinned at 0→0 and 1→1.
+- Reconstruction (shared): quadGEN blends the sparse corrections with an adaptive Gaussian kernel (σ(x) from local patch spacing). A 50 % default smoothing factor (widen factor ≈ 1.5) is applied automatically—matching the legacy POPS defaults—and you can adjust it (0–300 %) from the ⚙️ Options panel. Endpoints remain pinned at 0→0 and 1→1.
 - Result: 256‑sample mapping `[0..1]` applied as a 1D LUT (interpolation per UI selection).
 
 ## Graph Semantics (quadGEN)
@@ -64,7 +64,7 @@
 ## Typical Workflow
 1. Measure a wedge; export `.txt` with GRAY and L*.
 2. Load into quadGEN (Global or per-channel). Ensure GRAY% is strictly increasing.
-3. Choose the interpolation method (PCHIP recommended). No manual smoothing control is exposed in current builds; the adaptive kernel handles stability automatically.
+3. Choose the interpolation method (PCHIP recommended). The adaptive kernel defaults to a 50 % smoothing profile (widen factor ≈ 1.5); tweak it from 0–300 % with the LAB smoothing slider in the Options panel if you need a softer or crisper fit.
 4. Inspect the graph:
    - Dips (Y < X) at inputs where measured was too dark.
    - Humps (Y > X) at inputs where measured was too light.

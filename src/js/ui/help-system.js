@@ -27,7 +27,8 @@ function unlockBodyScrollIfNoHelpOpen() {
       elements.helpPopup,
       elements.globalCorrectionHelpPopup,
       elements.editModeHelpPopup,
-      elements.intentHelpPopup
+      elements.intentHelpPopup,
+      elements.optionsModal
     ];
     const anyOpen = popups.some((popup) => popup && !popup.classList.contains('hidden'));
     if (!anyOpen) {
