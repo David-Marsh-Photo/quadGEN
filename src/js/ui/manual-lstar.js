@@ -14,6 +14,7 @@ import { invokeLegacyHelper } from '../legacy/legacy-helpers.js';
 import { getLegacyLinearizationBridge } from '../legacy/linearization-bridge.js';
 import { getLabNormalizationMode, setLabNormalizationMode, isDensityNormalizationEnabled, LAB_NORMALIZATION_MODES } from '../core/lab-settings.js';
 import { parseManualLstarData as coreParseManualLstarData } from '../parsers/file-parsers.js';
+import { maybeAutoRaiseInkLimits } from '../core/auto-raise-on-import.js';
 
 const MIN_ROWS = 5;
 const MAX_ROWS = 50;
@@ -325,6 +326,12 @@ function applyManualLinearization(validation) {
 
   appState.linearizationData = normalized;
   appState.linearizationApplied = true;
+
+  maybeAutoRaiseInkLimits(normalized, {
+    scope: 'global',
+    label: 'manual L* correction',
+    source: 'manual-lstar'
+  });
 
   if (elements.globalLinearizationBtn) {
     elements.globalLinearizationBtn.setAttribute('data-tooltip', `Loaded: Manual L* (${getBasePointCountLabel(correctionData)})`);

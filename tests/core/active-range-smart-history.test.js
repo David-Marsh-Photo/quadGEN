@@ -3,7 +3,7 @@ import { JSDOM } from 'jsdom';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const bootstrapDom = new JSDOM('<!doctype html><html><body></body></html>');
+const bootstrapDom = new JSDOM('<!doctype html><html><body></body></html>', { url: 'https://example.com' });
 global.window = bootstrapDom.window;
 global.document = bootstrapDom.window.document;
 global.Blob = bootstrapDom.window.Blob;
@@ -99,7 +99,7 @@ function setupDom({ printerId, channels, endValues }) {
     <input id="filenameInput" value="fixture">
     <textarea id="userNotes"></textarea>
     <table><tbody id="channels">${rowsHtml}</tbody></table>
-  </body></html>`);
+  </body></html>`, { url: 'https://example.com' });
 
   global.window = dom.window;
   global.document = dom.window.document;

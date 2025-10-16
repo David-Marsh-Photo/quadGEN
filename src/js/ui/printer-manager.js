@@ -13,6 +13,8 @@ import { getStateManager } from '../core/state-manager.js';
 import { findMatchingPrinter } from '../data/quad-parser.js';
 import { updateIntentDropdownState } from './intent-system.js';
 import { showStatus } from './status-service.js';
+import { initializeChannelLocks } from '../core/channel-locks.js';
+import { initializeChannelDensitiesForPrinter, getResolvedChannelDensity, formatDensityValue } from '../core/channel-densities.js';
 
 let channelRowSetupCallback = null;
 
@@ -21,15 +23,51 @@ function reportStatus(message) {
     showStatus(message);
 }
 
-function buildChannelRow(channelName, percent, endValue) {
+const LOCK_ICON_UNLOCKED = `
+    <svg class="w-3.5 h-3.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="5.5" y="11" width="13" height="9.5" rx="2"></rect>
+        <path d="M16 11V8.5a4 4 0 00-7.5-2"></path>
+    </svg>`;
+
+const LOCK_ICON_LOCKED = `
+    <svg class="w-3.5 h-3.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <rect x="5.5" y="11" width="13" height="9.5" rx="2"></rect>
+        <path d="M16 11V8a4 4 0 00-8 0v3"></path>
+        <path d="M12 15v2.5"></path>
+    </svg>`;
+
+function formatPercentDisplay(value) {
+    if (!Number.isFinite(value)) return '0';
+    const rounded = Math.round(value);
+    if (Math.abs(value - rounded) < 0.05) {
+        return String(rounded);
+    }
+    return Number(value.toFixed(1)).toString();
+}
+
+function resolveDensityAttributes(channelName, densityState) {
+    const resolved = densityState && typeof densityState === 'object'
+        ? densityState
+        : getResolvedChannelDensity(channelName);
+    const value = Number.isFinite(resolved?.value) ? resolved.value : null;
+    const source = resolved?.source || (value !== null ? 'default' : 'unset');
+    const display = value !== null ? formatDensityValue(value) : '';
+    return { value, source, display };
+}
+
+function buildChannelRow(channelName, percent, endValue, densityState) {
     const row = document.createElement('tr');
     row.className = 'border-t border-gray-200 channel-row';
     row.setAttribute('data-channel', channelName);
+    const density = resolveDensityAttributes(channelName, densityState);
+    const densityValueAttr = density.display || '';
+    const densitySourceAttr = density.source || 'unset';
 
     row.innerHTML = `
         <td class="p-0 text-center" style="width:0;"></td>
         <td class="px-1 pt-2 pb-1 font-medium align-middle text-left" style="width: 100px;">
             <span class="flex items-center gap-2 w-full">
+                <button type="button" class="channel-lock-btn px-1.5 py-1 text-xs rounded border border-gray-300 text-gray-600 bg-white hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 flex-shrink-0" data-channel="${channelName}" data-tooltip="Lock to prevent edits" aria-pressed="false" aria-label="Toggle ink limit lock for ${channelName}">${LOCK_ICON_UNLOCKED.trim()}</button>
                 <span class="inline-block w-3.5 h-3.5 rounded-sm border border-black/10 flex-shrink-0" style="background-color: ${INK_COLORS[channelName] || '#000'}"></span>
                 <span class="w-8 channel-name">${channelName}</span>
                 <span class="text-xs text-gray-500 invisible" data-disabled>(disabled)</span>
@@ -50,10 +88,18 @@ function buildChannelRow(channelName, percent, endValue) {
             <span class="processing-label italic font-normal text-xs text-gray-600" data-channel="${channelName}">→ Linear ramp</span>
         </td>
         <td class="pr-0 pt-2 pb-1 text-right" style="width:120px;">
-            <input type="number" step="1" min="0" max="100" value="${percent}" data-base-percent="${percent}" class="percent-input w-20 m-0 rounded-lg border border-gray-300 px-2 py-1 text-right">
+            <div class="flex items-center justify-end gap-1">
+                <input type="number" step="1" min="0" max="100" value="${percent}" data-base-percent="${percent}" class="percent-input w-16 m-0 rounded-lg border border-gray-300 px-2 py-1 text-right">
+            </div>
         </td>
         <td class="pl-0 pt-2 pb-1 text-right" style="width:120px;">
             <input type="number" step="1" min="0" max="65535" value="${endValue}" data-base-end="${endValue}" class="end-input w-20 m-0 rounded-lg border border-gray-300 px-2 py-1 text-right">
+        </td>
+        <td class="pl-0 pr-2 pt-2 pb-1 text-right" style="width:150px;">
+            <div class="flex flex-col items-end gap-1">
+                <input type="number" step="0.001" min="0" max="2" value="${densityValueAttr}" class="density-input w-20 m-0 rounded-lg border border-gray-300 px-2 py-1 text-xs text-right" data-channel="${channelName}" data-density-source="${densitySourceAttr}" placeholder="—">
+                <span class="density-coverage-indicator text-xs text-gray-500 text-right hidden" data-coverage-indicator></span>
+            </div>
         </td>
     `;
 
@@ -89,6 +135,12 @@ function buildPlaceholderRow() {
         </td>
         <td class="pl-0 pt-2 pb-1 text-right" style="width:120px;">
             <input type="number" step="1" min="0" max="65535" value="65535" data-base-end="65535" class="end-input w-20 m-0 rounded-lg border border-gray-300 px-2 py-1 text-right invisible" disabled>
+        </td>
+        <td class="pl-0 pr-2 pt-2 pb-1 text-right" style="width:150px;">
+            <div class="flex flex-col items-end gap-1">
+                <input type="number" step="0.001" min="0" max="2" value="" class="density-input w-20 m-0 rounded-lg border border-gray-300 px-2 py-1 text-xs text-right invisible" disabled>
+                <span class="density-coverage-indicator text-xs text-gray-500 text-right hidden" data-coverage-indicator></span>
+            </div>
         </td>
     `;
     return row;
@@ -160,7 +212,7 @@ export function setPrinter(model, options = {}) {
     try {
         const stateManager = getStateManager();
         if (stateManager) {
-            stateManager.setPrinter(printerId);
+            stateManager.setPrinter(printerId, overrides);
         }
     } catch (err) {
         if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
@@ -183,15 +235,26 @@ export function setPrinter(model, options = {}) {
         ? 'MK'
         : (printer.channels.includes('K') ? 'K' : printer.channels[0]);
 
+    const lockDefaults = {};
+    initializeChannelDensitiesForPrinter(printer.channels);
+
     printer.channels.forEach((channelName) => {
         const { percent, endValue } = applyInitialValues(channelName, overrides, primaryChannel);
-        const row = buildChannelRow(channelName, percent, endValue);
+        lockDefaults[channelName] = {
+            percentLimit: percent,
+            endValue
+        };
+        const densityState = getResolvedChannelDensity(channelName);
+        const row = buildChannelRow(channelName, percent, endValue, densityState);
         fragment.appendChild(row);
         registerChannelRow(channelName, row);
     });
 
     fragment.appendChild(buildPlaceholderRow());
     elements.rows.appendChild(fragment);
+
+    initializeChannelLocks(lockDefaults);
+    applyOverrideDisplays(overrides);
 
     setupChannelRows(elements.rows);
     updateChannelLegend(printer);
@@ -224,6 +287,27 @@ export function initializePrinterUI() {
     setPrinter(initialModel, { updateSelect: false, silent: true, force: true });
 }
 
+function applyOverrideDisplays(overrides = {}) {
+    if (!elements.rows || !overrides || typeof overrides !== 'object') {
+        return;
+    }
+    Object.entries(overrides).forEach(([channelName, override]) => {
+        const row = elements.rows.querySelector(`tr.channel-row[data-channel="${channelName}"]`);
+        if (!row) return;
+        const percentInput = row.querySelector('.percent-input');
+        const endInput = row.querySelector('.end-input');
+        if (!percentInput || !endInput) return;
+        const endValue = InputValidator.clampEnd(
+            Number.isFinite(override?.endValue) ? override.endValue : endInput.value
+        );
+        const percentValue = InputValidator.computePercentFromEnd(endValue);
+        percentInput.value = formatPercentDisplay(percentValue);
+        percentInput.setAttribute('data-base-percent', String(percentValue));
+        endInput.value = String(endValue);
+        endInput.setAttribute('data-base-end', String(endValue));
+    });
+}
+
 export function syncPrinterForQuadData(quadData, options = {}) {
     if (!quadData || !Array.isArray(quadData.channels)) {
         return;
@@ -249,4 +333,15 @@ export function syncPrinterForQuadData(quadData, options = {}) {
         filename: quadData.filename,
         silent
     });
+    applyOverrideDisplays(overrides);
+    const scheduleReapply = () => applyOverrideDisplays(overrides);
+    if (typeof requestAnimationFrame === 'function') {
+        requestAnimationFrame(() => {
+            scheduleReapply();
+            requestAnimationFrame(scheduleReapply);
+        });
+    } else {
+        setTimeout(scheduleReapply, 0);
+        setTimeout(scheduleReapply, 50);
+    }
 }

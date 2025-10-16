@@ -1,7 +1,7 @@
 // quadGEN Chart Manager
 // Chart rendering, zoom management, and interaction handling
 
-import { elements, getCurrentPrinter, getAppState, updateAppState, INK_COLORS, TOTAL, isChannelNormalizedToEnd } from '../core/state.js';
+import { elements, getCurrentPrinter, getAppState, updateAppState, INK_COLORS, TOTAL, isChannelNormalizedToEnd, getLoadedQuadData } from '../core/state.js';
 import { getStateManager } from '../core/state-manager.js';
 import { InputValidator } from '../core/validation.js';
 import { make256 } from '../core/processing-pipeline.js';
@@ -10,7 +10,17 @@ import { SCALING_STATE_FLAG_EVENT } from '../core/scaling-constants.js';
 import { ControlPoints, isSmartCurve } from '../curves/smart-curves.js';
 import { registerInkChartHandler, triggerPreviewUpdate } from './ui-hooks.js';
 import { showStatus } from './status-service.js';
-import { LinearizationState } from '../data/linearization-utils.js';
+import { LinearizationState, normalizeLinearizationEntry } from '../data/linearization-utils.js';
+import { isSmartPointDragEnabled } from '../core/feature-flags.js';
+import { isChannelLocked, getChannelLockEditMessage } from '../core/channel-locks.js';
+import {
+    beginSmartPointDrag,
+    updateSmartPointDrag,
+    endSmartPointDrag,
+    cancelSmartPointDrag,
+    isSmartPointDragActive,
+    selectSmartPointOrdinal
+} from './edit-mode.js';
 import {
     normalizeDisplayMax,
     clampPercentForDisplay,
@@ -20,7 +30,10 @@ import {
     mapXToPercent,
     getChartColors,
     createChartGeometry,
-    drawChartGrid
+    drawChartGrid,
+    hitTestSmartPoint,
+    clampSmartPointCoordinates,
+    resolveSmartPointClickSelection
 } from './chart-utils.js';
 import {
     drawChartAxes,
@@ -33,7 +46,16 @@ import {
     drawAxisTitles,
     getTickValues
 } from './chart-renderer.js';
+import { normalizeDragOutputToAbsolute } from './drag-utils.js';
 import { updateProcessingDetail, updateAllProcessingDetails } from './processing-status.js';
+import { registerDebugNamespace } from '../utils/debug-registry.js';
+import { subscribeCompositeDebugState, getCompositeDebugState } from '../core/composite-debug.js';
+import {
+    computeLightBlockingCurve,
+    isLightBlockingOverlayEnabled as coreIsLightBlockingOverlayEnabled,
+    setLightBlockingOverlayEnabled as coreSetLightBlockingOverlayEnabled,
+    clearLightBlockingCache as clearLightBlockingOverlayCache
+} from '../core/light-blocking.js';
 
 const globalScope = typeof window !== 'undefined' ? window : globalThis;
 const isBrowser = typeof document !== 'undefined';
@@ -45,6 +67,484 @@ function formatPercentDisplay(value) {
     return String(rounded);
   }
   return Number(value.toFixed(1)).toString();
+}
+
+const SMART_POINT_DRAG_TOLERANCE_PX = 12;
+
+const initialAppStateSnapshot = getAppState();
+const CORRECTION_OVERLAY_COLOR = '#ef4444';
+const CORRECTION_BASELINE_COLOR = '#a855f7';
+const ORIGINAL_CURVE_OVERLAY_COLOR = '#4b5563';
+const LIGHT_BLOCKING_OVERLAY_COLOR = '#7c3aed';
+const LIGHT_BLOCKING_LABEL_COLOR = '#6d28d9';
+const LIGHT_BLOCKING_REFERENCE_COLOR = '#c084fc';
+const FLAG_MARKER_EMOJI = '🚩';
+const FLAG_MARKER_FALLBACK = '⚑';
+
+const chartDebugSettings = {
+    showCorrectionTarget: !!initialAppStateSnapshot.showCorrectionOverlay,
+    lastCorrectionOverlay: null,
+    showLightBlockingOverlay: false,
+    lastLightBlockingCurve: null,
+    lastOriginalOverlays: {},
+    flaggedSnapshots: [],
+    lastSelectionProbe: null
+};
+
+function sampleLightBlockingAtPercent(inputPercent) {
+    const overlay = chartDebugSettings.lastLightBlockingCurve;
+    const curve = overlay?.curve;
+    if (!Array.isArray(curve) || curve.length < 2) {
+        return null;
+    }
+    const percent = Math.max(0, Math.min(100, inputPercent));
+    const normalized = percent / 100;
+    const lastIndex = curve.length - 1;
+    const position = normalized * lastIndex;
+    const left = Math.floor(position);
+    const right = Math.min(lastIndex, left + 1);
+    const t = position - left;
+    const leftValue = Number(curve[left]) || 0;
+    const rightValue = Number(curve[right]) || leftValue;
+    return leftValue + (rightValue - leftValue) * t;
+}
+
+function sampleRawLightBlockingAtPercent(inputPercent) {
+    const overlay = chartDebugSettings.lastLightBlockingCurve;
+    if (!overlay) return null;
+    const rawCurve = overlay.rawCurve;
+    if (!Array.isArray(rawCurve) || rawCurve.length < 2) {
+        return null;
+    }
+    const percent = Math.max(0, Math.min(100, inputPercent));
+    const normalized = percent / 100;
+    const lastIndex = rawCurve.length - 1;
+    const position = normalized * lastIndex;
+    const left = Math.floor(position);
+    const right = Math.min(lastIndex, left + 1);
+    const t = position - left;
+    const leftValue = Number(rawCurve[left]) || 0;
+    const rightValue = Number(rawCurve[right]) || leftValue;
+    return leftValue + (rightValue - leftValue) * t;
+}
+
+export function setChartDebugShowCorrectionTarget(enabled = true) {
+    chartDebugSettings.showCorrectionTarget = !!enabled;
+    updateAppState({ showCorrectionOverlay: chartDebugSettings.showCorrectionTarget });
+    const toggle = elements.correctionOverlayToggle;
+    if (toggle) {
+        toggle.checked = chartDebugSettings.showCorrectionTarget;
+        toggle.setAttribute('aria-checked', String(chartDebugSettings.showCorrectionTarget));
+    }
+    if (!chartDebugSettings.showCorrectionTarget) {
+        chartDebugSettings.lastCorrectionOverlay = null;
+        if (isBrowser && globalScope.__quadDebug?.chartDebug) {
+            globalScope.__quadDebug.chartDebug.lastCorrectionOverlay = null;
+        }
+    }
+    if (typeof updateInkChart === 'function') {
+        try {
+            updateInkChart();
+        } catch (err) {
+            console.warn('[CHART DEBUG] Failed to refresh chart after toggling correction target debug:', err);
+        }
+    }
+    return chartDebugSettings.showCorrectionTarget;
+}
+
+export function isChartDebugShowCorrectionTarget() {
+    return !!chartDebugSettings.showCorrectionTarget;
+}
+
+export function setChartLightBlockingOverlayEnabled(enabled = true) {
+    const next = coreSetLightBlockingOverlayEnabled(enabled);
+    chartDebugSettings.showLightBlockingOverlay = !!next;
+    const toggle = elements.lightBlockingOverlayToggle;
+    if (toggle) {
+        toggle.checked = chartDebugSettings.showLightBlockingOverlay;
+        toggle.setAttribute('aria-checked', String(chartDebugSettings.showLightBlockingOverlay));
+    }
+    if (!chartDebugSettings.showLightBlockingOverlay) {
+        chartDebugSettings.lastLightBlockingCurve = null;
+        if (isBrowser && globalScope.__quadDebug?.chartDebug) {
+            globalScope.__quadDebug.chartDebug.lastLightBlockingCurve = null;
+        }
+    }
+    clearLightBlockingOverlayCache();
+    if (typeof updateInkChart === 'function') {
+        try {
+            updateInkChart();
+        } catch (err) {
+            console.warn('[LightBlocking] Failed to refresh chart after toggle:', err);
+        }
+    }
+    return chartDebugSettings.showLightBlockingOverlay;
+}
+
+export function isChartLightBlockingOverlayEnabled() {
+    if (!chartDebugSettings.showLightBlockingOverlay) {
+        chartDebugSettings.showLightBlockingOverlay = !!coreIsLightBlockingOverlayEnabled();
+    }
+    return !!chartDebugSettings.showLightBlockingOverlay;
+}
+
+if (isBrowser) {
+    const debugHelpers = registerDebugNamespace('chartDebug', {
+        setShowCorrectionTarget: setChartDebugShowCorrectionTarget,
+        isShowCorrectionTargetEnabled: isChartDebugShowCorrectionTarget,
+        getLastCorrectionOverlay: () => chartDebugSettings.lastCorrectionOverlay,
+        getLastOriginalOverlays: () => ({ ...chartDebugSettings.lastOriginalOverlays }),
+        getFlaggedSnapshots: () => chartDebugSettings.flaggedSnapshots.slice(),
+        setLightBlockingOverlayEnabled: setChartLightBlockingOverlayEnabled,
+        isLightBlockingOverlayEnabled: isChartLightBlockingOverlayEnabled,
+        getLastLightBlockingCurve: () => chartDebugSettings.lastLightBlockingCurve,
+        getLastSelectionProbe: () => chartDebugSettings.lastSelectionProbe,
+        simulateSmartPointSelection: (channel, ordinal, options = {}) => selectSmartPointOrdinal(channel, ordinal, {
+            description: options?.description || `Debug select ${channel} point ${ordinal}`,
+            silent: options?.silent !== undefined ? options.silent : true,
+            skipHistory: true
+        })
+    }, {
+        exposeOnWindow: true,
+        windowAliases: [
+            'setChartDebugShowCorrectionTarget',
+            'isChartDebugShowCorrectionTarget',
+            'getChartDebugFlaggedSnapshots',
+            'setLightBlockingOverlayEnabled',
+            'isLightBlockingOverlayEnabled'
+        ]
+    });
+    if (debugHelpers) {
+        Object.defineProperty(debugHelpers, 'lastCorrectionOverlay', {
+            configurable: true,
+            enumerable: true,
+            get() {
+                return chartDebugSettings.lastCorrectionOverlay;
+            },
+            set(value) {
+                chartDebugSettings.lastCorrectionOverlay = value;
+            }
+        });
+        Object.defineProperty(debugHelpers, 'lastOriginalOverlays', {
+            configurable: true,
+            enumerable: true,
+            get() {
+                return chartDebugSettings.lastOriginalOverlays;
+            },
+            set(value) {
+                if (value && typeof value === 'object') {
+                    chartDebugSettings.lastOriginalOverlays = { ...value };
+                } else {
+                    chartDebugSettings.lastOriginalOverlays = {};
+                }
+            }
+        });
+        Object.defineProperty(debugHelpers, 'lastLightBlockingCurve', {
+            configurable: true,
+            enumerable: true,
+            get() {
+                return chartDebugSettings.lastLightBlockingCurve;
+            },
+            set(value) {
+                chartDebugSettings.lastLightBlockingCurve = value;
+            }
+        });
+    }
+}
+
+let compositeDebugSelection = { index: null, percent: null };
+let unsubscribeCompositeDebug = null;
+let flaggedSnapshotIndicators = [];
+let flaggedSnapshotSignature = '';
+
+function cloneFlagForDebug(entry) {
+    if (!entry || typeof entry !== 'object') {
+        return null;
+    }
+    return {
+        index: entry.index,
+        percent: entry.percent,
+        kind: entry.flag?.kind || null,
+        magnitude: entry.flag?.magnitude ?? null,
+        channels: Array.isArray(entry.flag?.channels) ? entry.flag.channels.slice() : []
+    };
+}
+
+function updateFlaggedSnapshotIndicators(state) {
+    const flags = state?.flags && typeof state.flags === 'object' ? state.flags : {};
+    const snapshots = Array.isArray(state?.snapshots) ? state.snapshots : [];
+    const next = [];
+
+    Object.entries(flags).forEach(([key, info]) => {
+        const index = Number.parseInt(key, 10);
+        if (!Number.isInteger(index) || !info || typeof info !== 'object') {
+            return;
+        }
+        const snapshot = snapshots[index] && snapshots[index]?.index === index
+            ? snapshots[index]
+            : snapshots.find((entry) => entry && entry.index === index) || null;
+        const percent = Number.isFinite(info.inputPercent)
+            ? info.inputPercent
+            : (snapshot && Number.isFinite(snapshot.inputPercent) ? snapshot.inputPercent : null);
+        if (!Number.isFinite(percent)) {
+            return;
+        }
+        const flag = {
+            kind: info.kind === 'drop' ? 'drop' : 'rise',
+            magnitude: Number.isFinite(info.magnitude) ? info.magnitude : null,
+            channels: Array.isArray(info.channels) ? info.channels.slice() : [],
+            details: Array.isArray(info.details) ? info.details.map((detail) => ({ ...detail })) : []
+        };
+        next.push({ index, percent, flag });
+    });
+
+    next.sort((a, b) => a.index - b.index);
+    const signature = JSON.stringify(next.map((entry) => ({
+        i: entry.index,
+        p: Math.round(entry.percent * 1000) / 1000,
+        k: entry.flag.kind,
+        m: entry.flag.magnitude != null ? Math.round(entry.flag.magnitude * 1000) / 1000 : null,
+        c: entry.flag.channels
+    })));
+    const changed = signature !== flaggedSnapshotSignature;
+    if (changed) {
+        flaggedSnapshotIndicators = next;
+        flaggedSnapshotSignature = signature;
+        chartDebugSettings.flaggedSnapshots = next.map(cloneFlagForDebug).filter(Boolean);
+        if (isBrowser && globalScope.__quadDebug?.chartDebug) {
+            globalScope.__quadDebug.chartDebug.flaggedSnapshots = chartDebugSettings.flaggedSnapshots;
+        }
+    }
+    if (!next.length && chartDebugSettings.flaggedSnapshots.length) {
+        chartDebugSettings.flaggedSnapshots = [];
+        if (isBrowser && globalScope.__quadDebug?.chartDebug) {
+            globalScope.__quadDebug.chartDebug.flaggedSnapshots = [];
+        }
+    }
+    return changed;
+}
+
+function setCompositeDebugSelectionState(state) {
+    const nextPercent = Number.isFinite(state?.selection?.percent) ? state.selection.percent : null;
+    const nextIndex = Number.isInteger(state?.selection?.index) ? state.selection.index : null;
+    const changed = compositeDebugSelection.percent !== nextPercent || compositeDebugSelection.index !== nextIndex;
+    compositeDebugSelection = { index: nextIndex, percent: nextPercent };
+    const flagsChanged = updateFlaggedSnapshotIndicators(state);
+    return changed || flagsChanged;
+}
+
+function initializeCompositeDebugChartSubscription() {
+    if (!isBrowser) {
+        return;
+    }
+    if (unsubscribeCompositeDebug) {
+        return;
+    }
+    setCompositeDebugSelectionState(getCompositeDebugState());
+    unsubscribeCompositeDebug = subscribeCompositeDebugState((nextState) => {
+        if (setCompositeDebugSelectionState(nextState)) {
+            try {
+                updateInkChart();
+            } catch (error) {
+                console.warn('[CHART] composite debug refresh failed:', error);
+            }
+        }
+    });
+}
+
+function getCompositeDebugMarkerPercent() {
+    return Number.isFinite(compositeDebugSelection.percent) ? compositeDebugSelection.percent : null;
+}
+
+function drawFlaggedSnapshotMarkers(ctx, geom, fontScale) {
+    if (!Array.isArray(flaggedSnapshotIndicators) || !flaggedSnapshotIndicators.length) {
+        return;
+    }
+    ctx.save();
+    const fontSize = Math.max(12, Math.round(14 * Math.max(1, fontScale)));
+    ctx.font = `${fontSize}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji","Twemoji Mozilla",sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = '#ef4444';
+    const markerY = Math.max(Number(geom?.padding) || 0, 0) + fontSize + 4;
+    flaggedSnapshotIndicators.forEach((entry) => {
+        const percent = Math.max(0, Math.min(100, Number(entry?.percent) || 0));
+        const x = mapPercentToX(percent, geom);
+        ctx.fillText(FLAG_MARKER_EMOJI, x, markerY);
+    });
+    ctx.restore();
+}
+
+function formatFlagTooltip(flag, percent, index) {
+    const lines = [];
+    if (Number.isInteger(index)) {
+        lines.push(`Snapshot #${index}`);
+    }
+    if (Number.isFinite(percent)) {
+        lines.push(`Input ${percent.toFixed(1)}%`);
+    }
+    if (flag && Array.isArray(flag.channels) && flag.channels.length) {
+        if (Array.isArray(flag.details) && flag.details.length) {
+            const detailParts = flag.details
+                .map((detail) => {
+                    if (!detail || typeof detail.channel !== 'string' || !detail.channel) {
+                        return null;
+                    }
+                    if (Number.isFinite(detail.delta)) {
+                        const deltaValue = Math.abs(detail.delta).toFixed(1);
+                        const sign = detail.delta >= 0 ? '+' : '−';
+                        return `${detail.channel}: ${sign}${deltaValue}%`;
+                    }
+                    if (Number.isFinite(detail.magnitude)) {
+                        const deltaValue = Math.abs(detail.magnitude).toFixed(1);
+                        const sign = detail.direction === 'drop' ? '−' : '+';
+                        return `${detail.channel}: ${sign}${deltaValue}%`;
+                    }
+                    return detail.channel;
+                })
+                .filter(Boolean);
+            if (detailParts.length) {
+                lines.push(`Channels: ${detailParts.join(', ')}`);
+            } else {
+                lines.push(`Channels: ${flag.channels.join(', ')}`);
+            }
+        } else {
+            lines.push(`Channels: ${flag.channels.join(', ')}`);
+        }
+    }
+    if (flag && Number.isFinite(flag.threshold)) {
+        lines.push(`Threshold ≥ ${flag.threshold.toFixed(1)}%`);
+    }
+    return lines.join('\n');
+}
+
+function updateSnapshotFlagOverlay(geom, deviceScale = 1) {
+    const overlay = elements.snapshotFlagOverlay;
+    const canvas = elements.inkChart;
+    if (!overlay || !canvas) {
+        return;
+    }
+    overlay.innerHTML = '';
+    if (!Array.isArray(flaggedSnapshotIndicators) || !flaggedSnapshotIndicators.length) {
+        overlay.classList.add('hidden');
+        return;
+    }
+    overlay.classList.remove('hidden');
+    const width = canvas.width || 1;
+    const height = canvas.height || 1;
+    const markerYOffset = Math.max(Number(geom?.padding) || 0, 0) + Math.max(12, 14 * Math.max(1, deviceScale)) + 4;
+    flaggedSnapshotIndicators.forEach((entry) => {
+        const marker = document.createElement('span');
+        marker.textContent = FLAG_MARKER_EMOJI;
+        marker.className = 'absolute pointer-events-auto select-none text-base font-semibold drop-shadow-sm';
+        marker.style.color = '#ef4444';
+        marker.style.cursor = 'help';
+        marker.dataset.flaggedSnapshot = String(entry.index);
+        marker.dataset.flagKind = entry.flag?.kind || 'rise';
+        const percent = Math.max(0, Math.min(100, Number(entry?.percent) || 0));
+        const x = mapPercentToX(percent, geom);
+        const top = markerYOffset;
+        marker.style.left = `${(x / width) * 100}%`;
+        marker.style.top = `${(top / height) * 100}%`;
+        marker.style.transform = 'translate(-50%, -60%)';
+        const tooltip = formatFlagTooltip(entry.flag, percent, entry.index);
+        if (tooltip) {
+            marker.title = tooltip;
+            marker.setAttribute('aria-label', tooltip.replace(/\n/g, ', '));
+        } else {
+            marker.setAttribute('aria-hidden', 'true');
+        }
+        overlay.appendChild(marker);
+    });
+}
+
+const smartDragState = {
+    geom: null,
+    pointerId: null,
+    active: false,
+    channel: null,
+    ordinal: 0,
+    moved: false,
+    suppressClick: false,
+    hoverOrdinal: null
+};
+
+let pendingClickSelection = null;
+
+function resetSmartDragRuntimeState() {
+    smartDragState.pointerId = null;
+    smartDragState.active = false;
+    smartDragState.channel = null;
+    smartDragState.ordinal = 0;
+    smartDragState.moved = false;
+    smartDragState.hoverOrdinal = null;
+    pendingClickSelection = null;
+}
+
+function isSmartPointDragAvailable() {
+    if (!isBrowser) return false;
+    if (!isSmartPointDragEnabled()) return false;
+    if (typeof globalScope.isEditModeEnabled === 'function' && !globalScope.isEditModeEnabled()) {
+        return false;
+    }
+    return !!(globalScope.EDIT && globalScope.EDIT.selectedChannel);
+}
+
+function getSelectedChannelName() {
+    return globalScope.EDIT?.selectedChannel || null;
+}
+
+function resolveChannelRow(channelName) {
+    if (!elements.rows || !channelName) return null;
+    const rows = Array.from(elements.rows.children).filter((row) => row.id !== 'noChannelsRow');
+    return rows.find((row) => row.getAttribute('data-channel') === channelName) || null;
+}
+
+function getChannelPercentForRow(row) {
+    if (!row) return 100;
+    const percentInput = row.querySelector('.percent-input');
+    if (!percentInput) return 100;
+    const raw = percentInput.value ?? percentInput.getAttribute('data-base-percent');
+    const percent = InputValidator.clampPercent(raw);
+    return Number.isFinite(percent) && percent > 0 ? percent : 100;
+}
+
+function getCurveSamplesForChannel(channelName, row) {
+    if (!row) return null;
+    const endInput = row.querySelector('.end-input');
+    const endValue = InputValidator.clampEnd(endInput?.value || endInput?.getAttribute('data-base-end') || 0);
+    if (!Number.isFinite(endValue) || endValue <= 0) {
+        return null;
+    }
+    const applyLinearization = LinearizationState.globalApplied && LinearizationState.globalData;
+    const normalizeToEnd = isChannelNormalizedToEnd(channelName);
+    try {
+        return {
+            values: make256(endValue, channelName, applyLinearization, { normalizeToEnd }),
+            endValue
+        };
+    } catch (err) {
+        console.warn('[CHART] Failed to sample curve during drag prep:', err);
+        return null;
+    }
+}
+
+function getPointerCanvasCoordinates(event, canvas) {
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+    return {
+        canvasX: (event.clientX - rect.left) * scaleX,
+        canvasY: (event.clientY - rect.top) * scaleY,
+        scaleX,
+        scaleY
+    };
+}
+
+function updateCanvasCursor(canvas, cursor) {
+    if (!canvas) return;
+    if (canvas.style.cursor === cursor) return;
+    canvas.style.cursor = cursor || '';
 }
 
 let unsubscribeScalingStateChart = null;
@@ -218,13 +718,12 @@ const CHART_ZOOM_STORAGE_KEY = 'quadgen_chart_zoom_v1';
  * Initialize chart zoom from localStorage
  */
 export function initializeChartZoom() {
-    const savedZoom = localStorage.getItem(CHART_ZOOM_STORAGE_KEY);
-    if (savedZoom) {
-        const percent = parseFloat(savedZoom);
-        if (Number.isFinite(percent)) {
-            setChartZoomPercent(percent, { persist: false, refresh: false });
-        }
+    try {
+        localStorage.removeItem(CHART_ZOOM_STORAGE_KEY);
+    } catch (err) {
+        console.warn('Could not clear chart zoom storage:', err);
     }
+    setChartZoomPercent(100, { persist: false, refresh: false });
 }
 
 /**
@@ -250,9 +749,9 @@ export function getChartZoomIndex() {
  */
 function persistChartZoom() {
     try {
-        localStorage.setItem(CHART_ZOOM_STORAGE_KEY, String(getChartZoomPercent()));
+        localStorage.removeItem(CHART_ZOOM_STORAGE_KEY);
     } catch (err) {
-        console.warn('Could not persist chart zoom:', err);
+        console.warn('Could not clear chart zoom storage:', err);
     }
 }
 
@@ -261,6 +760,15 @@ function persistChartZoom() {
  * @returns {number} Highest percentage among enabled channels
  */
 function getHighestActivePercent() {
+    const state = getAppState();
+    const hasLoadedQuad = !!state.loadedQuadData;
+    const hasLinearization = !!state.linearizationData || state.linearizationApplied === true;
+    if (!hasLoadedQuad && !hasLinearization) {
+        // On the default landing state we ignore any placeholder channel values so zoom
+        // guards do not clamp to highlight mode.
+        return 0;
+    }
+
     let maxPercent = 0;
     try {
         const rowNodes = elements.rows?.children ? Array.from(elements.rows.children) : [];
@@ -293,12 +801,17 @@ export function getMinimumAllowedZoomIndex() {
     // Round up to nearest 10% to ensure full curve visibility
     const target = Math.min(100, Math.max(0, Math.ceil(highest / 10) * 10));
 
-    // Find first zoom level that can show the full curve
-    for (let i = 0; i < CHART_ZOOM_LEVELS.length; i++) {
-        if (CHART_ZOOM_LEVELS[i] >= target) return i;
+    let minIndex = CHART_ZOOM_LEVELS.findIndex((level) => level >= target);
+    if (minIndex === -1) {
+        minIndex = CHART_ZOOM_LEVELS.length - 1;
     }
 
-    return CHART_ZOOM_LEVELS.length - 1;
+    // Allow a single highlight inspection step even when a channel reaches 100%
+    if (target >= 100 && minIndex >= CHART_ZOOM_LEVELS.length - 1) {
+        minIndex = Math.max(0, minIndex - 1);
+    }
+
+    return minIndex;
 }
 
 /**
@@ -375,9 +888,23 @@ export function setChartZoomPercent(percent, options = {}) {
  */
 export function stepChartZoom(direction, options = {}) {
     const currentIdx = getChartZoomIndex();
+    const minIdx = getMinimumAllowedZoomIndex();
+    const proposedIdx = currentIdx + (direction >= 0 ? -1 : 1);
+
+    if (direction >= 0 && proposedIdx < minIdx) {
+        const clampLevel = CHART_ZOOM_LEVELS[minIdx] ?? CHART_ZOOM_LEVELS[CHART_ZOOM_LEVELS.length - 1];
+        const highest = getHighestActivePercent();
+        const highestLabel = Number.isFinite(highest) ? Math.round(highest * 10) / 10 : null;
+        if (typeof setChartStatusMessage === 'function') {
+            const message = highestLabel != null
+                ? `Zoom stops at ${clampLevel}% — active channel peaks at ${highestLabel}%`
+                : `Zoom stops at ${clampLevel}%`;
+            setChartStatusMessage(message, 2600);
+        }
+    }
+
     // Invert direction: positive direction decreases index (zoom in = magnify shadows)
-    const newIdx = currentIdx + (direction >= 0 ? -1 : 1);
-    return setChartZoomIndex(newIdx, options);
+    return setChartZoomIndex(proposedIdx, options);
 }
 
 /**
@@ -387,15 +914,25 @@ function updateChartZoomButtons() {
     const currentIdx = getChartZoomIndex();
     const current = getChartZoomPercent();
     const minIdx = getMinimumAllowedZoomIndex();
+    const highestActive = getHighestActivePercent();
+    const highestRounded = Number.isFinite(highestActive) ? Math.round(highestActive) : null;
+    const highestLabel = Number.isFinite(highestActive) ? Math.round(highestActive * 10) / 10 : null;
 
     if (elements.chartZoomInBtn) {
         // Zoom in = decrease index (magnify shadows). Can't go below minimum index.
         const atZoomInLimit = currentIdx <= minIdx;
         elements.chartZoomInBtn.disabled = atZoomInLimit;
         elements.chartZoomInBtn.setAttribute('aria-disabled', atZoomInLimit ? 'true' : 'false');
-        elements.chartZoomInBtn.title = atZoomInLimit
-            ? 'Already at maximum zoom'
-            : `Zoom in from ${current}%`;
+        if (atZoomInLimit) {
+            const nextLevel = CHART_ZOOM_LEVELS[Math.min(CHART_ZOOM_LEVELS.length - 1, minIdx + 1)];
+            const highestTrigger = highestRounded != null && nextLevel != null && highestRounded >= nextLevel;
+            const activePeak = highestLabel != null ? highestLabel : highestRounded;
+            elements.chartZoomInBtn.title = highestTrigger
+                ? `Zoom limited to ${CHART_ZOOM_LEVELS[minIdx]}% — active channel peaks at ${activePeak ?? 100}%`
+                : 'Already at maximum zoom';
+        } else {
+            elements.chartZoomInBtn.title = `Zoom in from ${current}%`;
+        }
     }
 
     if (elements.chartZoomOutBtn) {
@@ -537,12 +1074,15 @@ export function updateInkChart() {
     const minZoomIdx = getMinimumAllowedZoomIndex();
     const currentIdx = getChartZoomIndex();
     if (currentIdx < minZoomIdx) {
-        setChartZoomIndex(minZoomIdx, { persist: true, refresh: false });
+        // Auto clamp the zoom for rendering but avoid persisting so the user's preferred
+        // level (stored in localStorage) is restored once the guard relaxes.
+        setChartZoomIndex(minZoomIdx, { persist: false, refresh: false });
     }
 
     // Create chart geometry
     const displayMax = getChartZoomPercent();
     const geom = createChartGeometry(canvas, displayMax, deviceScale);
+    ensureSmartPointDragHandlers(geom);
 
     // Draw chart background if specified
     if (colors.bg && colors.bg !== 'transparent') {
@@ -588,8 +1128,60 @@ export function updateInkChart() {
     drawAxisLabels(ctx, geom, colors, tickValues, inkGradientInfo, inputGradientInfo);
     drawAxisTitles(ctx, geom, colors, inkGradientInfo);
 
+    if (chartDebugSettings.showCorrectionTarget) {
+        drawCorrectionTargetCurve(ctx, geom);
+    }
+
     // Draw curves for each active channel
     renderChannelCurves(ctx, geom, colors, fontScale);
+
+    if (chartDebugSettings.showLightBlockingOverlay) {
+        try {
+            const overlayResult = computeLightBlockingCurve({ resolution: 256, normalize: true, skipCache: true });
+            if (overlayResult && Array.isArray(overlayResult.curve) && overlayResult.curve.length > 1) {
+                drawLightBlockingOverlay(ctx, geom, overlayResult);
+                chartDebugSettings.lastLightBlockingCurve = {
+                    curve: overlayResult.curve.slice(),
+                    maxValue: overlayResult.maxValue,
+                    contributingChannels: overlayResult.contributingChannels.slice(),
+                    rawCurve: Array.isArray(overlayResult.rawCurve) ? overlayResult.rawCurve.slice() : null,
+                    rawMaxValue: Number.isFinite(overlayResult.rawMaxValue) ? overlayResult.rawMaxValue : null,
+                    normalizedCurve: Array.isArray(overlayResult.normalizedCurve) ? overlayResult.normalizedCurve.slice() : null,
+                    normalizedMaxValue: Number.isFinite(overlayResult.normalizedMaxValue) ? overlayResult.normalizedMaxValue : null
+                };
+                if (isBrowser && globalScope.__quadDebug?.chartDebug) {
+                    globalScope.__quadDebug.chartDebug.lastLightBlockingCurve = chartDebugSettings.lastLightBlockingCurve;
+                }
+            }
+        } catch (error) {
+            console.warn('[LightBlocking] Failed to compute overlay curve:', error);
+        }
+    } else if (chartDebugSettings.lastLightBlockingCurve) {
+        chartDebugSettings.lastLightBlockingCurve = null;
+        if (isBrowser && globalScope.__quadDebug?.chartDebug) {
+            globalScope.__quadDebug.chartDebug.lastLightBlockingCurve = null;
+        }
+    }
+
+    drawFlaggedSnapshotMarkers(ctx, geom, fontScale);
+    updateSnapshotFlagOverlay(geom, deviceScale);
+
+    const debugMarkerPercent = getCompositeDebugMarkerPercent();
+    if (debugMarkerPercent != null) {
+        const clamped = Math.max(0, Math.min(100, debugMarkerPercent));
+        const markerX = mapPercentToX(clamped, geom);
+        const top = geom.padding;
+        const bottom = geom.height - (geom.bottomPadding || geom.padding);
+        ctx.save();
+        ctx.strokeStyle = '#16a34a';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(markerX, top);
+        ctx.lineTo(markerX, bottom);
+        ctx.stroke();
+        ctx.restore();
+    }
 
     // Setup chart cursor tooltip interaction
     setupChartCursorTooltip(geom);
@@ -610,6 +1202,7 @@ export function initializeChart() {
     console.log('📊 Initializing chart system...');
 
     configureChartScalingStateSubscription();
+    initializeCompositeDebugChartSubscription();
 
     if (elements.inkChart) {
         const wrapper = getChartWrapper();
@@ -827,32 +1420,204 @@ function drawReferenceIntentCurve(ctx, geom, colors, channelName, endValue) {
     }
 }
 
+function getEffectiveGlobalInkPercent(loadedData, fallbackMax = 100) {
+    if (!loadedData || typeof loadedData !== 'object') {
+        return fallbackMax;
+    }
+
+    let effective = 0;
+    let hasValue = false;
+
+    if (loadedData.baselineEnd && typeof loadedData.baselineEnd === 'object') {
+        Object.values(loadedData.baselineEnd).forEach((endValue) => {
+            const numeric = Math.max(0, Number(endValue) || 0);
+            if (numeric > 0) {
+                effective += numeric;
+                hasValue = true;
+            }
+        });
+    }
+
+    if (!hasValue && loadedData.curves && typeof loadedData.curves === 'object') {
+        Object.values(loadedData.curves).forEach((curve) => {
+            if (Array.isArray(curve) && curve.length) {
+                const lastValue = Math.max(0, Number(curve[curve.length - 1]) || 0);
+                effective += lastValue;
+                hasValue = hasValue || lastValue > 0;
+            }
+        });
+    }
+
+    if (!hasValue || effective <= 0) {
+        return fallbackMax;
+    }
+
+    const maxPercent = (effective / TOTAL) * 100;
+    if (!Number.isFinite(maxPercent) || maxPercent <= 0) {
+        return fallbackMax;
+    }
+
+    return Math.max(0.01, maxPercent);
+}
+
+function drawCorrectionTargetCurve(ctx, geom) {
+    try {
+        const globalEntry = typeof LinearizationState.getGlobalData === 'function'
+            ? LinearizationState.getGlobalData()
+            : LinearizationState.globalData;
+        if (!globalEntry) {
+            chartDebugSettings.lastCorrectionOverlay = null;
+            if (isBrowser && globalScope.__quadDebug?.chartDebug) {
+                globalScope.__quadDebug.chartDebug.lastCorrectionOverlay = null;
+            }
+            return;
+        }
+
+        const normalized = normalizeLinearizationEntry(globalEntry);
+        const samples = normalized?.samples;
+        if (!Array.isArray(samples) || samples.length < 2) {
+            chartDebugSettings.lastCorrectionOverlay = null;
+            if (isBrowser && globalScope.__quadDebug?.chartDebug) {
+                globalScope.__quadDebug.chartDebug.lastCorrectionOverlay = null;
+            }
+            return;
+        }
+
+        const loadedData = typeof getLoadedQuadData === 'function' ? getLoadedQuadData() : null;
+        let effectiveMaxPercent = getEffectiveGlobalInkPercent(loadedData, geom.displayMax || 100);
+        if (!Number.isFinite(effectiveMaxPercent) || effectiveMaxPercent <= 0) {
+            effectiveMaxPercent = Math.min(geom.displayMax || 100, 100);
+        } else if (geom.displayMax && effectiveMaxPercent > geom.displayMax) {
+            effectiveMaxPercent = geom.displayMax;
+        }
+
+        const overlayMeta = {
+            color: CORRECTION_OVERLAY_COLOR,
+            samples: [],
+            baseline: null,
+            effectiveMaxPercent
+        };
+
+        ctx.save();
+        ctx.strokeStyle = CORRECTION_OVERLAY_COLOR;
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.85;
+        ctx.setLineDash([8, 6]);
+
+        ctx.beginPath();
+        for (let i = 0; i < samples.length; i += 1) {
+            const inputPercent = (i / (samples.length - 1)) * 100;
+            const outputPercent = Math.max(0, Math.min(effectiveMaxPercent, samples[i] * effectiveMaxPercent));
+            const x = mapPercentToX(inputPercent, geom);
+            const y = mapPercentToY(outputPercent, geom);
+            overlayMeta.samples.push({ input: inputPercent, output: outputPercent });
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        ctx.strokeStyle = CORRECTION_BASELINE_COLOR;
+        ctx.lineWidth = 1.5;
+        ctx.globalAlpha = 0.9;
+        ctx.beginPath();
+        const baselinePoints = [
+            { input: 0, output: 0 },
+            { input: 100, output: effectiveMaxPercent }
+        ];
+        const startX = mapPercentToX(baselinePoints[0].input, geom);
+        const startY = mapPercentToY(baselinePoints[0].output, geom);
+        const endX = mapPercentToX(baselinePoints[1].input, geom);
+        const endY = mapPercentToY(baselinePoints[1].output, geom);
+        ctx.moveTo(startX, startY);
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+
+        overlayMeta.baseline = {
+            color: CORRECTION_BASELINE_COLOR,
+            points: baselinePoints
+        };
+
+        chartDebugSettings.lastCorrectionOverlay = overlayMeta;
+        if (isBrowser && globalScope.__quadDebug?.chartDebug) {
+            globalScope.__quadDebug.chartDebug.lastCorrectionOverlay = overlayMeta;
+        }
+
+        ctx.restore();
+    } catch (error) {
+        console.warn('[CHART DEBUG] Failed to draw correction target overlay:', error);
+        chartDebugSettings.lastCorrectionOverlay = null;
+        if (isBrowser && globalScope.__quadDebug?.chartDebug) {
+            globalScope.__quadDebug.chartDebug.lastCorrectionOverlay = null;
+        }
+    }
+}
+
 function drawOriginalCurveOverlay(ctx, geom, colors, channelName, endValue) {
     try {
         const hasLinearization = LinearizationState.hasAnyLinearization() ||
                                 LinearizationState.getPerChannelData(channelName);
         const loadedData = getLoadedQuadData();
+        const baselineCurves = typeof LinearizationState?.getGlobalBaselineCurves === 'function'
+            ? LinearizationState.getGlobalBaselineCurves()
+            : null;
         const originalCurve = loadedData?.originalCurves?.[channelName];
-        if (!Array.isArray(originalCurve) || originalCurve.length === 0) return;
+        const referenceCurve = originalCurve && originalCurve.length
+            ? originalCurve
+            : (baselineCurves?.[channelName] || null);
+        const isArrayLike = Array.isArray(referenceCurve) ||
+            ArrayBuffer.isView(referenceCurve) ||
+            (referenceCurve && typeof referenceCurve.length === 'number');
+
+        if (!isArrayLike || !referenceCurve || referenceCurve.length === 0) {
+            if (chartDebugSettings.lastOriginalOverlays[channelName]) {
+                delete chartDebugSettings.lastOriginalOverlays[channelName];
+                if (isBrowser && globalScope.__quadDebug?.chartDebug?.lastOriginalOverlays) {
+                    delete globalScope.__quadDebug.chartDebug.lastOriginalOverlays[channelName];
+                }
+            }
+            return;
+        }
 
         const showOverlay = hasLinearization || !!loadedData;
-        if (!showOverlay) return;
+        if (!showOverlay) {
+            if (chartDebugSettings.lastOriginalOverlays[channelName]) {
+                delete chartDebugSettings.lastOriginalOverlays[channelName];
+                if (isBrowser && globalScope.__quadDebug?.chartDebug?.lastOriginalOverlays) {
+                    delete globalScope.__quadDebug.chartDebug.lastOriginalOverlays[channelName];
+                }
+            }
+            return;
+        }
 
-        const baselineEnd = loadedData?.baselineEnd?.[channelName];
-        const scale = baselineEnd > 0 ? endValue / baselineEnd : 1;
+        const overlayMeta = {
+            channelName,
+            color: ORIGINAL_CURVE_OVERLAY_COLOR,
+            samples: [],
+            percentSamples: []
+        };
 
         ctx.save();
-        ctx.strokeStyle = '#9CA3AF';
-        ctx.globalAlpha = 0.8;
-        ctx.lineWidth = 1;
+        ctx.strokeStyle = ORIGINAL_CURVE_OVERLAY_COLOR;
+        ctx.globalAlpha = 0.9;
+        ctx.lineWidth = 1.75;
         ctx.setLineDash([4, 2]);
 
         ctx.beginPath();
-        for (let i = 0; i < originalCurve.length; i++) {
-            const x = geom.leftPadding + (i / (originalCurve.length - 1)) * geom.chartWidth;
-            const scaledValue = Math.max(0, Math.min(TOTAL, Math.round(originalCurve[i] * scale)));
-            const valuePercent = (scaledValue / TOTAL) * 100;
+        const lastIndex = Math.max(1, referenceCurve.length - 1);
+        for (let i = 0; i < referenceCurve.length; i++) {
+            const inputPercent = (i / lastIndex) * 100;
+            const rawSample = Number(referenceCurve[i]) || 0;
+            const rawValue = Math.max(0, Math.min(TOTAL, Math.round(rawSample)));
+            overlayMeta.samples.push(rawValue);
+            const valuePercent = (rawValue / TOTAL) * 100;
+            overlayMeta.percentSamples.push(valuePercent);
             const chartPercent = Math.max(0, Math.min(geom.displayMax, valuePercent));
+            const x = mapPercentToX(inputPercent, geom);
             const y = mapPercentToY(chartPercent, geom);
 
             if (i === 0) {
@@ -865,8 +1630,21 @@ function drawOriginalCurveOverlay(ctx, geom, colors, channelName, endValue) {
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.restore();
+
+        chartDebugSettings.lastOriginalOverlays[channelName] = overlayMeta;
+        if (isBrowser && globalScope.__quadDebug?.chartDebug) {
+            const debugOverlays = globalScope.__quadDebug.chartDebug.lastOriginalOverlays ||
+                (globalScope.__quadDebug.chartDebug.lastOriginalOverlays = {});
+            debugOverlays[channelName] = overlayMeta;
+        }
     } catch (error) {
         console.warn(`Error drawing original overlay for ${channelName}:`, error);
+        if (chartDebugSettings.lastOriginalOverlays[channelName]) {
+            delete chartDebugSettings.lastOriginalOverlays[channelName];
+            if (isBrowser && globalScope.__quadDebug?.chartDebug?.lastOriginalOverlays) {
+                delete globalScope.__quadDebug.chartDebug.lastOriginalOverlays[channelName];
+            }
+        }
     }
 }
 
@@ -887,6 +1665,8 @@ function renderChannelCurves(ctx, geom, colors, fontScale) {
         if (isBrowser) {
             globalScope.__chartDrawMeta = drawMeta;
         }
+
+        const dragActive = typeof isSmartPointDragActive === 'function' && isSmartPointDragActive();
 
         for (const row of channels) {
             const channelName = row.getAttribute('data-channel');
@@ -919,11 +1699,11 @@ function renderChannelCurves(ctx, geom, colors, fontScale) {
             // Draw reference line (target intent curve) if linearization is active
             drawReferenceIntentCurve(ctx, geom, colors, channelName, baseEndValue);
 
-            // Draw original loaded curve overlay (dashed) when linearization is active
-            drawOriginalCurveOverlay(ctx, geom, colors, channelName, baseEndValue);
-
             // Convert curve to chart coordinates and draw
             const curveMeta = drawChannelCurve(ctx, geom, colors, channelName, curveValues, baseEndValue);
+
+            // Draw original loaded curve overlay (dashed) above the channel curve for visibility
+            drawOriginalCurveOverlay(ctx, geom, colors, channelName, baseEndValue);
             if (curveMeta) {
                 drawMeta.push({
                     channelName,
@@ -942,25 +1722,28 @@ function renderChannelCurves(ctx, geom, colors, fontScale) {
                 if (Number.isFinite(v) && v > peakValue) peakValue = v;
             }
 
-            const peakPercent = (peakValue / TOTAL) * 100;
-            const effectivePercent = InputValidator.clampPercent(peakPercent);
-            const effectiveEnd = InputValidator.clampEnd(Math.round(peakValue));
-
-            const shouldUseEffective = !LinearizationState.globalApplied
-                || LinearizationState.isGlobalBaked?.();
-            const percentToDisplay = shouldUseEffective ? effectivePercent : basePercent;
-            const endToDisplay = shouldUseEffective ? effectiveEnd : baseEndValue;
+            const effectiveEnd = InputValidator.clampEnd(baseEndValue);
+            const percentToDisplay = InputValidator.computePercentFromEnd(effectiveEnd);
+            const effectivePercent = percentToDisplay;
+            const endToDisplay = normalizeToEnd ? effectiveEnd : baseEndValue;
             const endY = mapPercentToY(Math.max(0, Math.min(100, effectivePercent)), geom);
 
             const percentHold = percentInput.dataset.userEditing === 'true' || percentInput.dataset.pendingCommitValue != null;
             const endHold = endInput.dataset.userEditing === 'true' || endInput.dataset.pendingCommitValue != null;
 
-            if (!percentHold) {
-            percentInput.value = formatPercentDisplay(percentToDisplay);
+            const allowBaselineMutation = !dragActive;
+
+            if (!percentHold && allowBaselineMutation) {
+                percentInput.value = formatPercentDisplay(percentToDisplay);
+            }
+            if (allowBaselineMutation) {
                 percentInput.setAttribute('data-base-percent', String(percentToDisplay));
             }
-            if (!endHold) {
+
+            if (!endHold && allowBaselineMutation) {
                 endInput.value = String(endToDisplay);
+            }
+            if (allowBaselineMutation) {
                 endInput.setAttribute('data-base-end', String(endToDisplay));
             }
 
@@ -980,6 +1763,24 @@ function renderChannelCurves(ctx, geom, colors, fontScale) {
     } catch (error) {
         console.error('Error rendering channel curves:', error);
     }
+}
+
+function drawPeakMarker(ctx, geom, color, inputPercent, outputPercent) {
+    const x = mapPercentToX(inputPercent, geom);
+    const y = mapPercentToY(outputPercent, geom);
+    const size = Math.max(6, Math.min(12, geom.chartHeight * 0.035));
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x, y - size);
+    ctx.lineTo(x - size * 0.75, y - size * 0.2);
+    ctx.lineTo(x + size * 0.75, y - size * 0.2);
+    ctx.closePath();
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = '#ffffff';
+    ctx.stroke();
+    ctx.restore();
 }
 
 /**
@@ -1010,15 +1811,20 @@ function drawChannelCurve(ctx, geom, colors, channelName, curveValues, endValue)
 
         ctx.beginPath();
 
+        let peakIndex = -1;
+        let peakValue = -Infinity;
+        const lastIndex = Math.max(1, curveValues.length - 1);
+
         for (let i = 0; i < curveValues.length; i++) {
-            // Convert from curve index to input percentage (0-100)
-            const inputPercent = (i / (curveValues.length - 1)) * 100;
+            const rawValue = Number(curveValues[i]) || 0;
+            if (rawValue > peakValue) {
+                peakValue = rawValue;
+                peakIndex = i;
+            }
 
-            // Convert from curve value to output percentage (0-100)
-            // Note: Normalize to TOTAL (65535) to show actual ink percentages, not to endValue
-            const outputPercent = (curveValues[i] / TOTAL) * 100;
+            const inputPercent = (i / lastIndex) * 100;
+            const outputPercent = (rawValue / TOTAL) * 100;
 
-            // Map to chart coordinates
             const x = mapPercentToX(inputPercent, geom);
             const y = mapPercentToY(outputPercent, geom);
 
@@ -1031,6 +1837,25 @@ function drawChannelCurve(ctx, geom, colors, channelName, curveValues, endValue)
 
         ctx.stroke();
         ctx.restore();
+
+        if (peakIndex >= 0 && peakValue > 0) {
+            const inputPercent = (peakIndex / lastIndex) * 100;
+            const outputPercent = (peakValue / TOTAL) * 100;
+            drawPeakMarker(ctx, geom, channelColor, inputPercent, outputPercent);
+
+            const loadedData = typeof getLoadedQuadData === 'function' ? getLoadedQuadData() : null;
+            if (loadedData) {
+                if (!loadedData.channelPeaks || typeof loadedData.channelPeaks !== 'object') {
+                    loadedData.channelPeaks = {};
+                }
+                loadedData.channelPeaks[channelName] = peakIndex;
+            }
+        } else {
+            const loadedData = typeof getLoadedQuadData === 'function' ? getLoadedQuadData() : null;
+            if (loadedData?.channelPeaks && channelName in loadedData.channelPeaks) {
+                delete loadedData.channelPeaks[channelName];
+            }
+        }
 
         // Draw Smart key point overlays if in edit mode and this is the selected channel
         try {
@@ -1048,6 +1873,7 @@ function drawChannelCurve(ctx, geom, colors, channelName, curveValues, endValue)
                     const selectedOrdinal = globalScope.EDIT.selectedOrdinal || 1;
 
                     // Draw the overlays
+                    const isDraggingThisChannel = smartDragState.active && smartDragState.channel === channelName;
                     drawSmartKeyPointOverlays(
                         ctx,
                         geom,
@@ -1061,7 +1887,7 @@ function drawChannelCurve(ctx, geom, colors, channelName, curveValues, endValue)
                         {
                             drawMarkers: true,
                             showLabels: elements.aiLabelToggle ? elements.aiLabelToggle.checked : true,
-                            boxSize: 6
+                            boxSize: isDraggingThisChannel ? 9 : 6
                         }
                     );
                 }
@@ -1174,6 +2000,103 @@ function drawInkLabels(ctx, geom, labels, fontScale) {
     }
 }
 
+function drawLightBlockingOverlay(ctx, geom, overlay) {
+    const curve = Array.isArray(overlay?.curve) ? overlay.curve : overlay?.normalizedCurve;
+    if (!Array.isArray(curve) || curve.length < 2) {
+        return;
+    }
+    const lastIndex = curve.length - 1;
+    const displayMax = Number.isFinite(geom?.displayMax) && geom.displayMax > 0 ? geom.displayMax : 100;
+    ctx.save();
+    ctx.strokeStyle = LIGHT_BLOCKING_OVERLAY_COLOR;
+    ctx.lineWidth = Math.max(2, Math.min(4, geom.chartHeight * 0.005));
+    ctx.beginPath();
+    for (let i = 0; i < curve.length; i += 1) {
+        const inputPercent = lastIndex === 0 ? 0 : (i / lastIndex) * 100;
+        const normalizedValue = Number(curve[i]) || 0;
+        const outputPercent = Math.max(0, Math.min(displayMax, (normalizedValue / 100) * displayMax));
+        const x = mapPercentToX(inputPercent, geom);
+        const y = mapPercentToY(outputPercent, geom);
+        if (i === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
+        }
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    drawLightBlockingReference(ctx, geom);
+    drawLightBlockingLabel(ctx, geom, overlay);
+}
+
+const LIGHT_BLOCKING_REFERENCE_K = 4.2;
+const LIGHT_BLOCKING_REFERENCE_RESOLUTION = 256;
+
+function drawLightBlockingReference(ctx, geom) {
+    const displayMax = Number.isFinite(geom?.displayMax) && geom.displayMax > 0 ? geom.displayMax : 100;
+    // Saturation occurs when -ln(1 - x) == LIGHT_BLOCKING_REFERENCE_K
+    // We remap input so the reference reaches (100, 100) instead of flattening early.
+    const saturationPoint = 1 - Math.exp(-LIGHT_BLOCKING_REFERENCE_K);
+    ctx.save();
+    ctx.strokeStyle = LIGHT_BLOCKING_REFERENCE_COLOR;
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
+    ctx.beginPath();
+    for (let i = 0; i < LIGHT_BLOCKING_REFERENCE_RESOLUTION; i += 1) {
+        const inputFraction = i / (LIGHT_BLOCKING_REFERENCE_RESOLUTION - 1);
+        const remappedFraction = Math.max(0, Math.min(saturationPoint, inputFraction * saturationPoint));
+        const safeDelta = Math.max(Number.EPSILON, 1 - remappedFraction);
+        let normalizedCorrection = 0;
+        if (remappedFraction > 0) {
+            normalizedCorrection = Math.max(0, Math.min(1, -Math.log(safeDelta) / LIGHT_BLOCKING_REFERENCE_K));
+        }
+        const scaledOutput = normalizedCorrection * displayMax;
+        const x = mapPercentToX(inputFraction * 100, geom);
+        const y = mapPercentToY(scaledOutput, geom);
+        if (i === 0) {
+            ctx.moveTo(x, y);
+        } else {
+            ctx.lineTo(x, y);
+        }
+    }
+    ctx.lineTo(mapPercentToX(100, geom), mapPercentToY(displayMax, geom));
+    ctx.stroke();
+    ctx.restore();
+}
+
+function drawLightBlockingLabel(ctx, geom, overlay) {
+    const normalizedMax = Number.isFinite(overlay?.maxValue) ? overlay.maxValue : Number.isFinite(overlay?.normalizedMaxValue) ? overlay.normalizedMaxValue : 0;
+    const rawMax = Number.isFinite(overlay?.rawMaxValue) ? overlay.rawMaxValue : null;
+    let label = `Light Block ${normalizedMax.toFixed(1)}%`;
+    if (rawMax != null && Math.abs(rawMax - normalizedMax) > 0.05) {
+        label += ` (raw ${rawMax.toFixed(1)}%)`;
+    }
+    ctx.save();
+    const fontSize = Math.max(11, Math.min(16, geom.chartHeight * 0.05));
+    ctx.font = `600 ${fontSize}px system-ui`;
+    ctx.fillStyle = LIGHT_BLOCKING_LABEL_COLOR;
+    ctx.textBaseline = 'top';
+    const textWidth = ctx.measureText(label).width;
+    const rightLimit = geom.leftPadding + geom.chartWidth - 12;
+    const left = Math.max(geom.leftPadding + 12, rightLimit - textWidth);
+    const displayMax = Number.isFinite(geom?.displayMax) && geom.displayMax > 0 ? geom.displayMax : 100;
+    const clampedMax = Math.max(0, Math.min(100, normalizedMax));
+    const scaledPercent = (clampedMax / 100) * displayMax;
+    const targetY = mapPercentToY(scaledPercent, geom) - fontSize - 8;
+    const minY = geom.padding + 8;
+    const finalY = Math.max(minY, targetY);
+    ctx.fillText(label, left, finalY);
+    if (Array.isArray(overlay?.contributingChannels) && overlay.contributingChannels.length) {
+        const contributors = overlay.contributingChannels.join(', ');
+        const secondaryLabel = `Channels: ${contributors}`;
+        const secondaryFont = Math.max(9, Math.min(14, fontSize - 2));
+        ctx.font = `500 ${secondaryFont}px system-ui`;
+        ctx.fillText(secondaryLabel, left, finalY + fontSize + 2);
+    }
+    ctx.restore();
+}
+
 /**
  * Get chart interaction coordinates
  * @param {MouseEvent} event - Mouse event
@@ -1219,6 +2142,9 @@ export function setupChartCursorTooltip(geom) {
         const container = canvas.closest('.relative') || canvas.parentElement || document.body;
 
         const onMove = (e) => {
+            if (smartDragState.active) {
+                return;
+            }
             if (!CHART_CURSOR_MAP) return;
 
             // Re-render chart to clear prior cursor marker overlay
@@ -1255,13 +2181,14 @@ export function setupChartCursorTooltip(geom) {
                         const row = Array.from(elements.rows.children).find(tr =>
                             tr.getAttribute('data-channel') === selCh
                         );
-                        if (row) {
-                            const endVal = InputValidator.clampEnd(row.querySelector('.end-input')?.value || 0);
-                            if (endVal > 0) {
-                                canInsert = true;
-                                // Generate curve values and lock Y to curve
-                                const values = make256(endVal, selCh, true, { normalizeToEnd: isChannelNormalizedToEnd(selCh) });
-                                const t = Math.max(0, Math.min(1, (xPct/100))) * (values.length - 1);
+                    if (row) {
+                        const locked = isChannelLocked(selCh);
+                        const endVal = InputValidator.clampEnd(row.querySelector('.end-input')?.value || 0);
+                        if (!locked && endVal > 0) {
+                            canInsert = true;
+                            // Generate curve values and lock Y to curve
+                            const values = make256(endVal, selCh, true, { normalizeToEnd: isChannelNormalizedToEnd(selCh) });
+                            const t = Math.max(0, Math.min(1, (xPct/100))) * (values.length - 1);
                                 const i0 = Math.floor(t);
                                 const i1 = Math.min(values.length - 1, i0 + 1);
                                 const a = t - i0;
@@ -1291,7 +2218,22 @@ export function setupChartCursorTooltip(geom) {
             }
 
             // Update tooltip content and position
-            tip.innerHTML = `${xPct.toFixed(1)}, ${yPct.toFixed(1)}${canInsert ? '<br>click to add point' : ''}`;
+            const tooltipLines = [`${xPct.toFixed(1)}, ${yPct.toFixed(1)}`];
+            if (chartDebugSettings.showLightBlockingOverlay && chartDebugSettings.lastLightBlockingCurve) {
+                const lightBlockingValue = sampleLightBlockingAtPercent(xPct);
+                if (Number.isFinite(lightBlockingValue)) {
+                    let tooltipLabel = `Light Block: ${lightBlockingValue.toFixed(1)}%`;
+                    const rawValue = sampleRawLightBlockingAtPercent(xPct);
+                    if (Number.isFinite(rawValue) && rawValue > 0) {
+                        tooltipLabel += ` (raw ${rawValue.toFixed(1)}%)`;
+                    }
+                    tooltipLines.push(tooltipLabel);
+                }
+            }
+            if (canInsert) {
+                tooltipLines.push('click to add point');
+            }
+            tip.innerHTML = tooltipLines.join('<br>');
             const contRect = container.getBoundingClientRect();
             const left = e.clientX - contRect.left + 12;
             const top = e.clientY - contRect.top - 24;
@@ -1310,71 +2252,161 @@ export function setupChartCursorTooltip(geom) {
         };
 
         const onClick = (e) => {
+            chartDebugSettings.lastSelectionProbe = {
+                reason: 'start'
+            };
+            if (typeof console !== 'undefined') {
+                console.log('[CHART] canvas click detected');
+            }
+            if (smartDragState.suppressClick) {
+                smartDragState.suppressClick = false;
+                chartDebugSettings.lastSelectionProbe = {
+                    reason: 'suppressed'
+                };
+                return;
+            }
             try {
-                // Basic click handling - can be enhanced with edit mode integration
-                if (typeof globalScope.isEditModeEnabled === 'function' && globalScope.isEditModeEnabled() && globalScope.quadGenActions) {
-                    if (!globalScope.isEditModeEnabled() || !globalScope.EDIT || !globalScope.EDIT.selectedChannel) return;
+                const isEditMode = typeof globalScope.isEditModeEnabled === 'function' && globalScope.isEditModeEnabled();
+                if (!isEditMode || !globalScope.quadGenActions || !globalScope.EDIT || !globalScope.EDIT.selectedChannel) {
+                    chartDebugSettings.lastSelectionProbe = {
+                        reason: 'editModeUnavailable',
+                        isEditMode,
+                        hasActions: !!globalScope.quadGenActions,
+                        hasEditState: !!globalScope.EDIT
+                    };
+                    return;
+                }
 
-                    const selCh = globalScope.EDIT.selectedChannel;
-                    const row = Array.from(elements.rows.children).find(tr =>
-                        tr.getAttribute('data-channel') === selCh
-                    );
-                    if (!row) return;
+                const selCh = globalScope.EDIT.selectedChannel;
+                const row = Array.from(elements.rows.children).find((tr) => tr.getAttribute('data-channel') === selCh);
+                if (!row) {
+                    chartDebugSettings.lastSelectionProbe = {
+                        reason: 'rowMissing',
+                        channel: selCh
+                    };
+                    return;
+                }
 
-                    const endVal = InputValidator.clampEnd(row.querySelector('.end-input')?.value || 0);
-                    if (endVal <= 0) return;
+                const samples = getCurveSamplesForChannel(selCh, row);
+                const values = samples?.values || null;
+                const endVal = samples?.endValue ?? 0;
 
-                    // Calculate click coordinates
-                    const rect = canvas.getBoundingClientRect();
-                    const scaleX = canvas.width / rect.width;
-                    const scaleY = canvas.height / rect.height;
-                    const cx = (e.clientX - rect.left) * scaleX;
-                    const cy = (e.clientY - rect.top) * scaleY;
+                const points = globalScope.ControlPoints?.get(selCh)?.points || [];
+                const geomRef = smartDragState.geom;
+                let handled = false;
 
-                    const { leftPadding, chartWidth } = CHART_CURSOR_MAP;
-                    let xPct = ((cx - leftPadding) / chartWidth) * 100;
-                    xPct = Math.max(0, Math.min(100, xPct));
+                if (geomRef && points.length > 0 && values) {
+                    const coords = getPointerCanvasCoordinates(e, canvas);
+                    const tolerancePx = SMART_POINT_DRAG_TOLERANCE_PX * (Number(geomRef?.dpr) || 1);
+                    const hit = resolveSmartPointClickSelection({
+                        canvasX: coords.canvasX,
+                        canvasY: coords.canvasY,
+                        points,
+                        geom: geomRef,
+                        tolerance: tolerancePx,
+                        values,
+                        maxValue: TOTAL
+                    });
 
-                    // Sample curve at click position and insert point
-                    const values = make256(endVal, selCh, true, { normalizeToEnd: isChannelNormalizedToEnd(selCh) });
-                    const t = Math.max(0, Math.min(1, (xPct/100))) * (values.length - 1);
-                    const i0 = Math.floor(t);
-                    const i1 = Math.min(values.length - 1, i0 + 1);
-                    const a = t - i0;
-                    const v = (1 - a) * values[i0] + a * values[i1];
-                    let yPct = Math.max(0, Math.min(100, (v / TOTAL) * 100));
+                    chartDebugSettings.lastSelectionProbe = {
+                        channel: selCh,
+                        coords,
+                        tolerance: tolerancePx,
+                        geomAvailable: !!geomRef,
+                        pointsCount: points.length,
+                        valuesAvailable: !!values,
+                        hit
+                    };
 
-                    const res = globalScope.quadGenActions.insertSmartKeyPointAt(selCh, xPct, yPct);
-                    if (res && res.success) {
-                        console.log('Point inserted successfully at', xPct.toFixed(1), ',', yPct.toFixed(1));
+                    if (hit && Number.isInteger(hit.ordinal)) {
+                        const result = selectSmartPointOrdinal(selCh, hit.ordinal, {
+                            description: `Select ${selCh} Smart point ${hit.ordinal} (chart click)`
+                        });
+                        if (result?.success) {
+                            handled = true;
+                        }
+                    }
+                } else {
+                    chartDebugSettings.lastSelectionProbe = {
+                        channel: selCh,
+                        geomAvailable: !!geomRef,
+                        pointsCount: points.length,
+                        valuesAvailable: !!values,
+                        hit: null
+                    };
+                }
 
-                        // Set selection to the newly inserted point (matching legacy behavior)
-                        try {
-                            const kp = globalScope.ControlPoints?.get(selCh)?.points || [];
-                            if (kp.length > 0 && globalScope.ControlPoints?.nearestIndex) {
-                                const nearest = globalScope.ControlPoints.nearestIndex(kp, xPct, 100); // large tolerance
-                                if (nearest && typeof nearest.index === 'number' && nearest.index >= 0) {
-                                    if (globalScope.EDIT) {
-                                        globalScope.EDIT.selectedOrdinal = nearest.index + 1; // Convert to 1-based
-                                        console.log('Selected newly inserted point:', globalScope.EDIT.selectedOrdinal);
+                if (handled) {
+                    e.preventDefault();
+                    return;
+                }
 
-                                        // Refresh the point index display
-                                        if (typeof globalScope.edit_refreshPointIndex === 'function') {
-                                            globalScope.edit_refreshPointIndex();
-                                        }
+                if (isChannelLocked(selCh)) {
+                    showStatus(getChannelLockEditMessage(selCh, 'inserting points'));
+                    chartDebugSettings.lastSelectionProbe = {
+                        reason: 'channelLocked',
+                        channel: selCh
+                    };
+                    return;
+                }
+
+                if (!values || !Number.isFinite(endVal) || endVal <= 0) {
+                    chartDebugSettings.lastSelectionProbe = {
+                        reason: 'invalidSamples',
+                        channel: selCh,
+                        valuesAvailable: !!values,
+                        endValue: endVal
+                    };
+                    return;
+                }
+
+                const rect = canvas.getBoundingClientRect();
+                const scaleX = canvas.width / rect.width;
+                const scaleY = canvas.height / rect.height;
+                const cx = (e.clientX - rect.left) * scaleX;
+                const cy = (e.clientY - rect.top) * scaleY;
+
+                const { leftPadding, chartWidth } = CHART_CURSOR_MAP;
+                let xPct = ((cx - leftPadding) / chartWidth) * 100;
+                xPct = Math.max(0, Math.min(100, xPct));
+
+                const t = Math.max(0, Math.min(1, (xPct / 100))) * (values.length - 1);
+                const i0 = Math.floor(t);
+                const i1 = Math.min(values.length - 1, i0 + 1);
+                const a = t - i0;
+                const v = (1 - a) * values[i0] + (a * values[i1]);
+                let yPct = Math.max(0, Math.min(100, (v / TOTAL) * 100));
+
+                const res = globalScope.quadGenActions.insertSmartKeyPointAt(selCh, xPct, yPct);
+                if (res && res.success) {
+                    console.log('Point inserted successfully at', xPct.toFixed(1), ',', yPct.toFixed(1));
+
+                    try {
+                        const kp = globalScope.ControlPoints?.get(selCh)?.points || [];
+                        if (kp.length > 0 && globalScope.ControlPoints?.nearestIndex) {
+                            const nearest = globalScope.ControlPoints.nearestIndex(kp, xPct, 100);
+                            if (nearest && typeof nearest.index === 'number' && nearest.index >= 0) {
+                                if (globalScope.EDIT) {
+                                    globalScope.EDIT.selectedOrdinal = nearest.index + 1;
+                                    console.log('Selected newly inserted point:', globalScope.EDIT.selectedOrdinal);
+
+                                    if (typeof globalScope.edit_refreshPointIndex === 'function') {
+                                        globalScope.edit_refreshPointIndex();
                                     }
                                 }
                             }
-                        } catch (err) {
-                            console.warn('Failed to update point selection:', err);
                         }
-
-                        try { triggerPreviewUpdate(); } catch (err) {
-                            console.warn('Failed to update preview after point insertion:', err);
-                        }
-                    } else if (res && !res.success && res.message) {
-                        showStatus(res.message);
+                    } catch (err) {
+                        console.warn('Failed to update point selection:', err);
                     }
+
+                    try {
+                        triggerPreviewUpdate();
+                    } catch (err) {
+                        console.warn('Failed to update preview after point insertion:', err);
+                    }
+                } else if (res && !res.success && res.message) {
+                    showStatus(res.message);
                 }
             } catch (err) {
                 console.warn('Click-to-insert failed:', err);
@@ -1390,6 +2422,386 @@ export function setupChartCursorTooltip(geom) {
 
         console.log('📊 Chart cursor tooltip setup complete');
     }
+}
+
+function ensureSmartPointDragHandlers(geom) {
+    const canvas = elements.inkChart;
+    if (!canvas) return;
+    if (geom) {
+        smartDragState.geom = geom;
+    }
+
+    if (canvas._smartPointDragBound) {
+        return;
+    }
+
+    const OFF_CANVAS_CANCEL_BUFFER = 64;
+
+    const handlePointerDown = (event) => {
+        if (event.button !== 0) return;
+
+        pendingClickSelection = null;
+
+        const channelName = getSelectedChannelName();
+        if (!channelName) return;
+
+        const geomRef = smartDragState.geom;
+        if (!geomRef) {
+            chartDebugSettings.lastSelectionProbe = {
+                reason: 'geomMissing'
+            };
+            return;
+        }
+
+        const row = resolveChannelRow(channelName);
+        const samples = getCurveSamplesForChannel(channelName, row);
+        const values = samples?.values;
+        if (!values || !Array.isArray(values)) {
+            chartDebugSettings.lastSelectionProbe = {
+                reason: 'noSamples',
+                channel: channelName
+            };
+            return;
+        }
+
+        const entry = ControlPoints.get(channelName);
+        const points = entry?.points || [];
+        if (points.length === 0) {
+            chartDebugSettings.lastSelectionProbe = {
+                reason: 'noPoints',
+                channel: channelName
+            };
+            return;
+        }
+
+        const coords = getPointerCanvasCoordinates(event, canvas);
+        const tolerance = SMART_POINT_DRAG_TOLERANCE_PX * (geomRef?.dpr || 1);
+        const hit = hitTestSmartPoint(coords.canvasX, coords.canvasY, {
+            points,
+            geom: geomRef,
+            tolerance,
+            values,
+            maxValue: TOTAL
+        });
+
+        if (!hit) {
+            chartDebugSettings.lastSelectionProbe = {
+                reason: 'noHit',
+                channel: channelName
+            };
+            return;
+        }
+
+        const locked = isChannelLocked(channelName);
+        const dragAvailable = isSmartPointDragAvailable();
+
+        pendingClickSelection = {
+            channel: channelName,
+            ordinal: hit.ordinal,
+            pointerId: event.pointerId
+        };
+
+        chartDebugSettings.lastSelectionProbe = {
+            reason: 'pointerDownHit',
+            channel: channelName,
+            ordinal: hit.ordinal,
+            dragAvailable,
+            locked
+        };
+
+        if (locked) {
+            showStatus(`${channelName} ink limit is locked. Unlock before adjusting points.`);
+            updateCanvasCursor(canvas, '');
+            return;
+        }
+
+        if (!dragAvailable) {
+            return;
+        }
+
+        const began = beginSmartPointDrag(channelName, hit.ordinal);
+        if (!began.success) {
+            return;
+        }
+
+        smartDragState.pointerId = event.pointerId;
+        smartDragState.active = true;
+        smartDragState.channel = channelName;
+        smartDragState.ordinal = hit.ordinal;
+        smartDragState.moved = false;
+
+        if (elements.chartCursorTooltip) {
+            elements.chartCursorTooltip.classList.add('hidden');
+        }
+
+        try {
+            canvas.setPointerCapture(event.pointerId);
+        } catch (captureError) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[CHART] Pointer capture failed:', captureError);
+            }
+        }
+
+        updateCanvasCursor(canvas, 'grabbing');
+        showStatus(`Dragging ${channelName} point ${hit.ordinal}`);
+        event.preventDefault();
+    };
+
+    const handlePointerMove = (event) => {
+        if (!smartDragState.geom) {
+            return;
+        }
+        const geomRef = smartDragState.geom;
+        const coords = getPointerCanvasCoordinates(event, canvas);
+
+        if (smartDragState.active && smartDragState.pointerId === event.pointerId) {
+            const rect = canvas.getBoundingClientRect();
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.log('[CHART] Pointer move', {
+                    clientX: event.clientX,
+                    clientY: event.clientY,
+                    rect
+                });
+            }
+            const outside =
+                event.clientX < rect.left - OFF_CANVAS_CANCEL_BUFFER ||
+                event.clientX > rect.right + OFF_CANVAS_CANCEL_BUFFER ||
+                event.clientY < rect.top - OFF_CANVAS_CANCEL_BUFFER ||
+                event.clientY > rect.bottom + OFF_CANVAS_CANCEL_BUFFER;
+
+            if (outside) {
+                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                    console.log('[CHART] Cancelling drag: pointer outside', {
+                        clientX: event.clientX,
+                        clientY: event.clientY,
+                        rect
+                    });
+                }
+                const pointerId = smartDragState.pointerId;
+                if (pointerId != null) {
+                    try {
+                        canvas.releasePointerCapture(pointerId);
+                    } catch (releaseError) {
+                        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                            console.warn('[CHART] Pointer release during cancel failed:', releaseError);
+                        }
+                    }
+                }
+                finalizeDrag(false);
+                updateCanvasCursor(canvas, '');
+                return;
+            }
+
+            const channelName = smartDragState.channel;
+            if (isChannelLocked(channelName)) {
+                return;
+            }
+            const row = resolveChannelRow(channelName);
+            const samples = getCurveSamplesForChannel(channelName, row);
+            if (!samples || !Array.isArray(samples.values)) {
+                return;
+            }
+            const entry = ControlPoints.get(channelName);
+            const points = entry?.points || [];
+            if (points.length === 0) {
+                return;
+            }
+
+            const rawInput = mapXToPercent(coords.canvasX, geomRef);
+            const rawOutput = mapYToPercent(coords.canvasY, geomRef);
+            const clamped = clampSmartPointCoordinates(rawInput, rawOutput, {
+                points,
+                ordinal: smartDragState.ordinal,
+                geom: geomRef
+            });
+            const displayMax = normalizeDisplayMax(geomRef);
+            const desiredAbsolute = normalizeDragOutputToAbsolute(clamped.outputPercent, displayMax);
+
+            const updateResult = updateSmartPointDrag(channelName, smartDragState.ordinal, {
+                inputPercent: clamped.inputPercent,
+                outputPercent: desiredAbsolute
+            });
+
+            if (updateResult?.success) {
+                smartDragState.moved = true;
+                pendingClickSelection = null;
+            }
+            return;
+        }
+
+        if (!isSmartPointDragAvailable()) {
+            updateCanvasCursor(canvas, '');
+            smartDragState.hoverOrdinal = null;
+            return;
+        }
+
+        const channelName = getSelectedChannelName();
+        if (!channelName) {
+            updateCanvasCursor(canvas, '');
+            smartDragState.hoverOrdinal = null;
+            return;
+        }
+
+        if (isChannelLocked(channelName)) {
+            updateCanvasCursor(canvas, '');
+            smartDragState.hoverOrdinal = null;
+            return;
+        }
+
+        const row = resolveChannelRow(channelName);
+        const samples = getCurveSamplesForChannel(channelName, row);
+        if (!samples || !Array.isArray(samples.values)) {
+            updateCanvasCursor(canvas, '');
+            smartDragState.hoverOrdinal = null;
+            return;
+        }
+
+        const entry = ControlPoints.get(channelName);
+        const points = entry?.points || [];
+        if (points.length === 0) {
+            updateCanvasCursor(canvas, '');
+            smartDragState.hoverOrdinal = null;
+            return;
+        }
+
+        const tolerance = SMART_POINT_DRAG_TOLERANCE_PX * (geomRef?.dpr || 1);
+        const hit = hitTestSmartPoint(coords.canvasX, coords.canvasY, {
+            points,
+            geom: geomRef,
+            tolerance,
+            values: samples.values,
+            maxValue: TOTAL
+        });
+
+        if (hit) {
+            updateCanvasCursor(canvas, 'grab');
+            smartDragState.hoverOrdinal = hit.ordinal;
+        } else if (smartDragState.hoverOrdinal !== null) {
+            updateCanvasCursor(canvas, '');
+            smartDragState.hoverOrdinal = null;
+        }
+    };
+
+    function finalizeDrag(commit) {
+        if (!smartDragState.active) return;
+        const channelName = smartDragState.channel;
+        const ordinal = smartDragState.ordinal;
+        let statusPosted = false;
+        if (commit) {
+            const result = endSmartPointDrag();
+            if (result?.success) {
+                const entry = ControlPoints.get(channelName);
+                const points = entry?.points || [];
+                const point = points[ordinal - 1];
+                if (point) {
+                    statusPosted = true;
+                    const inputLabel = (point.input ?? 0).toFixed(1);
+                    const row = resolveChannelRow(channelName);
+                    const channelPercent = getChannelPercentForRow(row);
+                    const absolute = ((point.output ?? 0) * (channelPercent / 100)).toFixed(1);
+                    showStatus(`Point ${ordinal} set to ${inputLabel}% / ${absolute}% ink`);
+                }
+            }
+            smartDragState.suppressClick = true;
+        } else {
+            cancelSmartPointDrag();
+            smartDragState.suppressClick = false;
+            if (smartDragState.moved) {
+                showStatus('Drag cancelled');
+            }
+        }
+        if (!statusPosted && commit) {
+            showStatus(`Point ${ordinal} updated`);
+        }
+        resetSmartDragRuntimeState();
+    }
+
+    const handlePointerUp = (event) => {
+        if (smartDragState.active && smartDragState.pointerId === event.pointerId) {
+            try {
+                canvas.releasePointerCapture(event.pointerId);
+            } catch (releaseError) {
+                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                    console.warn('[CHART] Pointer release failed:', releaseError);
+                }
+            }
+            const commit = smartDragState.moved;
+            if (!commit && smartDragState.channel && Number.isFinite(smartDragState.ordinal)) {
+                selectSmartPointOrdinal(smartDragState.channel, smartDragState.ordinal, {
+                    description: `Select ${smartDragState.channel} Smart point ${smartDragState.ordinal} (pointer tap)`
+                });
+                chartDebugSettings.lastSelectionProbe = {
+                    reason: 'pointerTap',
+                    channel: smartDragState.channel,
+                    ordinal: smartDragState.ordinal,
+                    pointerId: event.pointerId
+                };
+            }
+            finalizeDrag(commit);
+            pendingClickSelection = null;
+            updateCanvasCursor(canvas, '');
+            return;
+        }
+
+        if (pendingClickSelection && pendingClickSelection.pointerId === event.pointerId) {
+            const { channel, ordinal } = pendingClickSelection;
+            if (channel && Number.isFinite(ordinal)) {
+                selectSmartPointOrdinal(channel, ordinal, {
+                    description: `Select ${channel} Smart point ${ordinal} (pointer click)`
+                });
+                chartDebugSettings.lastSelectionProbe = {
+                    reason: 'pointerClick',
+                    channel,
+                    ordinal,
+                    pointerId: event.pointerId
+                };
+            }
+            pendingClickSelection = null;
+            updateCanvasCursor(canvas, '');
+        }
+    };
+
+    const handlePointerLeave = (event) => {
+        if (smartDragState.active) {
+            const pointerId = smartDragState.pointerId;
+            if (pointerId != null) {
+                try {
+                    canvas.releasePointerCapture(pointerId);
+                } catch (releaseError) {
+                    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                        console.warn('[CHART] Pointer release on leave failed:', releaseError);
+                    }
+                }
+            }
+            finalizeDrag(false);
+            updateCanvasCursor(canvas, '');
+            pendingClickSelection = null;
+            return;
+        }
+        if (smartDragState.hoverOrdinal !== null) {
+            updateCanvasCursor(canvas, '');
+            smartDragState.hoverOrdinal = null;
+        }
+        pendingClickSelection = null;
+    };
+
+    const handlePointerCancel = (event) => {
+        if (!smartDragState.active || smartDragState.pointerId !== event.pointerId) {
+            return;
+        }
+        cancelSmartPointDrag();
+        resetSmartDragRuntimeState();
+        smartDragState.suppressClick = false;
+        updateCanvasCursor(canvas, '');
+        pendingClickSelection = null;
+    };
+
+    canvas.addEventListener('pointerdown', handlePointerDown);
+    canvas.addEventListener('pointermove', handlePointerMove);
+    canvas.addEventListener('pointerup', handlePointerUp);
+    canvas.addEventListener('pointerleave', handlePointerLeave);
+    canvas.addEventListener('lostpointercapture', handlePointerCancel);
+    canvas._smartPointDragBound = true;
 }
 
 /**

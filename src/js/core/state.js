@@ -3,6 +3,7 @@
 
 import { registerDebugNamespace } from '../utils/debug-registry.js';
 import { getLegacyStateBridge } from '../legacy/state-bridge.js';
+import { getCorrectionMethod } from './correction-method.js';
 
 const legacyBridge = getLegacyStateBridge();
 
@@ -72,6 +73,7 @@ export const elements = {
     chartCursorTooltip: null,
     chartZoomInBtn: null,
     chartZoomOutBtn: null,
+    snapshotFlagOverlay: null,
 
     // File and input controls
     filenameInput: null,
@@ -236,6 +238,8 @@ export const elements = {
     labDensityToggle: null,
     labSmoothingSlider: null,
     labSmoothingValue: null,
+    plotSmoothingSlider: null,
+    plotSmoothingValue: null,
 
     // Version and session elements
     appVersion: null,
@@ -252,6 +256,13 @@ export const elements = {
     optionsModal: null,
     optionsContent: null,
     closeOptionsBtn: null,
+    correctionMethodRadios: null,
+    smartPointDragToggle: null,
+    correctionOverlayToggle: null,
+    lightBlockingOverlayToggle: null,
+    compositeWeightingSelect: null,
+    compositeDebugToggle: null,
+    autoRaiseInkToggle: null,
 
     // L* modal elements
     lstarModal: null,
@@ -290,6 +301,7 @@ export function initializeElements() {
 
     // Chart elements
     elements.inkChart = document.getElementById('inkChart');
+    elements.snapshotFlagOverlay = document.getElementById('snapshotFlagOverlay');
     elements.chartCursorTooltip = document.getElementById('chartCursorTooltip');
     elements.chartZoomInBtn = document.getElementById('chartZoomInBtn');
     elements.chartZoomOutBtn = document.getElementById('chartZoomOutBtn');
@@ -312,6 +324,8 @@ export function initializeElements() {
     elements.labDensityToggle = document.getElementById('labDensityModeToggle');
     elements.labSmoothingSlider = document.getElementById('labSmoothingPercentSlider');
     elements.labSmoothingValue = document.getElementById('labSmoothingPercentValue');
+    elements.plotSmoothingSlider = document.getElementById('plotSmoothingPercentSlider');
+    elements.plotSmoothingValue = document.getElementById('plotSmoothingPercentValue');
 
     // Auto limit controls
     elements.autoWhiteLimitToggle = document.getElementById('autoWhiteLimitToggle');
@@ -436,6 +450,14 @@ export function initializeElements() {
     elements.optionsModal = document.getElementById('optionsModal');
     elements.optionsContent = document.getElementById('optionsContent');
     elements.closeOptionsBtn = document.getElementById('closeOptionsBtn');
+    elements.correctionMethodRadios = Array.from(document.querySelectorAll('input[name="correctionMethod"]'));
+    elements.smartPointDragToggle = document.getElementById('smartPointDragToggle');
+    elements.correctionOverlayToggle = document.getElementById('correctionOverlayToggle');
+    elements.lightBlockingOverlayToggle = document.getElementById('lightBlockingOverlayToggle');
+    elements.compositeWeightingSelect = document.getElementById('compositeWeightingSelect');
+    elements.compositeDebugToggle = document.getElementById('compositeDebugToggle');
+    elements.autoRaiseInkToggle = document.getElementById('autoRaiseInkToggle');
+    elements.redistributionSmoothingToggle = document.getElementById('redistributionSmoothingToggle');
 
     // L* modal elements
     elements.lstarModal = document.getElementById('lstarModal');
@@ -537,6 +559,10 @@ export const appState = {
     // Chart state
     chartZoomIndex: 9, // Default to 100% zoom (index 9 in [10, 20, 30, 40, 50, 60, 70, 80, 90, 100])
     overlayAutoToggledOff: false,
+    showCorrectionOverlay: true,
+    showLightBlockingOverlay: false,
+    plotSmoothingPercent: 0,
+    correctionMethod: getCorrectionMethod(),
 
     // Edit mode state
     editMode: false,
@@ -580,6 +606,24 @@ export function setLoadedQuadData(quadData) {
                     quadData.rebasedSources[channelName] = curve.slice();
                 }
             });
+        }
+
+        if (!quadData.plotBaseCurves || typeof quadData.plotBaseCurves !== 'object') {
+            quadData.plotBaseCurves = {};
+            Object.keys(quadData.curves || {}).forEach((channelName) => {
+                const curve = quadData.curves?.[channelName];
+                if (Array.isArray(curve)) {
+                    quadData.plotBaseCurves[channelName] = curve.slice();
+                }
+            });
+        }
+        if (!quadData._originalBaselineEnd || typeof quadData._originalBaselineEnd !== 'object') {
+            quadData._originalBaselineEnd = {};
+            if (quadData.baselineEnd && typeof quadData.baselineEnd === 'object') {
+                Object.keys(quadData.baselineEnd).forEach((channelName) => {
+                    quadData._originalBaselineEnd[channelName] = quadData.baselineEnd[channelName];
+                });
+            }
         }
     }
     appState.loadedQuadData = quadData || null;
@@ -673,6 +717,19 @@ export function getAppState() {
     return { ...appState };
 }
 
+export function getPlotSmoothingPercent() {
+    return Number.isFinite(appState.plotSmoothingPercent)
+        ? appState.plotSmoothingPercent
+        : 0;
+}
+
+export function setPlotSmoothingPercent(percent) {
+    const numeric = Number(percent);
+    const clamped = Number.isFinite(numeric) ? Math.max(0, Math.min(300, Math.round(numeric))) : 0;
+    appState.plotSmoothingPercent = clamped;
+    return clamped;
+}
+
 /**
  * Reset application state to defaults
  */
@@ -682,8 +739,12 @@ export function resetAppState() {
     appState.linearizationApplied = false;
     appState.perChannelLinearization = {};
     appState.chartZoomIndex = 0;
+    appState.overlayAutoToggledOff = false;
+    appState.showCorrectionOverlay = true;
+    appState.showLightBlockingOverlay = false;
     appState.editMode = false;
     appState.selectedChannel = null;
+    appState.correctionMethod = getCorrectionMethod();
 
     syncWindowLoadedQuadData();
     notifyLoadedQuadListeners(null, null);

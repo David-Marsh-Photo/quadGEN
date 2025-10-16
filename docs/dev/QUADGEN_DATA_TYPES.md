@@ -153,7 +153,7 @@ Edit Mode × Linearization interplay (recent fixes):
 
 LUT → Smart key‑point seeding:
 - On first edit, if LUT data is present (global or per‑channel), seed Smart key points from LUT samples.
-- Direct‑seed threshold: If sample count ≤ DIRECT_SEED_MAX_POINTS (default: 25), seed samples directly at even X. Otherwise, derive a compact set via the adaptive simplifier (defaults: 0.25% max error, 21 max points).
+- Direct‑seed threshold: If sample count ≤ DIRECT_SEED_MAX_POINTS (default: 25), seed samples directly at even X. Otherwise, derive a compact set via the adaptive simplifier (defaults: 0.15% max error, 21 max points).
 
 Direct‑seed threshold (all sources):
 - Variable: `DIRECT_SEED_MAX_POINTS` (default: 25)
@@ -169,7 +169,7 @@ LAB Gaussian‑weighted reconstruction (local bandwidth):
   - Rationale: Robust to uneven spacing and dense/noisy datasets; avoids spline oscillations and preserves monotonic shape with PCHIP.
 
 LAB → Smart conversion preserves plotted shape:
-- On first edit, extract Smart key points from the current plotted 256‑sample curve (respecting interpolation + smoothing). Use the configurable key‑point simplifier (defaults: 0.25% max error, 21 max points) to make an editable, faithful curve.
+- On first edit, extract Smart key points from the current plotted 256‑sample curve (respecting interpolation + smoothing). Use the configurable key‑point simplifier (defaults: 0.15% max error, 21 max points) to make an editable, faithful curve.
 - Benefits: Visually identical handoff pre/post conversion; no path shifts between adjacent anchors.
 
 **`parseQuadFile(content)`**: Parses .quad file format
@@ -183,7 +183,7 @@ LAB → Smart conversion preserves plotted shape:
 - Critical: Do not replace with other interpolation methods
 
 **Smoothing Control**:
-- LAB/LUT processing uses an adaptive Gaussian reconstruction (defaults to 50 % ≈1.5× widen). The Options panel exposes a 0–300 % slider that feeds the same kernel; values persist across sessions.
+- LAB/LUT processing uses an adaptive Gaussian reconstruction (default 0 % → baseline ×1.0 widen). The Options panel exposes a 0–300 % slider that feeds the same kernel (e.g., 50 % ≈ ×1.27) and values persist across sessions.
 - Fidelity is still governed by Recompute (Max error %, Max points) for Smart curves. To iterate from measurement, use the Revert buttons (global/per‑channel) then Recompute, adjusting smoothing if needed.
 
 **EDN Intent + ACV/LUT Parity**

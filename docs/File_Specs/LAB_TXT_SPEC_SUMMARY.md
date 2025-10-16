@@ -30,6 +30,7 @@ Curve Construction (Adaptive Gaussian reconstruction)
 - Build 256 samples, clamping to [0,1] and pinning endpoints (samples[0]=0, samples[255]=1).
 - Output object:
   - `{ domainMin: 0, domainMax: 1, samples, originalData, originalSamples, format: 'LAB Data', getSmoothingControlPoints(%) }`
+- When the smoothing slider is set to **0 %**, quadGEN now bypasses the Gaussian blend entirely so perfectly linear measurement ramps (e.g., the `linear_reference_lab.txt` fixture) pass through untouched; monotonic enforcement still prevents reversals.
 
 Smoothing Control (pipeline hook)
 - `getSmoothingControlPoints(%)` remains available for tooling/tests. When invoked with `sp>0`, it widens the kernel (legacy 0.08→0.25 range) and emits a reduced control-point set. The Options panel slider writes the same parameter, so production users can dial in additional smoothing without leaving the UI.
@@ -38,6 +39,15 @@ Implementation Notes
 - Only LAB_L is used; LAB_A/B are ignored for linearization.
 - The method applies corrections to a linear baseline; it does not attempt full ICC‑style color management.
 - The result is a neutral correction curve to be combined with quadGEN’s printer‑space pipeline.
+- The **Simple Scaling** pipeline is the default consumer of these samples: it multiplies each channel’s plotted curve by a smoothed gain envelope with ±15 % clamps (K/MK fixed) and redistributes overflow into darker reserves. Switch to the **Density Solver** pipeline from ⚙️ Options when you need the ladder-based redistribution described below.
+- When the **Density Solver** pipeline is enabled (⚙️ Options → Correction method), the normalized ramp and its incremental density deltas feed the density solver described in `docs/features/channel-density-solver.md`. The solver:
+  - Computes `ΔDensity` between successive samples (perceptual or log-density depending on the import toggle).
+  - Cross-references the active `.quad` curves to calculate channel share at each sample (`draw_channel / Σ draw_all`).
+  - Finds dominance windows per channel to establish a **density constant**—the maximum darkening that ink has demonstrated on its own.
+  - Forms the correction delta as **targetDensity − measuredDensity** (the baseline composite density is no longer the driver).
+  - Distributes mixed intervals by weighting shares with the density constants and using those weights strictly as a funnel: headroom, ceilings, and ink availability remain the guardrails, so a zero delta stays zero for every channel.
+  - Records cumulative contributions, measurement deltas, and per-sample share tables for debugging.
+- The solver output is stored on `compositeLabSession` as `densityWeights`, `densityConstants`, `measurementDeltas`, `densityProfiles`, and `densityInputs`. The UI exposes `window.getCompositeDensityProfile(inputPercent)` so operators can inspect the constants and the per-sample redistribution used during global corrections.
 
 Minimal Valid Skeleton (that quadGEN will load)
 ```

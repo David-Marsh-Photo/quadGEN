@@ -65,6 +65,7 @@ async function loadScalingUtils() {
   vi.doMock('../../src/js/core/state.js', () => ({
     elements: {},
     getCurrentPrinter: currentPrinterMock,
+    TOTAL: 65535,
   }));
 
   const getHistoryManagerMock = vi.fn(() => ({ recordBatchAction: vi.fn() }));
@@ -82,14 +83,25 @@ async function loadScalingUtils() {
     },
   }));
 
-  const percentInput = {
-    value: '100',
-    classList: { toggle: vi.fn(), add: vi.fn(), remove: vi.fn() },
+  const createInput = (initialValue) => {
+    const attributes = new Map();
+    return {
+      value: initialValue,
+      classList: { toggle: vi.fn(), add: vi.fn(), remove: vi.fn() },
+      setAttribute: (name, value) => {
+        attributes.set(name, String(value));
+      },
+      getAttribute: (name) => (attributes.has(name) ? attributes.get(name) : null),
+      removeAttribute: (name) => {
+        attributes.delete(name);
+      }
+    };
   };
-  const endInput = {
-    value: '65535',
-    classList: { toggle: vi.fn(), add: vi.fn(), remove: vi.fn() },
-  };
+
+  const percentInput = createInput('100');
+  percentInput.setAttribute('data-base-percent', '100');
+  const endInput = createInput('65535');
+  endInput.setAttribute('data-base-end', '65535');
   vi.doMock('../../src/js/ui/channel-registry.js', () => ({
     getChannelRow: () => ({
       querySelector: (selector) => {

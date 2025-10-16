@@ -24,6 +24,8 @@ export class GraphStatus {
         this.sessionStatusElement = null;
         this.processingLabels = new Map(); // Track processing labels by channel
         this.isInitialized = false;
+        this.lastStatusBaseLine = null;
+        this.lastZoomPercent = 100;
     }
 
     /**
@@ -190,10 +192,14 @@ export class GraphStatus {
                 parts.push(`Intent: ${intentLabel}`);
             }
 
+            const baseLine = parts.join(' • ');
+
             // Add zoom level if not 100%
             const zoomPercent = this.getChartZoomPercent();
+            let zoomLabel = null;
             if (zoomPercent && zoomPercent !== 100) {
-                parts.push(`Zoom: ${zoomPercent}% max`);
+                zoomLabel = `Zoom: ${zoomPercent}% max`;
+                parts.push(zoomLabel);
             }
 
             // Update display
@@ -211,12 +217,20 @@ export class GraphStatus {
 
             // Also log to status messages for Lab Tech visibility
             if (line && line !== '\u00A0') {
-                statusMessages.addStatusMessage(`Graph: ${line}`, 2000); // 2 second throttle
-                console.log('💬 Added graph status to Lab Tech chat:', line);
+                const zoomChangedOnly = baseLine === this.lastStatusBaseLine && zoomPercent !== this.lastZoomPercent;
+                if (!zoomChangedOnly) {
+                    statusMessages.addStatusMessage(`Graph: ${line}`, 2000); // 2 second throttle
+                    console.log('💬 Added graph status to Lab Tech chat:', line);
+                } else {
+                    console.log('💬 Skipped Lab Tech status message (zoom-only change).');
+                }
             }
 
             // Trigger chart update to show the new session status
             triggerInkChartUpdate();
+
+            this.lastStatusBaseLine = baseLine;
+            this.lastZoomPercent = zoomPercent;
 
         } catch (err) {
             console.warn('Error updating session status:', err);

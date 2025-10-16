@@ -16,37 +16,43 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
-  '3.1.5': {
-    date: '2025-10-08',
-    title: 'Options panel & smoothing controls',
+  '4.0.0': {
+    date: '2025-10-15',
+    title: 'Options overlays & density workflow refresh',
     sections: {
       ADDED: [
-        '⚙️ Options panel now sits beside Help, centralizing global settings without crowding the Global Correction and Edit panels.',
-        'Floating tooltip manager renders help text above every panel (including Safari) while preserving keyboard focus.'
+        'Options panel now includes light blocking and correction target overlays, plus default-on curve dragging and snapshot flags for faster Edit Mode work.',
+        'Channel ink locks, import-time auto-raise, and the composite debug overlay keep corrections aligned with ink ceilings.',
+        'Channel Density column ships with studio presets and a Compute button so manual versus solver constants stay traceable in the UI.'
       ],
       CHANGED: [
-        'The “Use log-density for LAB / Manual measurements” toggle moved into the Options panel (and remains inside the Manual L* modal) with concise tooltip guidance.',
-        'LAB smoothing defaults to 50 % and the Options slider now spans 0–300 % so noisy highlights or shadows can be smoothed without editing config files.'
+        'Simple Scaling is the default correction method (swap back to the density solver from ⚙️ Options whenever needed).',
+        'Light mode loads by default, LAB smoothing starts at 0 %, and overlays scale to the active ink ceiling for clearer comparisons.',
+        'Composite solver reuses normalized coverage ceilings, momentum weighting, and ladder tapers to hand off corrections smoothly while retaining guardrails.'
       ],
       FIXED: [
-        'Channel percent/end inputs no longer revert while you type; values commit after blur, enter, or spinner adjustments.',
-        'Options tooltips now float above the panel, so macOS Safari no longer clips the descriptions.',
-        'Edit panel spacing restored so the “Calculate points” legend stays visible.',
-        'Smart points stay glued to the plotted curve after channel-percent nudges (e.g., TRIFORCE_V2 C channel).'
+        'Global .cube and .acv imports now stay monotone and correctly oriented, so baseline ramps reflect the intended shape.',
+        'Resetting LAB or plot smoothing to 0 % restores baseline amplitude and ink-limit fields without manual clean-up.',
+        'Smart key points and undo history remain stable after channel-percent nudges or auto-raise adjustments.'
       ],
       REMOVED: [],
       DOCS: [
-        'Help tabs, user guide, and linearization references updated to cover the Options panel workflow, tooltip behavior, and 0–300 % smoothing range.'
+        'Workflow guidance now lives in docs/quadgen_user_guide.md, and the print linearization guide consolidates LAB processing, manual density defaults, and Simple Scaling notes.',
+        'Auto-raise, density solver, and ingestion specs document smoothing interoperability and manual density inputs; Help ReadMe and Glossary mirror the updates.'
       ]
     },
     aboutDialog: [
       {
-        label: 'Options Panel',
-        desc: 'Group global preferences (log-density mode, LAB smoothing, more to come) in one overlay so feature panels stay laser-focused.'
+        label: 'Options overlays',
+        desc: 'Toggle light blocking and correction targets directly from ⚙️ Options; curve dragging and snapshot flags now load enabled so edits feel immediate.'
       },
       {
-        label: 'Floating Tooltips',
-        desc: 'New body-level tooltips keep help text readable above modals and cards on every browser.'
+        label: 'Density inputs',
+        desc: 'Channel Density fields ship with presets plus a Compute button—manual overrides, solver results, and coverage badges now stay traceable in one place.'
+      },
+      {
+        label: 'Simple Scaling default',
+        desc: 'Simple Scaling handles LAB corrections by default, while the density solver remains one click away when multi-ink redistribution is required.'
       }
     ]
   },
@@ -93,7 +99,7 @@ export const VERSION_HISTORY = {
       ],
       FIXED: [
         'Processing detail labels now surface “Global (baked)” so the graph header matches the rebased correction state.',
-        'Global LUT baking samples each correction once, keeping LUTs like `negative.cube` at their expected peak ink (~87 %).'
+        'Global LUT baking samples each correction once, keeping LUTs like `negative.cube` at their expected peak ink (~87 %).'
       ],
       REMOVED: [
         'Scaling State audit panel disappeared from Help → Version History; telemetry now lives in diagnostics scripts.'
@@ -170,17 +176,17 @@ export const VERSION_HISTORY = {
       FIXED: [
         'Smart point parity for preloaded `.quad` curves samples relative ink, keeping Edit Mode key points aligned when channels are limited.',
         'Lab Tech scaling commands now surface coordinator failures instead of reporting success on rejected queue operations.',
-        'Scaling-state parity remains intact when clamping back to 100 % ink; `maxAllowed` resets alongside legacy globals.',
+        'Scaling-state parity remains intact when clamping back to 100 % ink; `maxAllowed` resets alongside legacy globals.',
         'Undo/redo history refresh uses UI hooks, eliminating the missing-trigger warnings seen in scaling-state Playwright runs.',
         'Contrast intent reapply is idempotent—the original baseline is reused so repeated picks no longer compound the curve.',
         'Per-channel ink limit edits rescale the original `.quad` samples and skip default Smart ramps while Edit Mode is off, preventing linearized plots.'
       ],
       REMOVED: [],
       DOCS: [
-        'Phase 0 scaling checklist, regression matrix, and in-app notes updated for handoff.',
+        'Phase 0 scaling checklist, regression matrix, and in-app notes updated for handoff.',
         'CLAUDE.md and AGENTS.md now document the coordinator flag (`enableScalingCoordinator`) and window bridge.',
         'Scaling UI migration checklist and Smart/LAB parity diagnostics updates captured in `docs/features/SCALING_IMPROVEMENT_PLANS.md`.',
-        'Clamp-to-100 parity fix, undo trigger corrections, and private-lab rollout workflow documented across Phase 2 plan/checklists and `docs/manual_tests.md`.'
+        'Clamp-to-100 parity fix, undo trigger corrections, and private-lab rollout workflow documented across Phase 2 plan/checklists and `docs/manual_tests.md`.'
       ]
     },
     aboutDialog: [
@@ -474,7 +480,7 @@ export const VERSION_HISTORY = {
         'Lab Tech understands simple “zoom in” / “zoom out” phrasing and routes it to the controls.'
       ],
       CHANGED: [
-        'Zoom now steps through clean 10% increments and clamps to the highest active ink limit so 100% curves stay visible.',
+        'Zoom now steps through clean 10% increments, clamps to the highest active ink limit, and leaves one highlight step even when a channel peaks at 100% so you can still inspect the curve without losing awareness of the ceiling.',
         'Graph grids, axes, overlays, and tooltips all derive from the active zoom so the Y-axis always matches what you see.'
       ],
       FIXED: [
@@ -487,7 +493,7 @@ export const VERSION_HISTORY = {
       ]
     },
     aboutDialog: [
-      { label: 'Zoom Presets', desc: 'Use the +/− control (or Lab Tech commands) to step through 10% zoom levels without ever cropping active ink limits.' },
+      { label: 'Zoom Presets', desc: 'Use the +/− control (or Lab Tech commands) to step through 10% zoom levels; when a channel peaks at 100% quadGEN still lets you inspect one more step and flattens anything above the displayed max.' },
       { label: 'Stable Undo', desc: 'Smart key-point undo/redo keeps the rest of your curve anchored so only the edited point moves.' }
     ]
   },
@@ -523,7 +529,7 @@ export const VERSION_HISTORY = {
       ],
       CHANGED: [
         'Auto white/black limit rolloff controls are temporarily hidden and no longer apply knees while we retune the detector for consistency.',
-        'Measurement rebuild now defaults to the intent-simulator smoothing recipe (PCHIP with a 50% widen ≈1.5× sigma) and LAB bandwidth overrides (K=2, σ_floor=0.036, σ_ceil=0.15, σ_alpha=2.0); adjust the smoothing slider in the Options panel for other responses.',
+        'Measurement rebuild keeps the legacy baseline widen ×1 pass (slider default 0%) and still honours LAB bandwidth overrides (K=2, σ_floor=0.036, σ_ceil=0.15, σ_alpha=2.0); dial the smoothing slider above 0% only when you need extra cleanup.',
         'DataSpace now owns every image→printer conversion; loaders tag missing sourceSpace metadata and make256 helpers were split out for clarity.',
         'Undo/redo shares a single timeline so intent swaps, channel edits, and history snapshots stay in sync.',
         'Debug tuning panel drops the experimental intent blend slider to focus on smoothing/LAB controls, and automated intent tolerance is now 8% to match the new defaults.',
@@ -545,7 +551,7 @@ export const VERSION_HISTORY = {
     aboutDialog: [
       { label: 'Auto Rolloff Hidden', desc: 'White/black auto limit toggles are offline while we recalibrate the detector.' },
       { label: 'Printer-space Pipeline', desc: 'DataSpace now owns every conversion and the new fixtures/tests catch double-flip regressions early.' },
-      { label: 'Smoothing Defaults', desc: 'LAB rebuilds apply a 50% smoothing profile (≈1.5× Gaussian widen) by default, and the Options panel slider lets you dial it between 0–300% as needed.' },
+      { label: 'Smoothing Defaults', desc: 'LAB rebuilds now open at 0% smoothing (baseline widen ×1.0); raise the 0–300% slider only when your measurements need additional noise reduction.' },
       { label: 'Intent Remap', desc: 'Use Apply to Loaded Curve to bake the selected intent into a linearized .quad—no external LUT required. Intent previews now render as soon as you pick a preset.' }
     ]
   },
@@ -677,7 +683,7 @@ export const VERSION_HISTORY = {
         'Revert UI: added global and per-channel Revert buttons with integrated Undo/Redo',
         'Help: new Detailed Workflow tab plus Version History moved into Help window',
         'Lab Tech console (light mode): One Light–inspired text theme with terminal-style lines',
-        'Dark mode toggle: header button (🌙/☀️) to switch themes; remembers your choice and syncs with system preference'
+        'Dark mode toggle: header button (🌙/☀️) to switch themes; sessions start in light mode and quadGEN remembers your choice (still follows system changes when you reset to system preference)'
       ],
       CHANGED: [
         'Ordinal label chips now match the exact channel ink color with automatic black/white text for contrast',
@@ -786,7 +792,7 @@ export const VERSION_HISTORY = {
     sections: {
       CHANGED: [
         'LAB processing now uses Gaussian Weighted Correction (density‑independent); smoothing slider widens Gaussian influence radius',
-        'LAB → Smart conversion preserves plotted shape using adaptive key‑point fit (defaults: 0.25% max error, 21 max points)',
+        'LAB → Smart conversion preserves plotted shape using adaptive key‑point fit (defaults: 0.15% max error, 21 max points)',
         'Key‑point overlay and adapter overlays now align exactly with End‑scaled curves (absolute plotting)'
       ],
       FIXED: [
@@ -798,7 +804,7 @@ export const VERSION_HISTORY = {
       { label: 'Gaussian LAB', desc: 'Density‑independent LAB correction; smoother results on dense .quad curves' },
       { label: 'Preserved Shape', desc: 'LAB → AI conversion fits points to the plotted curve' },
       { label: 'Overlay Accuracy', desc: 'Markers and labels align with End‑scaled curves' },
-      { label: 'Simplifier Defaults', desc: 'Tighter default fit (0.25% / 21 points)' }
+      { label: 'Simplifier Defaults', desc: 'Tighter default fit (0.15% / 21 points)' }
     ]
   },
   'v1.8.6': {
@@ -1236,13 +1242,16 @@ Scope: This license applies to this HTML file (quadgen.html) only.</div>
 
       <hr />
 
-<h2 id="quickstart">Quick Start (Beta 2.5.1)</h2>
+      <h2 id="quickstart">Quick Start (Beta 3.1.5)</h2>
       <ol>
-        <li>Choose your printer and set ink limits (per channel).</li>
-        <li>Start with Linear Ramp, or</li>
-        <li>Load data: <code>.quad</code>, LAB <code>.txt</code>, LUT <code>.cube</code> (1D/3D), Photoshop <code>.acv</code>, or Manual L*.</li>
-        <li>Export the corrected <code>.quad</code>, print a step wedge target.</li>
-        <li>Measure print and load data, repeat if necessary.</li>
+        <li><strong>Pick a printer layout</strong> and set conservative End limits (and any known density constants) before exporting anything.</li>
+        <li><strong>Export a baseline linear ramp</strong> and stash it as your “v0” reference in QuadToneRIP’s <code>quad</code> folder.</li>
+        <li><strong>Print a step wedge</strong> through QTR/Print-Tool with that baseline curve—disable color management entirely.</li>
+        <li><strong>Measure the wedge</strong>, save the LAB <code>.txt</code> (0–100% GRAY, L* in range), and archive it under <code>data/</code>.</li>
+        <li><strong>Load the measurement in quadGEN</strong>, confirm the normalization mode (perceptual L* by default; enable log-density for through-light workflows), and keep the correction method on Simple Scaling unless you need the density solver.</li>
+        <li><strong>Review the global correction</strong> (chart, smoothing slider, auto-raise toasts). Switch to Density Solver or contrast intents only when required.</li>
+        <li><strong>Optional Edit Mode touch-up</strong>: Recompute Smart key points from the plotted curve and adjust as needed; quadGEN auto-raises Ends when allowed.</li>
+        <li><strong>Export the corrected <code>.quad</code></strong>, install it in QTR, reprint, remeasure, and iterate until tone stays linear.</li>
       </ol>
 
       <hr />
@@ -1251,14 +1260,17 @@ Scope: This license applies to this HTML file (quadgen.html) only.</div>
       <ul>
         <li>Supports most Epson printers.</li>
         <li>Quickly export linear ramps with any single ink channel or combination.</li>
+        <li>Channel table includes a <strong>Density</strong> column with studio presets (K/MK = 1.00, C = 0.21, LK = 0.054). Enter a value to lock a channel; leave it blank or set to <code>0</code> and quadGEN will regenerate that density automatically on the next LAB solve.</li>
+        <li>Per-channel ink locks prevent accidental ink limit changes and clamp Smart curve edits to the stored limit until unlocked.</li>
         <li>Inputs: <code>.quad</code>, LAB <code>.txt</code>, LUT <code>.cube</code>, <code>.acv</code>, Manual L*.</li>
         <li>Apply intent remaps directly to a loaded <code>.quad</code> via “Apply to Loaded Curve”.</li>
         <li>⚙️ Options panel centralizes app-wide preferences (e.g., log-density normalization) without cluttering workflow panels.</li>
+        <li>Correction overlay toggle draws a dashed global target and purple baseline scaled to the current ink ceiling so you can compare edits against the measurement at a glance.</li>
         <li>Evenly spaced or irregular targets supported.</li>
         <li>Edit Mode: point-based edits at any time.</li>
         <li>Undo/Redo: full history of edits, LAB/LUT loads, global scaling, and per-channel slider changes.</li>
         <li>Recompute key points: simplify Smart Curves with tolerance/max-point controls.</li>
-        <li>Graph zoom: use the +/− control in the chart corner to rescale the Y-axis in 10% steps when working with low ink limits; zoom automatically clamps to the highest active ink limit so you never crop a 100% curve.</li>
+        <li>Graph zoom: use the +/− control in the chart corner to rescale the Y-axis in 10% steps when working with low ink limits; when a channel peaks at 100% the chart keeps one highlight-inspection step and flattens anything above the displayed max while noting the clamp.</li>
         <li>Lab Tech: AI assistant for Q&amp;A and automation.</li>
         <li>Contrast intent: presets or custom targets; shows Δ vs target; endpoints fixed (use ink limits to change).</li>
         <li>Auto endpoint rolloff: optional white/black soft knees that detect early plateau and ease into the ink limit with a smooth shoulder/toe (3% proximity threshold).</li>
@@ -1320,6 +1332,13 @@ Scope: This license applies to this HTML file (quadgen.html) only.</div>
         <li>Trademarks: Epson and SureColor are trademarks of Seiko Epson Corporation. QuadToneRIP and Print‑Tool are property of Roy Harrington. Color Muse is a trademark of Variable, Inc. Nix Spectro L is a trademark of Nix Sensor Ltd. All product names, logos, and brands are property of their respective owners.</li>
       </ul>
 
+      <h3>Special Thanks</h3>
+      <ul>
+        <li>Walker Blackwell</li>
+        <li>Marek Wesołowski</li>
+        <li>Clay Harmon</li>
+      </ul>
+
 
       <hr />        
 
@@ -1365,6 +1384,12 @@ export function getHelpGlossaryHTML(){
         <dt>Channel</dt>
         <dd>A printer ink channel (e.g., K, C, M, Y, LC, LM, LK, LLK, OR, GR, MK, V). Channels can be enabled/disabled and have independent End (ink limits).</dd>
 
+        <dt>Composite debug overlay</dt>
+        <dd>Options-panel toggle that pins a diagnostic card to the chart showing channel maxima, density weights, and per-snapshot redistribution data. Selecting a snapshot draws a green vertical marker on the chart so composite LAB audits line up with the plotted curve.</dd>
+
+        <dt>Composite weighting</dt>
+        <dd>Preference in the ⚙️ Options panel that decides how LAB corrections are redistributed across multi-ink ramps. Isolated maximizes each channel’s capacity, Normalized blends the correction according to the loaded `.quad` ink shares, and Momentum biases the delta toward channels with the highest slope “momentum” using a Gaussian window.</dd>
+
                     <dt>Colorimeter</dt>
         <dd>Handheld device that measures color using filtered RGB sensors to approximate human vision. Fast and affordable for step wedges and general calibration. Example: <a href="https://amzn.to/45R8rof" target="_blank" rel="noopener">Color Muse 2</a>.</dd>
 
@@ -1374,8 +1399,14 @@ export function getHelpGlossaryHTML(){
         <dt>Correction (curve)</dt>
         <dd>Mapping that adjusts output ink levels versus input to achieve a target response. In quadGEN, plotted as Y (output ink %) vs X (input %).</dd>
 
+        <dt>Correction overlay</dt>
+        <dd>Dashed global reference plotted on the chart, sampled from the active correction dataset. A purple diagonal baseline (scaled to the current ink ceiling) renders beneath the curve so additive (above baseline) and subtractive (below baseline) regions are obvious. Enable the overlay from the Options panel toggle—no debug helpers required.</dd>
+
         <dt>Density</dt>
-        <dd>Measure of how much light a material absorbs or blocks. In photography and printing, higher density means darker areas that block more light. Enable the log-density toggle when you want corrections based on optical density (digital negatives, contact printing); leave it off to stay in L* for perceptual printer linearization.</dd>
+        <dd>Measure of how much light a material absorbs or blocks. In quadGEN we treat each density value as the normalized L* coverage ceiling an ink can provide; once a channel’s cumulative darkening reaches that ceiling (with a 0.5% buffer for measurement noise), the solver hands the remaining correction to higher-density inks. Enable the log-density toggle when you want corrections based on optical density (digital negatives, contact printing); leave it off to stay in L* for perceptual printer linearization. The channel table’s Density column lets you lock these ceilings (e.g., K/MK = 1.00, C = 0.21, LK = 0.054); leaving a field blank or zero prompts the solver to regenerate the value automatically. A coverage badge now sits beneath the Density input to show “used / limit” and lights amber with a tooltip listing any clamped samples when the ceiling is hit.</dd>
+
+        <dt>Density ladder</dt>
+        <dd>Composite redistribution order (light inks → dark inks) used by Normalized weighting. LK carries the highlight correction until it hits its buffered ceiling (≈1% headroom tolerance), then the solver hands the remaining delta to C, and only after C tops out does K contribute. The ladder order appears in composite debug snapshots along with ladder selection and “blocked by” details for audits.</dd>
 
         <dt>Digital Negative</dt>
         <dd>A digitally created film negative used for alternative photographic processes like platinum/palladium printing, cyanotype, and silver gelatin contact printing. Created by inverting a positive digital image and printing it on transparent film with precise density control.</dd>
@@ -1481,6 +1512,9 @@ export function getHelpGlossaryHTML(){
 
         <dt>Snapshot pair</dt>
         <dd>Undo entry created from a “Before:”/“After:” capture. quadGEN automatically rewinds to the matching “Before:” snapshot, then stores both states together so redo replays the pair in the correct order.</dd>
+
+        <dt>Simple Scaling correction</dt>
+        <dd>Legacy-style correction path (now the default) that scales channel curves from the measured vs target ratios, redistributing overflow based on density reserves. Each pass clamps auto-lifts to +15 % per channel, keeps K/MK from auto-raising, and backfills any excess into darker reserves so highlights don’t double in one shot. Toggle it from ⚙️ Options whenever you need the density solver instead.</dd>
 
         <dt>Smart curve</dt>
         <dd>Adaptive curve model in quadGEN defined by editable key points and monotonic interpolation. Smart curves allow precise local edits while preserving smoothness and avoiding overshoot, enabling efficient linearization and correction workflows.</dd>

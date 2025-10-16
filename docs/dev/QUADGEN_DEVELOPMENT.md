@@ -77,6 +77,16 @@ const { chromium } = require('playwright');
 - Integration testing across components
 - File load/save operations
 
+#### Headful Simple Scaling Capture Tool
+
+- Use the purpose-built runner to validate the full Simple Scaling stack with real quad/LAB inputs.
+- Command: `npm run capture:simple-scaling -- --quad data/P800_K36C26LK25_V6.quad --lab data/P800_K36C26LK25_V6.txt`
+  - Optional flags: `--json`, `--screenshot`, `--range start,end`, `--headless`.
+- Output: JSON snapshot under `analysis/` plus a screenshot in `artifacts/simple-scaling/`; both paths can be overridden.
+- The JSON includes per-channel deltas for the requested range and surfaces any console errors encountered during the run.
+- Scaling runs now report both the applied +15 % channel lift guard (with K/MK locked) and any overflow redistributed to darker reserves; expect the snapshot’s `perChannelLift` to top out at 0.15 × the baseline End while `residualOverflow`/redistribution stats capture the backfill work.
+- Prefer this tool whenever verifying solver behavior so we capture any UI/regression issues triggered by the real app shell.
+
 #### Standalone Function Testing
 
 **For Logic-Only Changes**: Create isolated Node.js test scripts to verify behavior before browser testing:

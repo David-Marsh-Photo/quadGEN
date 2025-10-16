@@ -142,6 +142,32 @@ function appendChannelCurves(lines, channelOrder) {
     const endValue = InputValidator.clampEnd(endInput ? endInput.value : 0);
     const curveValues = make256(endValue, channelName, true, { normalizeToEnd: isChannelNormalizedToEnd(channelName) });
 
+    const auditScope = typeof globalThis !== 'undefined'
+      ? globalThis
+      : (typeof window !== 'undefined' ? window : null);
+    if (auditScope && auditScope.__COMPOSITE_AUDIT__ && auditScope.__COMPOSITE_AUDIT__.enabled) {
+      try {
+        const audit = auditScope.__COMPOSITE_AUDIT__;
+        const events = Array.isArray(audit.events) ? audit.events : (audit.events = []);
+        const payload = {
+          channelName,
+          stage: 'export',
+          valueSample_242: Array.isArray(curveValues) && curveValues.length > 242 ? curveValues[242] : null,
+          endValue
+        };
+        events.push({
+          stage: 'export.make256',
+          payload,
+          ts: Date.now()
+        });
+        if (typeof audit.log === 'function') {
+          audit.log('export.make256', payload);
+        }
+      } catch (auditError) {
+        console.warn('[COMPOSITE_AUDIT] export logging failed:', auditError);
+      }
+    }
+
     lines.push(`# ${channelName} curve`);
     lines.push(...curveValues.map(String));
   });

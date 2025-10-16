@@ -27,6 +27,7 @@ import { parseLabData, applyDefaultLabSmoothingToEntry } from '../data/lab-parse
 import { parseManualLstarData } from '../parsers/file-parsers.js';
 import { setPrinter } from '../ui/printer-manager.js';
 import { computeGlobalRevertState, resetSmartPointsForChannels, resetChannelSmartPointsToMeasurement } from '../ui/revert-controls.js';
+import { maybeAutoRaiseInkLimits } from '../core/auto-raise-on-import.js';
 
 const globalScope = typeof window !== 'undefined' ? window : globalThis;
 const isBrowser = typeof document !== 'undefined';
@@ -262,6 +263,12 @@ export class QuadGenActions {
                 linearizationApplied: true
             });
 
+            maybeAutoRaiseInkLimits(normalized, {
+                scope: 'global',
+                label: 'global correction',
+                source: 'global-linearization'
+            });
+
             if (isBrowser) {
                 globalScope.linearizationData = normalized;
                 globalScope.linearizationApplied = true;
@@ -340,6 +347,13 @@ export class QuadGenActions {
                 [channelName]: normalized
             };
             updateAppState({ perChannelLinearization: nextPerChannelMap });
+
+            maybeAutoRaiseInkLimits(normalized, {
+                scope: 'channel',
+                channelName,
+                label: `${channelName} correction`,
+                source: 'per-channel-linearization'
+            });
 
             let handledViaToggle = false;
             const channelRow = document.querySelector(`tr[data-channel="${channelName}"]`);
@@ -1142,6 +1156,8 @@ export class QuadGenActions {
                 // Update UI after successful insertion
                 updateInkChart();
                 updateProcessingDetail(channelName);
+            } else if (result && result.message) {
+                showStatus(result.message);
             }
 
             return result;
@@ -1165,6 +1181,8 @@ export class QuadGenActions {
             if (result.success) {
                 updateInkChart();
                 updateProcessingDetail(channelName);
+            } else if (result && result.message) {
+                showStatus(result.message);
             }
 
             return result;

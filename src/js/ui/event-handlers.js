@@ -1,22 +1,31 @@
 // quadGEN UI Event Handlers
 // Centralized event handler management for UI interactions
 
-import { elements, getCurrentPrinter, setLoadedQuadData, getLoadedQuadData, ensureLoadedQuadData, getAppState, updateAppState, TOTAL } from '../core/state.js';
+import { elements, getCurrentPrinter, setLoadedQuadData, getLoadedQuadData, ensureLoadedQuadData, getAppState, updateAppState, TOTAL, getPlotSmoothingPercent, setPlotSmoothingPercent } from '../core/state.js';
 import { getStateManager } from '../core/state-manager.js';
+import { ensureChannelLock, setChannelLock, isChannelLocked, updateChannelLockBounds, subscribeToChannelLock, clampAbsoluteToChannelLock, getChannelLockInfo, getLockedChannels, getGlobalScaleLockMessage } from '../core/channel-locks.js';
 import { sanitizeFilename, debounce, formatScalePercent } from './ui-utils.js';
 import { generateFilename, downloadFile, readFileAsText } from '../files/file-operations.js';
 import { InputValidator } from '../core/validation.js';
 import { parseQuadFile, parseLinearizationFile } from '../parsers/file-parsers.js';
-import { updateInkChart, stepChartZoom } from './chart-manager.js';
-import { getCurrentScale, updateScaleBaselineForChannel as updateScaleBaselineForChannelCore, validateScalingStateSync } from '../core/scaling-utils.js';
+import {
+    updateInkChart,
+    stepChartZoom,
+    setChartDebugShowCorrectionTarget,
+    isChartDebugShowCorrectionTarget,
+    setChartLightBlockingOverlayEnabled,
+    isChartLightBlockingOverlayEnabled
+} from './chart-manager.js';
+import { getCurrentScale, reapplyCurrentGlobalScale, updateScaleBaselineForChannel as updateScaleBaselineForChannelCore, validateScalingStateSync } from '../core/scaling-utils.js';
 import { SCALING_STATE_FLAG_EVENT } from '../core/scaling-constants.js';
 import scalingCoordinator from '../core/scaling-coordinator.js';
 import { updateCompactChannelsList, updateChannelCompactState, updateNoChannelsMessage } from './compact-channels.js';
 import { registerChannelRow, getChannelRow } from './channel-registry.js';
 import { updateProcessingDetail, updateSessionStatus } from './graph-status.js';
 import { LinearizationState, normalizeLinearizationEntry, getEditedDisplayName, getBasePointCountLabel } from '../data/linearization-utils.js';
-import { ControlPoints, extractAdaptiveKeyPointsFromValues, KP_SIMPLIFY, isSmartCurve, rescaleSmartCurveForInkLimit } from '../curves/smart-curves.js';
-import { isEditModeEnabled, setEditMode, populateChannelDropdown, refreshSmartCurvesFromMeasurements, reinitializeChannelSmartCurves, persistSmartPoints, setGlobalBakedState } from './edit-mode.js';
+import { maybeAutoRaiseInkLimits } from '../core/auto-raise-on-import.js';
+import { ControlPoints, extractAdaptiveKeyPointsFromValues, KP_SIMPLIFY, isSmartCurve, isSmartCurveSourceTag, rescaleSmartCurveForInkLimit, refreshPlotSmoothingSnapshotsForSmartEdit } from '../curves/smart-curves.js';
+import { isEditModeEnabled, setEditMode, populateChannelDropdown, refreshSmartCurvesFromMeasurements, reinitializeChannelSmartCurves, persistSmartPoints, setGlobalBakedState, isSmartPointDragActive } from './edit-mode.js';
 import { getTargetRelAt } from '../data/lab-parser.js';
 import { postLinearizationSummary } from './labtech-summaries.js';
 import { updatePreview } from './quad-preview.js';
@@ -32,7 +41,7 @@ import {
 import { showStatus } from './status-service.js';
 import { initializeHelpSystem } from './help-system.js';
 import { setPrinter, registerChannelRowSetup, syncPrinterForQuadData } from './printer-manager.js';
-import { make256 } from '../core/processing-pipeline.js';
+import { make256, beginCompositeLabRedistribution, finalizeCompositeLabRedistribution, replayCompositeDebugSessionFromCache, getCompositeCoverageSummary } from '../core/processing-pipeline.js';
 import {
     getLabNormalizationMode,
     setLabNormalizationMode,
@@ -41,21 +50,314 @@ import {
     LAB_NORMALIZATION_MODES,
     getLabSmoothingPercent,
     setLabSmoothingPercent,
-    subscribeLabSmoothingPercent
+    subscribeLabSmoothingPercent,
+    mapSmoothingPercentToWiden
 } from '../core/lab-settings.js';
 import { rebuildLabSamplesFromOriginal } from '../data/lab-parser.js';
 import { isLabLinearizationData } from '../data/lab-legacy-bypass.js';
+import { isSmartPointDragEnabled, setSmartPointDragEnabled, isRedistributionSmoothingWindowEnabled, setRedistributionSmoothingWindowEnabled, isAutoRaiseInkLimitsEnabled, setAutoRaiseInkLimitsEnabled } from '../core/feature-flags.js';
+import {
+    setCompositeWeightingMode,
+    getCompositeWeightingMode,
+    subscribeCompositeWeightingMode,
+    COMPOSITE_WEIGHTING_MODES
+} from '../core/composite-settings.js';
+import { setCompositeDebugEnabled, isCompositeDebugEnabled, subscribeCompositeDebugState } from '../core/composite-debug.js';
+import {
+    setManualChannelDensity,
+   setSolverChannelDensity,
+   getResolvedChannelDensity as getResolvedDensity,
+   subscribeChannelDensities,
+   formatDensityValue as formatDensityInput,
+   clearChannelDensity,
+   getDensityOverridesSnapshot,
+   isAutoDensityComputeEnabled,
+   DEFAULT_CHANNEL_DENSITIES
+} from '../core/channel-densities.js';
+import { CORRECTION_METHODS, getCorrectionMethod, setCorrectionMethod, subscribeCorrectionMethod } from '../core/correction-method.js';
+import { runSimpleScalingCorrection } from '../core/simple-scaling/index.js';
 
 const globalScope = typeof window !== 'undefined' ? window : globalThis;
 const isBrowser = typeof document !== 'undefined';
 
+function getCompositeAuditConfig() {
+    const auditConfig = globalScope && typeof globalScope === 'object' ? globalScope.__COMPOSITE_AUDIT__ : null;
+    if (!auditConfig || auditConfig.enabled === false) {
+        return null;
+    }
+    const index = Number.isFinite(auditConfig.sampleIndex) ? Math.max(0, Math.floor(auditConfig.sampleIndex)) : 242;
+    if (!Array.isArray(auditConfig.events)) {
+        auditConfig.events = [];
+    }
+
+    const log = typeof auditConfig.log === 'function'
+        ? auditConfig.log
+        : (stage, payload) => {
+            try {
+                console.log('[COMPOSITE_AUDIT]', stage, payload);
+            } catch (err) {
+                // ignore logging failure
+            }
+        };
+    return { index, log, events: auditConfig.events };
+}
+
+function emitCompositeAudit(stage, payloadFactory) {
+    try {
+        const config = getCompositeAuditConfig();
+        if (!config) return;
+        const payload = typeof payloadFactory === 'function' ? payloadFactory(config.index) : payloadFactory;
+        if (payload === null || payload === undefined) {
+            return;
+        }
+        config.log(stage, payload);
+        if (Array.isArray(config.events)) {
+            config.events.push({
+                stage,
+                payload,
+                ts: Date.now()
+            });
+        }
+    } catch (err) {
+        console.warn('[COMPOSITE_AUDIT] ui emit failed:', err);
+    }
+}
+
+function isBakedMeasurement(entry) {
+    if (!entry || typeof entry !== 'object') {
+        return false;
+    }
+    if (entry.meta && (entry.meta.baked === true || entry.meta.bakedGlobal === true)) {
+        return true;
+    }
+    const filename = typeof entry.filename === 'string' ? entry.filename : '';
+    if (filename.includes('*BAKED*')) {
+        return true;
+    }
+    const sourceTag = typeof entry.source === 'string' ? entry.source.toLowerCase() : '';
+    if (sourceTag.includes('baked')) {
+        return true;
+    }
+    if (typeof LinearizationState?.isGlobalBaked === 'function' && LinearizationState.isGlobalBaked()) {
+        return true;
+    }
+    return false;
+}
+
 let unsubscribeScalingStateInput = null;
 let unsubscribeLabNormalizationMode = null;
 let unsubscribeLabSmoothingPercent = null;
+let unsubscribeCompositeDebugState = null;
+let unsubscribeCompositeWeightingMode = null;
+let unsubscribeChannelDensityStore = null;
+let unsubscribeCorrectionMethod = null;
 let scalingStateFlagListenerAttached = false;
 let lastScalingStateValue = null;
 let scaleHandlerRetryCount = 0;
 const SCALE_HANDLER_MAX_RETRIES = 5;
+
+let latestCoverageSummary = null;
+const COVERAGE_INDICATOR_TOLERANCE = 0.003;
+const COVERAGE_INDICATOR_FLOAT_EPSILON = 1e-6;
+
+const SATURATION_THRESHOLD = 0.995;
+const PLOT_SMOOTHING_PEAK_EPSILON = 0.5;
+
+function captureCoverageSummarySnapshot() {
+    if (!isBrowser) {
+        latestCoverageSummary = null;
+        return;
+    }
+    try {
+        const summary = typeof getCompositeCoverageSummary === 'function' ? getCompositeCoverageSummary() : null;
+        if (summary && typeof summary === 'object') {
+            latestCoverageSummary = summary;
+        } else {
+            latestCoverageSummary = null;
+        }
+    } catch (error) {
+        latestCoverageSummary = null;
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.warn('[coverage] unable to read composite coverage summary:', error);
+        }
+    }
+}
+
+function lookupCoverageSummaryEntry(channelName) {
+    if (!latestCoverageSummary || !channelName) {
+        return null;
+    }
+    const normalizeKey = (key) => (typeof key === 'string' ? key : '');
+    if (latestCoverageSummary instanceof Map) {
+        const direct = latestCoverageSummary.get(channelName);
+        if (direct) return direct;
+        const upper = latestCoverageSummary.get(normalizeKey(channelName).toUpperCase());
+        if (upper) return upper;
+        const lower = latestCoverageSummary.get(normalizeKey(channelName).toLowerCase());
+        if (lower) return lower;
+        return null;
+    }
+    if (latestCoverageSummary[channelName]) {
+        return latestCoverageSummary[channelName];
+    }
+    const upper = normalizeKey(channelName).toUpperCase();
+    if (latestCoverageSummary[upper]) {
+        return latestCoverageSummary[upper];
+    }
+    const lower = normalizeKey(channelName).toLowerCase();
+    if (latestCoverageSummary[lower]) {
+        return latestCoverageSummary[lower];
+    }
+    return null;
+}
+
+function formatNormalizedPercent(value, digits = 1) {
+    if (!Number.isFinite(value)) {
+        return '—';
+    }
+    const clamped = clamp01(value);
+    const scaled = clamped * 100;
+    const formatted = scaled.toFixed(digits);
+    const cleaned = formatted.replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
+    return `${cleaned}%`;
+}
+
+function updateCoverageIndicatorForRow(row, channelName) {
+    if (!row || !isBrowser) {
+        return;
+    }
+    const indicator = row.querySelector('[data-coverage-indicator]');
+    if (!indicator) {
+        return;
+    }
+    const entry = lookupCoverageSummaryEntry(channelName);
+    if (!entry) {
+        indicator.textContent = '';
+        indicator.classList.add('hidden');
+        indicator.classList.remove('text-amber-600');
+        indicator.classList.add('text-gray-500');
+        indicator.removeAttribute('title');
+        return;
+    }
+
+    const maxNormalized = Number.isFinite(entry.maxNormalized) ? clamp01(entry.maxNormalized) : null;
+    const bufferedLimit = Number.isFinite(entry.bufferedLimit)
+        ? clamp01(entry.bufferedLimit)
+        : (Number.isFinite(entry.limit) ? clamp01(entry.limit) : null);
+
+    if (maxNormalized === null || bufferedLimit === null) {
+        indicator.textContent = '';
+        indicator.classList.add('hidden');
+        indicator.classList.remove('text-amber-600');
+        indicator.classList.add('text-gray-500');
+        indicator.removeAttribute('title');
+        return;
+    }
+
+    indicator.textContent = `Coverage ${formatNormalizedPercent(maxNormalized)} / ${formatNormalizedPercent(bufferedLimit)}`;
+    indicator.classList.remove('hidden');
+
+    const headroom = bufferedLimit - maxNormalized;
+    const overflowCount = Number(entry.overflow) || 0;
+    const highlight = overflowCount > 0 || headroom <= COVERAGE_INDICATOR_TOLERANCE + COVERAGE_INDICATOR_FLOAT_EPSILON;
+    indicator.classList.toggle('text-amber-600', highlight);
+    indicator.classList.toggle('text-gray-500', !highlight);
+
+    if (overflowCount > 0 && Array.isArray(entry.clampedSamples) && entry.clampedSamples.length) {
+        const samples = entry.clampedSamples.slice(0, 3).map((sample) => {
+            if (Number.isFinite(sample.inputPercent)) {
+                return `${sample.inputPercent.toFixed(1)}%`;
+            }
+            if (Number.isInteger(sample.index)) {
+                return `sample ${sample.index}`;
+            }
+            return 'sample';
+        });
+        const suffix = entry.clampedSamples.length > 3 ? '…' : '';
+        indicator.title = `Clamped at ${samples.join(', ')}${suffix}`;
+    } else if (highlight) {
+        indicator.title = 'Coverage ceiling reached for this channel.';
+    } else {
+        indicator.removeAttribute('title');
+    }
+}
+
+function updateCoverageIndicators() {
+    if (!isBrowser || !elements.rows) {
+        latestCoverageSummary = null;
+        return;
+    }
+    captureCoverageSummarySnapshot();
+    const rows = elements.rows.querySelectorAll('tr.channel-row[data-channel]');
+    rows.forEach((row) => {
+        const channel = row.getAttribute('data-channel');
+        updateCoverageIndicatorForRow(row, channel);
+    });
+}
+
+function applyDensityStateToRow(row, state) {
+    if (!row) return;
+    const densityInput = row.querySelector('.density-input');
+    const source = state?.source || 'unset';
+    const value = Number.isFinite(state?.value) ? state.value : null;
+    const display = value !== null ? formatDensityInput(value) : '';
+
+    if (densityInput) {
+        const isEditing = densityInput.dataset.userEditing === 'true';
+        if (!isEditing && document.activeElement !== densityInput) {
+            densityInput.value = display;
+        }
+        densityInput.setAttribute('data-density-source', source);
+        densityInput.dataset.densitySource = source;
+        densityInput.placeholder = display ? '' : '—';
+    }
+    const channelAttribute = row.getAttribute('data-channel');
+    updateCoverageIndicatorForRow(row, channelAttribute);
+}
+
+function formatSamplePercent(index) {
+    const pct = (index / 255) * 100;
+    return `${pct.toFixed(1).replace(/\\.0$/, '')}%`;
+}
+
+function collectCurveWarnings(entries) {
+    const saturationByChannel = new Map();
+    const saturationByIndex = new Map();
+
+    entries.forEach((entry) => {
+        const curve = entry?.curve;
+        const endValue = Math.max(0, Number(entry?.currentEnd) || 0);
+        if (!Array.isArray(curve) || curve.length === 0 || endValue <= 0) {
+            return;
+        }
+
+        for (let i = 0; i < curve.length; i += 1) {
+            const value = curve[i];
+            const inputPercent = (i / 255) * 100;
+            if (value >= endValue * SATURATION_THRESHOLD && inputPercent < 95) {
+                if (!saturationByChannel.has(entry.channelName)) {
+                    saturationByChannel.set(entry.channelName, formatSamplePercent(i));
+                }
+                const names = saturationByIndex.get(i) || [];
+                names.push(entry.channelName);
+                saturationByIndex.set(i, names);
+            }
+        }
+    });
+
+    const warnings = [];
+    saturationByChannel.forEach((percent, channel) => {
+        warnings.push(`${channel} channel reaches ≥99% ink near ${percent}`);
+    });
+
+    saturationByIndex.forEach((names, index) => {
+        if (names.length >= 2) {
+            warnings.push(`Multiple channels (${names.join(', ')}) saturate near ${formatSamplePercent(index)}`);
+        }
+    });
+
+    return warnings;
+}
 
 function syncScaleInputFromStateValue(value) {
     if (!elements.scaleAllInput) return;
@@ -195,8 +497,669 @@ function syncLabSmoothingControls(percent = getLabSmoothingPercent()) {
         }
     }
     if (elements.labSmoothingValue) {
-        elements.labSmoothingValue.textContent = `${clamped}%`;
+        const widen = mapSmoothingPercentToWiden(clamped);
+        elements.labSmoothingValue.textContent = `${clamped}% (×${widen.toFixed(2)})`;
     }
+}
+
+function syncPlotSmoothingBaselines(loadedData, channelNames = null, options = {}) {
+    if (!loadedData) {
+        return;
+    }
+    const {
+        source = 'curves',
+        force = false,
+        preserveExistingSnapshot = false
+    } = typeof options === 'object' && options !== null
+        ? options
+        : {};
+
+    const sourceMap = (() => {
+        if (source === 'rebasedCurves') return loadedData.rebasedCurves;
+        if (source === 'rebasedSources') return loadedData.rebasedSources;
+        if (source && typeof source === 'object') return source;
+        return loadedData.curves;
+    })();
+
+    if (!sourceMap || typeof sourceMap !== 'object') {
+        return;
+    }
+
+    const names = Array.isArray(channelNames) && channelNames.length
+        ? channelNames
+        : Object.keys(sourceMap);
+    if (!Array.isArray(names) || !names.length) {
+        return;
+    }
+
+    if (!loadedData.plotBaseCurves || typeof loadedData.plotBaseCurves !== 'object') {
+        loadedData.plotBaseCurves = {};
+    }
+    if (!loadedData._plotSmoothingOriginalCurves || typeof loadedData._plotSmoothingOriginalCurves !== 'object') {
+        loadedData._plotSmoothingOriginalCurves = {};
+    }
+    if (!loadedData._plotSmoothingBaselineCurves || typeof loadedData._plotSmoothingBaselineCurves !== 'object') {
+        loadedData._plotSmoothingBaselineCurves = {};
+    }
+    if (!loadedData._plotSmoothingOriginalEnds || typeof loadedData._plotSmoothingOriginalEnds !== 'object') {
+        loadedData._plotSmoothingOriginalEnds = {};
+    }
+    if (!loadedData.baselineEnd || typeof loadedData.baselineEnd !== 'object') {
+        loadedData.baselineEnd = {};
+    }
+
+    names.forEach((channelName) => {
+        if (!channelName) return;
+        const curve = Array.isArray(sourceMap[channelName]) ? sourceMap[channelName] : null;
+        if (!curve || !curve.length) return;
+
+        const cloned = curve.slice();
+        const peak = cloned.reduce((max, value) => (value > max ? value : max), 0);
+        const existingOriginalCurve = Array.isArray(loadedData._plotSmoothingOriginalCurves[channelName])
+            ? loadedData._plotSmoothingOriginalCurves[channelName]
+            : null;
+        const existingOriginalEnd = Number(
+            loadedData._plotSmoothingOriginalEnds && loadedData._plotSmoothingOriginalEnds[channelName]
+        );
+        const existingPeak = Number.isFinite(existingOriginalEnd)
+            ? existingOriginalEnd
+            : (Array.isArray(existingOriginalCurve)
+                ? existingOriginalCurve.reduce((max, value) => (value > max ? value : max), 0)
+                : Number.NaN);
+        const hasExistingSnapshot = Array.isArray(existingOriginalCurve) && existingOriginalCurve.length > 0;
+
+        const shouldReplaceSnapshot = (() => {
+            if (!hasExistingSnapshot) {
+                return true;
+            }
+            if (!Number.isFinite(existingPeak)) {
+                return true;
+            }
+            if (peak > existingPeak + PLOT_SMOOTHING_PEAK_EPSILON) {
+                return true;
+            }
+            if (preserveExistingSnapshot && peak < existingPeak - PLOT_SMOOTHING_PEAK_EPSILON) {
+                return false;
+            }
+            return force && !preserveExistingSnapshot;
+        })();
+
+        if (shouldReplaceSnapshot) {
+            loadedData.plotBaseCurves[channelName] = cloned.slice();
+            loadedData._plotSmoothingOriginalCurves[channelName] = cloned.slice();
+            loadedData._plotSmoothingBaselineCurves[channelName] = cloned.slice();
+            loadedData._plotSmoothingOriginalEnds[channelName] = peak;
+            loadedData.baselineEnd[channelName] = peak;
+            return;
+        }
+
+        const resolvedPeak = Number.isFinite(existingPeak) ? existingPeak : peak;
+        if (!Array.isArray(loadedData.plotBaseCurves[channelName])) {
+            loadedData.plotBaseCurves[channelName] = existingOriginalCurve
+                ? existingOriginalCurve.slice()
+                : cloned.slice();
+        }
+        if (!Array.isArray(loadedData._plotSmoothingBaselineCurves[channelName])) {
+            loadedData._plotSmoothingBaselineCurves[channelName] = existingOriginalCurve
+                ? existingOriginalCurve.slice()
+                : cloned.slice();
+        }
+        if (!Number.isFinite(existingOriginalEnd) || resolvedPeak > existingOriginalEnd + PLOT_SMOOTHING_PEAK_EPSILON) {
+            loadedData._plotSmoothingOriginalEnds[channelName] = resolvedPeak;
+        }
+        if (!Number.isFinite(loadedData.baselineEnd[channelName]) || preserveExistingSnapshot) {
+            loadedData.baselineEnd[channelName] = resolvedPeak;
+        }
+    });
+}
+
+function applyPlotSmoothingToCurve(values, percent) {
+    if (!Array.isArray(values) || values.length === 0) {
+        return Array.isArray(values) ? values.slice() : [];
+    }
+    const numeric = Number(percent);
+    if (!Number.isFinite(numeric) || numeric <= 0) {
+        return values.slice();
+    }
+    const radius = Math.max(1, Math.round((numeric / 100) * 12));
+    const len = values.length;
+    const smoothed = new Array(len);
+    for (let i = 0; i < len; i += 1) {
+        let weightedSum = 0;
+        let weightTotal = 0;
+        for (let offset = -radius; offset <= radius; offset += 1) {
+            const idx = Math.min(len - 1, Math.max(0, i + offset));
+            const weight = radius - Math.abs(offset) + 1;
+            weightedSum += values[idx] * weight;
+            weightTotal += weight;
+        }
+        smoothed[i] = weightTotal > 0 ? Math.round(weightedSum / weightTotal) : values[i];
+    }
+    smoothed[0] = values[0];
+    smoothed[len - 1] = values[len - 1];
+    return smoothed;
+}
+
+function clampCurveToSupport(values, support) {
+    if (!Array.isArray(values)) {
+        return Array.isArray(support) ? new Array(support.length).fill(0) : [];
+    }
+    if (!Array.isArray(support) || support.length === 0) {
+        return values.slice();
+    }
+    const limit = Math.min(values.length, support.length);
+    const clamped = values.slice();
+    for (let i = 0; i < limit; i += 1) {
+        const supportValue = Number(support[i]) || 0;
+        if (supportValue <= 0) {
+            clamped[i] = 0;
+        } else if (clamped[i] > supportValue) {
+            clamped[i] = supportValue;
+        }
+    }
+    return clamped;
+}
+
+const SINGLE_PEAK_LOCK_RATIO = 0.32;
+
+function enforceSinglePeak(values) {
+    if (!Array.isArray(values)) {
+        return [];
+    }
+    return values.slice();
+}
+
+function rescaleCurveToEnd(curve, targetEnd) {
+    if (!Array.isArray(curve)) {
+        return [];
+    }
+    if (!Number.isFinite(targetEnd) || targetEnd <= 0) {
+        return curve.slice();
+    }
+    const currentMax = Math.max(...curve);
+    if (!Number.isFinite(currentMax) || currentMax <= 0) {
+        return new Array(curve.length).fill(0);
+    }
+    const scale = targetEnd / currentMax;
+    const result = curve.map((value) => Math.round(Math.max(0, value * scale)));
+    const lastIndex = result.length - 1;
+    if (lastIndex >= 0) {
+        const originalTail = curve[lastIndex] ?? 0;
+        const scaledTail = Math.round(Math.max(0, originalTail * scale));
+        result[lastIndex] = Math.min(targetEnd, scaledTail);
+    }
+    return result;
+}
+
+function applyPlotSmoothingToEntries(entries, percent, loadedData) {
+    if (!Array.isArray(entries) || entries.length === 0 || !loadedData) {
+        return;
+    }
+    const numeric = Math.max(0, Number(percent) || 0);
+    if (!loadedData.plotBaseCurves || typeof loadedData.plotBaseCurves !== 'object') {
+        loadedData.plotBaseCurves = {};
+    }
+    if (!loadedData._plotSmoothingOriginalCurves || typeof loadedData._plotSmoothingOriginalCurves !== 'object') {
+        loadedData._plotSmoothingOriginalCurves = {};
+    } else {
+        Object.keys(loadedData._plotSmoothingOriginalCurves).forEach((key) => {
+            if (!loadedData.plotBaseCurves[key]) {
+                delete loadedData._plotSmoothingOriginalCurves[key];
+            }
+        });
+    }
+    if (!loadedData._plotSmoothingOriginalEnds || typeof loadedData._plotSmoothingOriginalEnds !== 'object') {
+        loadedData._plotSmoothingOriginalEnds = {};
+    }
+    const originalEnds = loadedData._plotSmoothingOriginalEnds;
+    entries.forEach((entry) => {
+        const { channelName } = entry;
+        if (!channelName || !Array.isArray(entry.curve)) return;
+        const base = entry.curve.slice();
+        loadedData.plotBaseCurves[channelName] = base.slice();
+        if (originalEnds[channelName] == null) {
+            const baseMax = Math.max(...base);
+            originalEnds[channelName] = Number.isFinite(baseMax) ? baseMax : 0;
+        }
+        const peakIndex = Number.isFinite(loadedData.channelPeaks?.[channelName])
+            ? loadedData.channelPeaks[channelName]
+            : null;
+        if (numeric > 0) {
+            const targetEnd = Math.max(...base);
+            const smoothed = clampCurveToSupport(applyPlotSmoothingToCurve(base, numeric), base);
+            const rescaled = rescaleCurveToEnd(smoothed, targetEnd);
+            entry.curve = enforceSinglePeak(clampCurveToSupport(rescaled, base), peakIndex);
+        } else if (peakIndex != null) {
+            entry.curve = enforceSinglePeak(base, peakIndex);
+        }
+    });
+    Object.entries(loadedData.plotBaseCurves).forEach(([channelName, curve]) => {
+        loadedData._plotSmoothingOriginalCurves[channelName] = Array.isArray(curve) ? curve.slice() : [];
+    });
+}
+
+function applyPlotSmoothingToLoadedChannels(percent) {
+    const loadedData = getLoadedQuadData?.();
+    if (!loadedData || !loadedData.curves) {
+        return;
+    }
+    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+        console.log('[PlotSmoothing] apply start', { percent });
+    }
+    const numeric = Math.max(0, Number(percent) || 0);
+    if (numeric <= 0 && loadedData._zeroSmoothingCurves && typeof loadedData._zeroSmoothingCurves === 'object') {
+        Object.entries(loadedData._zeroSmoothingCurves).forEach(([channelName, curve]) => {
+            if (!Array.isArray(curve)) return;
+            const cloned = curve.slice();
+            if (!loadedData.rebasedSources || typeof loadedData.rebasedSources !== 'object') {
+                loadedData.rebasedSources = {};
+            }
+            if (!loadedData.rebasedCurves || typeof loadedData.rebasedCurves !== 'object') {
+                loadedData.rebasedCurves = {};
+            }
+            loadedData.rebasedSources[channelName] = cloned.slice();
+            loadedData.rebasedCurves[channelName] = cloned.slice();
+            loadedData.curves[channelName] = cloned.slice();
+        });
+        syncPlotSmoothingBaselines(loadedData, null, {
+            source: loadedData._zeroSmoothingCurves,
+            force: true
+        });
+    }
+    if (numeric <= 0) {
+        try {
+            const printer = getCurrentPrinter();
+            const preferredChannels = Array.isArray(printer?.channels) ? printer.channels.slice() : null;
+            syncPlotSmoothingBaselines(loadedData, preferredChannels, {
+                source: 'rebasedSources',
+                force: true,
+                preserveExistingSnapshot: true
+            });
+        } catch (syncErr) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[PlotSmoothing] Failed to prime baseline caches before zero smoothing apply:', syncErr);
+            }
+        }
+    }
+    if (!loadedData._plotSmoothingOriginalCurves || typeof loadedData._plotSmoothingOriginalCurves !== 'object') {
+        loadedData._plotSmoothingOriginalCurves = {};
+    }
+    if (!loadedData._plotSmoothingOriginalEnds || typeof loadedData._plotSmoothingOriginalEnds !== 'object') {
+        loadedData._plotSmoothingOriginalEnds = {};
+    }
+    const originalCurves = loadedData._plotSmoothingOriginalCurves;
+    const originalEnds = loadedData._plotSmoothingOriginalEnds;
+    if (loadedData.baselineEnd && typeof loadedData.baselineEnd === 'object') {
+        Object.keys(loadedData.baselineEnd).forEach((channelName) => {
+            if (typeof originalEnds[channelName] !== 'number') {
+                originalEnds[channelName] = loadedData.baselineEnd[channelName];
+            }
+        });
+    }
+    const channelNames = Object.keys(loadedData.curves);
+    channelNames.forEach((channelName) => {
+        const hasStoredOriginal = Array.isArray(originalCurves[channelName]) && originalCurves[channelName].length > 0;
+
+        if (!hasStoredOriginal && Array.isArray(loadedData.plotBaseCurves?.[channelName])) {
+            originalCurves[channelName] = loadedData.plotBaseCurves[channelName].slice();
+        } else if (!hasStoredOriginal && Array.isArray(loadedData.curves?.[channelName])) {
+            originalCurves[channelName] = loadedData.curves[channelName].slice();
+        }
+
+        const baselineSnapshot = Array.isArray(loadedData._plotSmoothingBaselineCurves?.[channelName])
+            ? loadedData._plotSmoothingBaselineCurves[channelName].slice()
+            : null;
+        const sourceCurveSnapshot = Array.isArray(loadedData.rebasedSources?.[channelName])
+            ? loadedData.rebasedSources[channelName].slice()
+            : null;
+        let base = Array.isArray(originalCurves[channelName]) && originalCurves[channelName].length
+            ? originalCurves[channelName].slice()
+            : null;
+        const currentCurveSnapshot = Array.isArray(loadedData.curves?.[channelName])
+            ? loadedData.curves[channelName].slice()
+            : null;
+        if (numeric <= 0 && (!Array.isArray(base) || base.length === 0)) {
+            const zeroSource = Array.isArray(loadedData._zeroSmoothingCurves?.[channelName])
+                ? loadedData._zeroSmoothingCurves[channelName]
+                : null;
+            if (zeroSource && zeroSource.length) {
+                base = zeroSource.slice();
+                originalCurves[channelName] = base.slice();
+            }
+        }
+        if (numeric <= 0 && Array.isArray(loadedData._zeroSmoothingCurves?.[channelName])) {
+            base = loadedData._zeroSmoothingCurves[channelName].slice();
+            originalCurves[channelName] = base.slice();
+        }
+        if (!base && Array.isArray(sourceCurveSnapshot)) {
+            base = sourceCurveSnapshot.slice();
+            originalCurves[channelName] = base.slice();
+        }
+        if (numeric <= 0 && Array.isArray(currentCurveSnapshot)) {
+            const storedMax = Array.isArray(base) && base.length
+                ? base.reduce((max, value) => (value > max ? value : max), 0)
+                : 0;
+            const currentMax = currentCurveSnapshot.reduce((max, value) => (value > max ? value : max), 0);
+            if (!Array.isArray(base) || currentMax > storedMax + 0.5) {
+                base = currentCurveSnapshot.slice();
+                originalCurves[channelName] = base.slice();
+            }
+        }
+        if (!base && Array.isArray(baselineSnapshot)) {
+            base = baselineSnapshot.slice();
+            originalCurves[channelName] = base.slice();
+        }
+        if (!base && Array.isArray(currentCurveSnapshot)) {
+            base = currentCurveSnapshot.slice();
+            originalCurves[channelName] = base.slice();
+        }
+        if (!base) return;
+        let targetEnd = typeof originalEnds[channelName] === 'number'
+            ? originalEnds[channelName]
+            : (typeof loadedData.baselineEnd?.[channelName] === 'number'
+                ? loadedData.baselineEnd[channelName]
+                : Math.max(...base));
+        if (!Number.isFinite(targetEnd) || targetEnd <= 0) {
+            const fallbackMax = Math.max(...base);
+            targetEnd = Number.isFinite(fallbackMax) && fallbackMax > 0 ? fallbackMax : 0;
+            originalEnds[channelName] = targetEnd;
+        }
+        const peakIndex = Number.isFinite(loadedData.channelPeaks?.[channelName])
+            ? loadedData.channelPeaks[channelName]
+            : null;
+        if (numeric <= 0 || targetEnd <= 0) {
+            let restoredBase = base.slice();
+            const baseMax = restoredBase.reduce((max, value) => (value > max ? value : max), 0);
+            if (numeric <= 0 && targetEnd > 0 && Math.abs(baseMax - targetEnd) > 0.5) {
+                restoredBase = rescaleCurveToEnd(restoredBase, targetEnd);
+            }
+            const restored = enforceSinglePeak(restoredBase, peakIndex);
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.log('[PlotSmoothing] curve restore', channelName, {
+                    storedMax: Math.max(...base),
+                    targetEnd,
+                    currentMax: Array.isArray(currentCurveSnapshot) ? Math.max(...currentCurveSnapshot) : null
+                });
+            }
+            loadedData.curves[channelName] = restored.slice();
+            if (!loadedData.rebasedCurves) loadedData.rebasedCurves = {};
+            if (!loadedData.rebasedSources) loadedData.rebasedSources = {};
+            loadedData.rebasedCurves[channelName] = restored.slice();
+            loadedData.rebasedSources[channelName] = restored.slice();
+            if (loadedData.baselineEnd && Number.isFinite(targetEnd)) {
+                loadedData.baselineEnd[channelName] = targetEnd;
+            }
+            if (!loadedData.plotBaseCurves || typeof loadedData.plotBaseCurves !== 'object') {
+                loadedData.plotBaseCurves = {};
+            }
+            loadedData.plotBaseCurves[channelName] = restored.slice();
+            if (!loadedData._plotSmoothingBaselineCurves || typeof loadedData._plotSmoothingBaselineCurves !== 'object') {
+                loadedData._plotSmoothingBaselineCurves = {};
+            }
+            loadedData._plotSmoothingBaselineCurves[channelName] = restored.slice();
+            originalCurves[channelName] = restored.slice();
+            originalEnds[channelName] = targetEnd;
+            return;
+        }
+        const smoothedCurve = clampCurveToSupport(applyPlotSmoothingToCurve(base, numeric), base);
+        const rescaledCurve = targetEnd > 0
+            ? rescaleCurveToEnd(smoothedCurve, targetEnd)
+            : smoothedCurve;
+        const finalCurve = enforceSinglePeak(clampCurveToSupport(rescaledCurve, base), peakIndex);
+        loadedData.curves[channelName] = finalCurve.slice();
+        if (!loadedData.rebasedCurves) loadedData.rebasedCurves = {};
+        if (!loadedData.rebasedSources) loadedData.rebasedSources = {};
+        loadedData.rebasedCurves[channelName] = finalCurve.slice();
+        if (numeric <= 0) {
+            loadedData.rebasedSources[channelName] = finalCurve.slice();
+        } else if (!Array.isArray(loadedData.rebasedSources[channelName])) {
+            loadedData.rebasedSources[channelName] = base.slice();
+        }
+        if (loadedData.baselineEnd && Number.isFinite(targetEnd)) {
+            loadedData.baselineEnd[channelName] = targetEnd;
+        }
+        if (!loadedData.plotBaseCurves || typeof loadedData.plotBaseCurves !== 'object') {
+            loadedData.plotBaseCurves = {};
+        }
+        if (!loadedData._plotSmoothingOriginalCurves || typeof loadedData._plotSmoothingOriginalCurves !== 'object') {
+            loadedData._plotSmoothingOriginalCurves = {};
+        }
+        if (numeric <= 0) {
+            loadedData.plotBaseCurves[channelName] = finalCurve.slice();
+            loadedData._plotSmoothingOriginalCurves[channelName] = finalCurve.slice();
+        }
+    });
+    if (numeric <= 0) {
+        try {
+            syncPlotSmoothingBaselines(loadedData, channelNames, { source: 'curves', force: true });
+        } catch (baselineSyncErr) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[PlotSmoothing] Failed to synchronize baselines after zero smoothing apply:', baselineSyncErr);
+            }
+        }
+        try {
+            const zeroCurves = loadedData._zeroSmoothingCurves;
+            const signature = loadedData._zeroSmoothingSignature || null;
+            const globalFilename = typeof LinearizationState?.getGlobalData === 'function'
+                ? LinearizationState.getGlobalData()?.filename || null
+                : null;
+            const signatureMatches = !signature || !globalFilename || signature === globalFilename;
+            const maxOf = (curve) => {
+                if (!Array.isArray(curve)) return 0;
+                return curve.reduce((max, value) => (value > max ? value : max), 0);
+            };
+            if (zeroCurves && typeof zeroCurves === 'object' && signatureMatches) {
+                let requiresReapply = false;
+                Object.entries(zeroCurves).forEach(([channelName, curve]) => {
+                    if (!Array.isArray(curve) || !curve.length) return;
+                    const snapshotMax = maxOf(curve);
+                    const currentMax = maxOf(loadedData.curves?.[channelName]);
+                    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                        console.log('[PlotSmoothing] zero-check', channelName, { snapshotMax, currentMax });
+                    }
+                    if (snapshotMax > 0 && Math.abs(currentMax - snapshotMax) > 0.5) {
+                        requiresReapply = true;
+                    }
+                });
+                if (requiresReapply) {
+                    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                        console.log('[PlotSmoothing] Reapplying zero-smoothing snapshot to restore baseline amplitude.');
+                    }
+                    Object.entries(zeroCurves).forEach(([channelName, curve]) => {
+                        if (!Array.isArray(curve)) return;
+                        const cloned = curve.slice();
+                        loadedData.curves[channelName] = cloned.slice();
+                        if (!loadedData.rebasedCurves || typeof loadedData.rebasedCurves !== 'object') {
+                            loadedData.rebasedCurves = {};
+                        }
+                        loadedData.rebasedCurves[channelName] = cloned.slice();
+                        if (!loadedData.rebasedSources || typeof loadedData.rebasedSources !== 'object') {
+                            loadedData.rebasedSources = {};
+                        }
+                        loadedData.rebasedSources[channelName] = cloned.slice();
+                    });
+                    syncPlotSmoothingBaselines(loadedData, null, { source: zeroCurves, force: true });
+                    loadedData._zeroSmoothingReapplied = true;
+                    if (typeof LinearizationState?.setGlobalCorrectedCurves === 'function') {
+                        try {
+                            LinearizationState.setGlobalCorrectedCurves(loadedData.curves);
+                        } catch (snapshotErr) {
+                            console.warn('[PlotSmoothing] Failed to push zero-snapshot corrected curves:', snapshotErr);
+                        }
+                    }
+                    if (typeof LinearizationState?.setGlobalBaselineCurves === 'function') {
+                        try {
+                            LinearizationState.setGlobalBaselineCurves(loadedData.plotBaseCurves);
+                        } catch (baselineErr) {
+                            console.warn('[PlotSmoothing] Failed to push zero-snapshot baseline curves:', baselineErr);
+                        }
+                    }
+                } else if (loadedData._zeroSmoothingReapplied) {
+                    loadedData._zeroSmoothingReapplied = false;
+                }
+            }
+        } catch (zeroErr) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[PlotSmoothing] Failed to validate zero-smoothing snapshot during reset:', zeroErr);
+            }
+        }
+    }
+    try { updateInkChart(); } catch (error) { console.warn(error); }
+    try { debouncedPreviewUpdate(); } catch (error) { console.warn(error); }
+    try {
+        const printer = getCurrentPrinter();
+        const names = printer?.channels || channelNames;
+        names.forEach((channelName) => {
+            try { updateProcessingDetail(channelName); } catch (err) { console.warn(err); }
+        });
+    } catch (error) {
+        console.warn(error);
+    }
+    try { updateSessionStatus(); } catch (error) { console.warn(error); }
+    try { postLinearizationSummary(); } catch (error) { console.warn(error); }
+    updateCoverageIndicators();
+}
+
+const schedulePlotSmoothingRefresh = debounce(() => {
+    applyPlotSmoothingToLoadedChannels(getPlotSmoothingPercent());
+}, 250);
+
+const scheduleCompositeWeightingRefresh = debounce(() => {
+    try {
+        if (!LinearizationState?.isGlobalEnabled?.()) {
+            return;
+        }
+        const globalData = LinearizationState.getGlobalData?.();
+        if (!globalData || !isLabLinearizationData(globalData)) {
+            return;
+        }
+        const printer = getCurrentPrinter();
+        const channelNames = Array.isArray(printer?.channels) ? printer.channels.slice() : [];
+        if (!channelNames.length) {
+            return;
+        }
+        rebaseChannelsToCorrectedCurves(channelNames, {
+            source: 'compositeWeightingChange',
+            useOriginalBaseline: true
+        });
+    } catch (error) {
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.warn('[CompositeWeighting] Failed to refresh after weighting change:', error);
+        }
+    }
+}, 200);
+
+function resetPlotSmoothingCaches() {
+    const loadedData = getLoadedQuadData?.();
+    if (!loadedData) {
+        return;
+    }
+    loadedData._plotSmoothingOriginalCurves = {};
+    loadedData._plotSmoothingOriginalEnds = {};
+}
+
+function storeZeroSmoothingSnapshot(filename) {
+    const loadedData = getLoadedQuadData?.();
+    if (!loadedData || !loadedData.curves) {
+        return;
+    }
+    const snapshot = {};
+    Object.entries(loadedData.curves).forEach(([channelName, curve]) => {
+        if (Array.isArray(curve)) {
+            snapshot[channelName] = curve.slice();
+        }
+    });
+    loadedData._zeroSmoothingCurves = snapshot;
+    loadedData._zeroSmoothingSignature = typeof filename === 'string' && filename.trim() ? filename.trim() : null;
+    loadedData._zeroSmoothingRestored = false;
+}
+
+function restoreZeroSmoothingSnapshot(filename) {
+    const loadedData = getLoadedQuadData?.();
+    if (!loadedData || !loadedData._zeroSmoothingCurves) {
+        return false;
+    }
+    const signature = typeof filename === 'string' && filename.trim() ? filename.trim() : null;
+    if (signature && loadedData._zeroSmoothingSignature && loadedData._zeroSmoothingSignature !== signature) {
+        return false;
+    }
+    const restored = applyCurveSnapshot(loadedData._zeroSmoothingCurves, {
+        skipRefresh: false,
+        skipScaleBaselineUpdate: true
+    });
+    if (restored && loadedData) {
+        loadedData._zeroSmoothingRestored = true;
+        if (!loadedData.plotBaseCurves || typeof loadedData.plotBaseCurves !== 'object') {
+            loadedData.plotBaseCurves = {};
+        }
+        if (!loadedData._plotSmoothingOriginalCurves || typeof loadedData._plotSmoothingOriginalCurves !== 'object') {
+            loadedData._plotSmoothingOriginalCurves = {};
+        }
+        if (!loadedData._plotSmoothingOriginalEnds || typeof loadedData._plotSmoothingOriginalEnds !== 'object') {
+            loadedData._plotSmoothingOriginalEnds = {};
+        }
+        if (!loadedData._plotSmoothingBaselineCurves || typeof loadedData._plotSmoothingBaselineCurves !== 'object') {
+            loadedData._plotSmoothingBaselineCurves = {};
+        }
+        Object.entries(loadedData.curves || {}).forEach(([channelName, curve]) => {
+            if (!Array.isArray(curve)) {
+                return;
+            }
+            const cloned = curve.slice();
+            const peak = cloned.reduce((max, value) => (value > max ? value : max), 0);
+            loadedData.plotBaseCurves[channelName] = cloned.slice();
+            loadedData._plotSmoothingOriginalCurves[channelName] = cloned.slice();
+            loadedData._plotSmoothingBaselineCurves[channelName] = cloned.slice();
+            if (Number.isFinite(peak)) {
+                loadedData._plotSmoothingOriginalEnds[channelName] = peak;
+                if (loadedData.baselineEnd && typeof loadedData.baselineEnd === 'object') {
+                    loadedData.baselineEnd[channelName] = peak;
+                }
+            }
+        });
+        syncPlotSmoothingBaselines(loadedData, null, { source: 'curves', force: true });
+        if (LinearizationState && typeof LinearizationState.setGlobalCorrectedCurves === 'function') {
+            try {
+                LinearizationState.setGlobalCorrectedCurves(loadedData.curves);
+            } catch (err) {
+                console.warn('[ZeroSmoothing] Failed to sync corrected curves after restore:', err);
+            }
+        }
+        if (LinearizationState && typeof LinearizationState.setGlobalBaselineCurves === 'function') {
+            try {
+                LinearizationState.setGlobalBaselineCurves(loadedData.plotBaseCurves);
+            } catch (err) {
+                console.warn('[ZeroSmoothing] Failed to sync baseline curves after restore:', err);
+            }
+        }
+    }
+    return restored;
+}
+
+function syncPlotSmoothingControls(percent = getPlotSmoothingPercent()) {
+    const numeric = Number(percent);
+    const clamped = Number.isFinite(numeric) ? Math.max(0, Math.min(300, Math.round(numeric))) : getPlotSmoothingPercent();
+    if (elements.plotSmoothingSlider && Number(elements.plotSmoothingSlider.value) !== clamped) {
+        elements.plotSmoothingSlider.value = String(clamped);
+    }
+    if (elements.plotSmoothingValue) {
+        const widen = mapSmoothingPercentToWiden(clamped);
+        elements.plotSmoothingValue.textContent = `${clamped}% (×${widen.toFixed(2)})`;
+    }
+}
+
+function initializePlotSmoothingHandlers() {
+    syncPlotSmoothingControls();
+    if (!elements.plotSmoothingSlider) return;
+    elements.plotSmoothingSlider.addEventListener('input', (event) => {
+        const percent = Number(event.target.value);
+        const applied = setPlotSmoothingPercent(percent);
+        syncPlotSmoothingControls(applied);
+        schedulePlotSmoothingRefresh();
+        const widen = mapSmoothingPercentToWiden(applied);
+        showStatus(`Plot smoothing set to ${applied}% (×${widen.toFixed(2)})`);
+    });
+    schedulePlotSmoothingRefresh();
 }
 
 function rebuildLabEntryForNormalization(entry) {
@@ -205,18 +1168,20 @@ function rebuildLabEntryForNormalization(entry) {
     }
 
     const mode = getLabNormalizationMode();
+    const smoothingPercent = Number(getLabSmoothingPercent());
+    const hasSmoothing = Number.isFinite(smoothingPercent) && smoothingPercent > 0;
+    const widen = hasSmoothing ? mapSmoothingPercentToWiden(smoothingPercent) : 1;
+
     const rawSamples = rebuildLabSamplesFromOriginal(entry.originalData, {
         normalizationMode: mode,
-        skipDefaultSmoothing: true
+        skipDefaultSmoothing: true,
+        useBaselineWidenFactor: hasSmoothing
     }) || entry.baseSamples || entry.samples;
 
     const baseSamples = rebuildLabSamplesFromOriginal(entry.originalData, {
-        normalizationMode: mode
+        normalizationMode: mode,
+        useBaselineWidenFactor: hasSmoothing
     }) || rawSamples;
-
-    const smoothingPercent = Number(entry.previewSmoothingPercent);
-    const hasSmoothing = Number.isFinite(smoothingPercent) && smoothingPercent > 0;
-    const widen = hasSmoothing ? 1 + (smoothingPercent / 100) : 1;
     const previewSamples = hasSmoothing
         ? rebuildLabSamplesFromOriginal(entry.originalData, {
             normalizationMode: mode,
@@ -226,10 +1191,11 @@ function rebuildLabEntryForNormalization(entry) {
 
     const updated = {
         ...entry,
-        samples: baseSamples.slice(),
+        samples: hasSmoothing ? previewSamples.slice() : baseSamples.slice(),
         baseSamples: baseSamples.slice(),
         rawSamples: rawSamples.slice(),
-        previewSamples: previewSamples.slice()
+        previewSamples: previewSamples.slice(),
+        previewSmoothingPercent: smoothingPercent
     };
 
     if (!Array.isArray(updated.originalSamples)) {
@@ -244,6 +1210,10 @@ function refreshLinearizationDataForNormalization() {
     const printer = getCurrentPrinter();
     const channels = printer?.channels || [];
     const updatedChannels = [];
+    const smoothingPercent = Number(getLabSmoothingPercent?.() || 0);
+    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+        console.log('[LabNormalization] refreshLinearizationDataForNormalization start', { smoothingPercent });
+    }
 
     const globalData = LinearizationState.getGlobalData();
     if (globalData && isLabLinearizationData(globalData)) {
@@ -259,6 +1229,27 @@ function refreshLinearizationDataForNormalization() {
             linearizationData: updatedEntry,
             linearizationApplied: LinearizationState.globalApplied
         });
+
+        if (smoothingPercent <= 0) {
+            try {
+                const loadedData = getLoadedQuadData?.();
+                if (loadedData && loadedData._originalBaselineEnd) {
+                    loadedData.baselineEnd = { ...loadedData._originalBaselineEnd };
+                }
+            } catch (baselineErr) {
+                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                    console.warn('[LabNormalization] Failed to restore original baseline ends before rebase:', baselineErr);
+                }
+            }
+        }
+
+        if (smoothingPercent > 0) {
+            maybeAutoRaiseInkLimits(updatedEntry, {
+                scope: 'global',
+                label: 'LAB normalization update',
+                source: 'lab-normalization'
+            });
+        }
 
         if (elements.globalLinearizationBtn) {
             const countLabel = getBasePointCountLabel(updatedEntry);
@@ -279,6 +1270,22 @@ function refreshLinearizationDataForNormalization() {
                 : '';
         }
 
+        if (smoothingPercent > 0) {
+            try {
+                const loadedData = getLoadedQuadData?.();
+                const signature = typeof updatedEntry.filename === 'string' && updatedEntry.filename.trim()
+                    ? updatedEntry.filename.trim()
+                    : null;
+                if (loadedData && (!loadedData._zeroSmoothingCurves || loadedData._zeroSmoothingSignature !== signature)) {
+                    storeZeroSmoothingSnapshot(updatedEntry.filename);
+                }
+            } catch (snapshotErr) {
+                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                    console.warn('[LabNormalization] Failed to capture zero-smoothing snapshot before widening:', snapshotErr);
+                }
+            }
+        }
+
         updatedChannels.push(...channels);
     }
 
@@ -289,11 +1296,88 @@ function refreshLinearizationDataForNormalization() {
             const enabled = LinearizationState.isPerChannelEnabled(channelName);
             LinearizationState.setPerChannelData(channelName, updatedEntry, enabled);
             syncPerChannelAppState(channelName, updatedEntry);
+            if (smoothingPercent > 0) {
+                maybeAutoRaiseInkLimits(updatedEntry, {
+                    scope: 'channel',
+                    channelName,
+                    label: `${channelName} LAB normalization`,
+                    source: 'lab-normalization'
+                });
+            }
+            if (smoothingPercent <= 0) {
+                try {
+                    const loadedData = getLoadedQuadData?.();
+                    if (loadedData && loadedData._originalBaselineEnd && typeof loadedData._originalBaselineEnd === 'object') {
+                        const originalEnd = loadedData._originalBaselineEnd[channelName];
+                        if (Number.isFinite(originalEnd)) {
+                            loadedData.baselineEnd[channelName] = originalEnd;
+                        }
+                    }
+                } catch (baselineErr) {
+                    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                        console.warn('[LabNormalization] Failed to restore per-channel baseline end:', baselineErr);
+                    }
+                }
+            }
             if (!updatedChannels.includes(channelName)) {
                 updatedChannels.push(channelName);
             }
         }
     });
+
+    const loadedDataForZero = typeof getLoadedQuadData === 'function' ? getLoadedQuadData() : null;
+    const canRestoreZeroDirectly = smoothingPercent <= 0
+        && loadedDataForZero
+        && loadedDataForZero._zeroSmoothingCurves
+        && Object.keys(loadedDataForZero._zeroSmoothingCurves).length > 0
+        && globalData
+        && typeof globalData.filename === 'string'
+        && globalData.filename.trim().length > 0;
+    console.log('[LabNormalization] zeroDirectCandidate', {
+        smoothingPercent,
+        hasLoadedData: !!loadedDataForZero,
+        hasZero: !!(loadedDataForZero && loadedDataForZero._zeroSmoothingCurves),
+        zeroCount: loadedDataForZero && loadedDataForZero._zeroSmoothingCurves ? Object.keys(loadedDataForZero._zeroSmoothingCurves).length : 0,
+        hasGlobalFilename: !!(globalData && globalData.filename),
+        canRestoreZeroDirectly
+    });
+
+    if (canRestoreZeroDirectly) {
+        const targetFilename = globalData.filename.trim();
+        const restored = restoreZeroSmoothingSnapshot(targetFilename);
+        if (!restored) {
+            applyPlotSmoothingToLoadedChannels(0);
+            restoreZeroSmoothingSnapshot(targetFilename);
+        }
+        syncPlotSmoothingBaselines(loadedDataForZero, null, {
+            source: loadedDataForZero._zeroSmoothingCurves,
+            force: true
+        });
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            try {
+                const channelSnapshot = Object.entries(loadedDataForZero._zeroSmoothingCurves || {}).reduce((acc, [channelName, curve]) => {
+                    if (Array.isArray(curve)) {
+                        acc[channelName] = curve.reduce((max, value) => (value > max ? value : max), 0);
+                    }
+                    return acc;
+                }, {});
+                console.log('[LabNormalization] zero snapshot restore applied', channelSnapshot);
+            } catch (zeroLogErr) {
+                console.warn('[LabNormalization] zero snapshot restore log failed:', zeroLogErr);
+            }
+        }
+        updateInkChart();
+        updateSessionStatus();
+        try {
+            postLinearizationSummary();
+        } catch (err) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[LabNormalization] Failed to post summary after direct zero restore:', err);
+            }
+        }
+        updateCoverageIndicators();
+        return;
+    }
 
     if (updatedChannels.length > 0) {
         if (typeof LinearizationState.setGlobalBakedMeta === 'function') {
@@ -324,8 +1408,28 @@ function refreshLinearizationDataForNormalization() {
 
         rebaseChannelsToCorrectedCurves(updatedChannels, {
             source: 'labNormalizationChange',
-            useOriginalBaseline: true
+            useOriginalBaseline: true,
+            resetEndsToBaseline: true
         });
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            try {
+                const loadedData = getLoadedQuadData?.();
+                if (loadedData && Array.isArray(updatedChannels) && updatedChannels.length) {
+                    const snapshot = updatedChannels.reduce((acc, channelName) => {
+                        const curve = Array.isArray(loadedData.curves?.[channelName])
+                            ? loadedData.curves[channelName]
+                            : null;
+                        if (curve) {
+                            acc[channelName] = curve.reduce((max, value) => (value > max ? value : max), 0);
+                        }
+                        return acc;
+                    }, {});
+                    console.log('[LabNormalization] post-rebase maxima', snapshot);
+                }
+            } catch (rebaseLogErr) {
+                console.warn('[LabNormalization] post-rebase maxima log failed:', rebaseLogErr);
+            }
+        }
         updateInkChart();
         updateSessionStatus();
         try {
@@ -335,12 +1439,398 @@ function refreshLinearizationDataForNormalization() {
                 console.warn('[LabNormalization] Failed to post summary:', err);
             }
         }
+        updateCoverageIndicators();
+    }
+
+    if (smoothingPercent <= 0) {
+        try {
+            const currentGlobal = LinearizationState.getGlobalData?.();
+            const restored = restoreZeroSmoothingSnapshot(currentGlobal?.filename);
+            if (!restored) {
+                applyPlotSmoothingToLoadedChannels(0);
+            }
+        } catch (restoreErr) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[LabNormalization] Failed to restore zero-smoothing curves after normalization:', restoreErr);
+            }
+        }
+        try {
+            const loadedData = getLoadedQuadData?.();
+            if (loadedData && loadedData._originalBaselineEnd && typeof loadedData._originalBaselineEnd === 'object') {
+                Object.entries(loadedData._originalBaselineEnd).forEach(([channelName, originalEnd]) => {
+                    const curve = Array.isArray(loadedData.curves?.[channelName]) ? loadedData.curves[channelName] : null;
+                    const targetEnd = Number(originalEnd);
+                    if (!curve || !Number.isFinite(targetEnd) || targetEnd <= 0) {
+                        return;
+                    }
+                    const currentMax = curve.reduce((max, value) => (value > max ? value : max), 0);
+                    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                        console.log('[LabNormalization] baseline restore check', {
+                            channelName,
+                            currentMax,
+                            targetEnd
+                        });
+                    }
+                    if (Math.abs(currentMax - targetEnd) <= 0.5) {
+                        if (loadedData.baselineEnd && typeof loadedData.baselineEnd === 'object') {
+                            loadedData.baselineEnd[channelName] = targetEnd;
+                        }
+                        if (loadedData._plotSmoothingOriginalEnds && typeof loadedData._plotSmoothingOriginalEnds === 'object') {
+                            loadedData._plotSmoothingOriginalEnds[channelName] = targetEnd;
+                        }
+                        return;
+                    }
+                    const rescaled = rescaleCurveToEnd(curve, targetEnd);
+                    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                        console.log('[LabNormalization] Rescaling baseline', channelName, {
+                            currentMax,
+                            targetEnd,
+                            scaledMax: Math.max(...rescaled)
+                        });
+                    }
+                    loadedData.curves[channelName] = rescaled.slice();
+                    if (loadedData.rebasedCurves && typeof loadedData.rebasedCurves === 'object') {
+                        loadedData.rebasedCurves[channelName] = rescaled.slice();
+                    }
+                    if (loadedData.rebasedSources && typeof loadedData.rebasedSources === 'object') {
+                        loadedData.rebasedSources[channelName] = rescaled.slice();
+                    }
+                    if (loadedData.plotBaseCurves && typeof loadedData.plotBaseCurves === 'object') {
+                        loadedData.plotBaseCurves[channelName] = rescaled.slice();
+                    }
+                    if (loadedData._plotSmoothingOriginalCurves && typeof loadedData._plotSmoothingOriginalCurves === 'object') {
+                        loadedData._plotSmoothingOriginalCurves[channelName] = rescaled.slice();
+                    }
+                    if (loadedData._plotSmoothingBaselineCurves && typeof loadedData._plotSmoothingBaselineCurves === 'object') {
+                        loadedData._plotSmoothingBaselineCurves[channelName] = rescaled.slice();
+                    }
+                    if (loadedData._plotSmoothingOriginalEnds && typeof loadedData._plotSmoothingOriginalEnds === 'object') {
+                        loadedData._plotSmoothingOriginalEnds[channelName] = targetEnd;
+                    }
+                    if (loadedData.baselineEnd && typeof loadedData.baselineEnd === 'object') {
+                        loadedData.baselineEnd[channelName] = targetEnd;
+                    }
+                });
+                if (LinearizationState && typeof LinearizationState.setGlobalCorrectedCurves === 'function') {
+                    LinearizationState.setGlobalCorrectedCurves(loadedData.curves);
+                }
+                if (LinearizationState && typeof LinearizationState.setGlobalBaselineCurves === 'function') {
+                    LinearizationState.setGlobalBaselineCurves(loadedData.plotBaseCurves);
+                }
+            }
+        } catch (scaleErr) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[LabNormalization] Failed to rescale curves to original baseline:', scaleErr);
+            }
+        }
+        try {
+            const loadedData = getLoadedQuadData?.();
+            if (loadedData) {
+                syncPlotSmoothingBaselines(loadedData, null, { source: 'curves', force: true });
+            }
+        } catch (baselineSyncErr) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[LabNormalization] Failed to synchronize plot smoothing baselines:', baselineSyncErr);
+            }
+        }
+        try {
+            applyPlotSmoothingToLoadedChannels(0);
+        } catch (plotErr) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[LabNormalization] Failed to reapply zero plot smoothing after normalization:', plotErr);
+            }
+        }
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            try {
+                const loadedData = getLoadedQuadData?.();
+                if (loadedData && loadedData.curves) {
+                    const summary = Object.entries(loadedData.curves).reduce((acc, [channelName, curve]) => {
+                        if (Array.isArray(curve)) {
+                            acc[channelName] = curve.reduce((max, value) => (value > max ? value : max), 0);
+                        }
+                        return acc;
+                    }, {});
+                    console.log('[LabNormalization] after zero plot smoothing apply', summary);
+                }
+            } catch (afterPlotLogErr) {
+                console.warn('[LabNormalization] Log after zero smoothing apply failed:', afterPlotLogErr);
+            }
+        }
+        try {
+            const currentGlobal = LinearizationState.getGlobalData?.();
+            restoreZeroSmoothingSnapshot(currentGlobal?.filename);
+        } catch (secondaryRestoreErr) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[LabNormalization] Subsequent zero-snapshot restore failed:', secondaryRestoreErr);
+            }
+        }
+        try {
+            const loadedData = getLoadedQuadData?.();
+            const zeroSnapshot = loadedData && loadedData._zeroSmoothingCurves && typeof loadedData._zeroSmoothingCurves === 'object'
+                ? loadedData._zeroSmoothingCurves
+                : null;
+            if (zeroSnapshot) {
+                if (!loadedData._plotSmoothingOriginalCurves || typeof loadedData._plotSmoothingOriginalCurves !== 'object') {
+                    loadedData._plotSmoothingOriginalCurves = {};
+                }
+                if (!loadedData.plotBaseCurves || typeof loadedData.plotBaseCurves !== 'object') {
+                    loadedData.plotBaseCurves = {};
+                }
+                if (!loadedData._plotSmoothingOriginalEnds || typeof loadedData._plotSmoothingOriginalEnds !== 'object') {
+                    loadedData._plotSmoothingOriginalEnds = {};
+                }
+                if (!loadedData.curves || typeof loadedData.curves !== 'object') {
+                    loadedData.curves = {};
+                }
+                if (!loadedData.rebasedCurves || typeof loadedData.rebasedCurves !== 'object') {
+                    loadedData.rebasedCurves = {};
+                }
+                if (!loadedData.rebasedSources || typeof loadedData.rebasedSources !== 'object') {
+                    loadedData.rebasedSources = {};
+                }
+                if (!loadedData.baselineEnd || typeof loadedData.baselineEnd !== 'object') {
+                    loadedData.baselineEnd = {};
+                }
+                Object.entries(zeroSnapshot).forEach(([channelName, curve]) => {
+                    if (!Array.isArray(curve)) {
+                        return;
+                    }
+                    const cloned = curve.slice();
+                    const peak = cloned.reduce((max, value) => (value > max ? value : max), 0);
+                    loadedData._plotSmoothingOriginalCurves[channelName] = cloned.slice();
+                    loadedData.plotBaseCurves[channelName] = cloned.slice();
+                    loadedData.curves[channelName] = cloned.slice();
+                    loadedData.rebasedCurves[channelName] = cloned.slice();
+                    loadedData.rebasedSources[channelName] = cloned.slice();
+                    if (Number.isFinite(peak) && peak > 0) {
+                        if (!Number.isFinite(loadedData._plotSmoothingOriginalEnds[channelName]) || peak > loadedData._plotSmoothingOriginalEnds[channelName]) {
+                            loadedData._plotSmoothingOriginalEnds[channelName] = peak;
+                        }
+                        loadedData.baselineEnd[channelName] = peak;
+                    }
+                });
+                if (LinearizationState && typeof LinearizationState.setGlobalCorrectedCurves === 'function') {
+                    try {
+                        LinearizationState.setGlobalCorrectedCurves(loadedData.curves);
+                    } catch (correctedErr) {
+                        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                            console.warn('[LabNormalization] Failed to push corrected curves after zero snapshot sync:', correctedErr);
+                        }
+                    }
+                }
+                if (LinearizationState && typeof LinearizationState.setGlobalBaselineCurves === 'function') {
+                    try {
+                        LinearizationState.setGlobalBaselineCurves(loadedData.plotBaseCurves);
+                    } catch (baselineErr) {
+                        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                            console.warn('[LabNormalization] Failed to push baseline curves after zero snapshot sync:', baselineErr);
+                        }
+                    }
+                }
+            }
+        } catch (zeroCurveSyncErr) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[LabNormalization] Failed to synchronize zero snapshot into original curves:', zeroCurveSyncErr);
+            }
+        }
     }
 
     const isDensity = mode === LAB_NORMALIZATION_MODES.DENSITY;
     const modeLabel = isDensity ? 'log-density (optical)' : 'perceptual L*';
     const extraNote = isDensity ? ' — .quad exports note optical-density mode.' : '';
     showStatus(`Linearization normalization set to ${modeLabel}${extraNote}`);
+}
+
+const scheduleNormalizationRefresh = debounce(() => {
+    refreshLinearizationDataForNormalization();
+}, 250);
+
+function syncSmartPointDragToggle() {
+    if (!elements.smartPointDragToggle) {
+        return;
+    }
+    const enabled = isSmartPointDragEnabled();
+    elements.smartPointDragToggle.checked = enabled;
+    elements.smartPointDragToggle.setAttribute('aria-checked', String(enabled));
+}
+
+function initializeSmartPointDragOption() {
+    syncSmartPointDragToggle();
+    if (!elements.smartPointDragToggle) {
+        return;
+    }
+    elements.smartPointDragToggle.addEventListener('change', (event) => {
+        const next = !!event.target.checked;
+        setSmartPointDragEnabled(next);
+        syncSmartPointDragToggle();
+        showStatus(next ? 'Curve point dragging enabled.' : 'Curve point dragging disabled.');
+    });
+}
+
+function syncCorrectionOverlayToggle() {
+    if (!elements.correctionOverlayToggle) {
+        return;
+    }
+    const enabled = isChartDebugShowCorrectionTarget();
+    elements.correctionOverlayToggle.checked = enabled;
+    elements.correctionOverlayToggle.setAttribute('aria-checked', String(enabled));
+}
+
+function initializeCorrectionOverlayOption() {
+    syncCorrectionOverlayToggle();
+    if (!elements.correctionOverlayToggle) {
+        return;
+    }
+    elements.correctionOverlayToggle.addEventListener('change', (event) => {
+        const enabled = !!event.target.checked;
+        setChartDebugShowCorrectionTarget(enabled);
+        syncCorrectionOverlayToggle();
+        showStatus(enabled ? 'Correction overlay enabled.' : 'Correction overlay disabled.');
+    });
+}
+
+function syncLightBlockingOverlayToggle() {
+    if (!elements.lightBlockingOverlayToggle) {
+        return;
+    }
+    const enabled = isChartLightBlockingOverlayEnabled();
+    elements.lightBlockingOverlayToggle.checked = enabled;
+    elements.lightBlockingOverlayToggle.setAttribute('aria-checked', String(enabled));
+}
+
+function initializeLightBlockingOverlayOption() {
+    syncLightBlockingOverlayToggle();
+    if (!elements.lightBlockingOverlayToggle) {
+        return;
+    }
+    elements.lightBlockingOverlayToggle.addEventListener('change', (event) => {
+        const enabled = !!event.target.checked;
+        setChartLightBlockingOverlayEnabled(enabled);
+        syncLightBlockingOverlayToggle();
+        showStatus(enabled ? 'Light blocking overlay enabled.' : 'Light blocking overlay disabled.');
+    });
+}
+
+function syncCompositeDebugToggle() {
+    if (!elements.compositeDebugToggle) {
+        return;
+    }
+    const enabled = isCompositeDebugEnabled();
+    elements.compositeDebugToggle.checked = enabled;
+    elements.compositeDebugToggle.setAttribute('aria-checked', String(enabled));
+}
+
+function initializeCompositeDebugOption() {
+    syncCompositeDebugToggle();
+    if (!elements.compositeDebugToggle) {
+        return;
+    }
+    if (unsubscribeCompositeDebugState) {
+        unsubscribeCompositeDebugState();
+        unsubscribeCompositeDebugState = null;
+    }
+    unsubscribeCompositeDebugState = subscribeCompositeDebugState(() => {
+        syncCompositeDebugToggle();
+    });
+    elements.compositeDebugToggle.addEventListener('change', (event) => {
+        const next = !!event.target.checked;
+        setCompositeDebugEnabled(next);
+        syncCompositeDebugToggle();
+        if (next) {
+            try {
+                replayCompositeDebugSessionFromCache();
+            } catch (error) {
+                console.warn('[CompositeDebug] Failed to replay cached session:', error);
+            }
+        }
+        showStatus(next ? 'Composite debug overlay enabled.' : 'Composite debug overlay disabled.');
+    });
+}
+
+function syncRedistributionSmoothingToggle() {
+    if (!elements.redistributionSmoothingToggle) {
+        return;
+    }
+    const enabled = isRedistributionSmoothingWindowEnabled();
+    elements.redistributionSmoothingToggle.checked = enabled;
+    elements.redistributionSmoothingToggle.setAttribute('aria-checked', String(enabled));
+}
+
+function initializeRedistributionSmoothingOption() {
+    syncRedistributionSmoothingToggle();
+    if (!elements.redistributionSmoothingToggle) {
+        return;
+    }
+    elements.redistributionSmoothingToggle.addEventListener('change', (event) => {
+        const next = !!event.target.checked;
+        setRedistributionSmoothingWindowEnabled(next);
+        syncRedistributionSmoothingToggle();
+        showStatus(next ? 'Redistribution smoothing window enabled.' : 'Redistribution smoothing window disabled.');
+    });
+}
+
+function syncAutoRaiseInkToggle() {
+    if (!elements.autoRaiseInkToggle) {
+        return;
+    }
+    const enabled = isAutoRaiseInkLimitsEnabled();
+    elements.autoRaiseInkToggle.checked = enabled;
+    elements.autoRaiseInkToggle.setAttribute('aria-checked', String(enabled));
+}
+
+function initializeAutoRaiseInkOption() {
+    syncAutoRaiseInkToggle();
+    if (!elements.autoRaiseInkToggle) {
+        return;
+    }
+    elements.autoRaiseInkToggle.addEventListener('change', (event) => {
+        const next = !!event.target.checked;
+        setAutoRaiseInkLimitsEnabled(next);
+        syncAutoRaiseInkToggle();
+        showStatus(next ? 'Auto-raise ink limits enabled.' : 'Auto-raise ink limits disabled.');
+    });
+}
+
+function syncCompositeWeightingSelect() {
+    if (!elements.compositeWeightingSelect) {
+        return;
+    }
+    const mode = getCompositeWeightingMode();
+    elements.compositeWeightingSelect.value = mode;
+}
+
+function initializeCompositeWeightingOption() {
+    syncCompositeWeightingSelect();
+    if (!elements.compositeWeightingSelect) {
+        return;
+    }
+    if (unsubscribeCompositeWeightingMode) {
+        unsubscribeCompositeWeightingMode();
+        unsubscribeCompositeWeightingMode = null;
+    }
+    unsubscribeCompositeWeightingMode = subscribeCompositeWeightingMode(() => {
+        syncCompositeWeightingSelect();
+        resetPlotSmoothingCaches();
+        schedulePlotSmoothingRefresh();
+        scheduleCompositeWeightingRefresh();
+    });
+
+    elements.compositeWeightingSelect.addEventListener('change', (event) => {
+        const selection = typeof event.target?.value === 'string' ? event.target.value : '';
+        const applied = setCompositeWeightingMode(selection);
+        syncCompositeWeightingSelect();
+        resetPlotSmoothingCaches();
+        schedulePlotSmoothingRefresh();
+        scheduleCompositeWeightingRefresh();
+        const labelMap = {
+            [COMPOSITE_WEIGHTING_MODES.ISOLATED]: 'Isolated',
+            [COMPOSITE_WEIGHTING_MODES.NORMALIZED]: 'Normalized',
+            [COMPOSITE_WEIGHTING_MODES.MOMENTUM]: 'Momentum',
+            [COMPOSITE_WEIGHTING_MODES.EQUAL]: 'Equal'
+        };
+        const label = labelMap[applied] || 'Isolated';
+        showStatus(`Composite weighting set to ${label}.`);
+    });
 }
 
 function initializeLabNormalizationHandlers() {
@@ -366,6 +1856,7 @@ function initializeLabNormalizationHandlers() {
             const percent = Number(event.target.value);
             const applied = setLabSmoothingPercent(percent);
             syncLabSmoothingControls(applied);
+            scheduleNormalizationRefresh();
         });
     }
 
@@ -386,9 +1877,63 @@ function initializeLabNormalizationHandlers() {
 
     unsubscribeLabSmoothingPercent = subscribeLabSmoothingPercent((percent) => {
         syncLabSmoothingControls(percent);
-        refreshLinearizationDataForNormalization();
-        const widen = 1 + (Number(percent) / 100);
+        scheduleNormalizationRefresh();
+        const widen = mapSmoothingPercentToWiden(percent);
         showStatus(`LAB smoothing set to ${percent}% (widen ≈ ${widen.toFixed(2)}×).`);
+        const numeric = Number(percent) || 0;
+        if (numeric <= 0) {
+            try {
+                const currentGlobal = LinearizationState.getGlobalData?.();
+                restoreZeroSmoothingSnapshot(currentGlobal?.filename);
+                applyPlotSmoothingToLoadedChannels(0);
+            } catch (err) {
+                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                    console.warn('[LabNormalization] Failed to restore zero snapshot on smoothing reset:', err);
+                }
+            }
+        }
+    });
+}
+
+function syncCorrectionMethodRadios(method = getCorrectionMethod()) {
+    if (!Array.isArray(elements.correctionMethodRadios) || !elements.correctionMethodRadios.length) {
+        return;
+    }
+    elements.correctionMethodRadios.forEach((input) => {
+        if (!input) return;
+        const checked = input.value === method;
+        input.checked = checked;
+        input.setAttribute('aria-checked', String(checked));
+    });
+}
+
+function initializeCorrectionMethodOption() {
+    syncCorrectionMethodRadios();
+
+    if (Array.isArray(elements.correctionMethodRadios)) {
+        elements.correctionMethodRadios.forEach((input) => {
+            if (!input) return;
+            input.addEventListener('change', (event) => {
+                if (!event.target.checked) return;
+                const next = setCorrectionMethod(event.target.value);
+                updateAppState({ correctionMethod: next });
+                syncCorrectionMethodRadios(next);
+                const message = next === CORRECTION_METHODS.SIMPLE_SCALING
+                    ? 'Correction method set to Simple Scaling (legacy).'
+                    : 'Correction method set to Density Solver (advanced).';
+                showStatus(message);
+                scheduleNormalizationRefresh();
+            });
+        });
+    }
+
+    if (unsubscribeCorrectionMethod) {
+        unsubscribeCorrectionMethod();
+    }
+    unsubscribeCorrectionMethod = subscribeCorrectionMethod((method) => {
+        updateAppState({ correctionMethod: method });
+        syncCorrectionMethodRadios(method);
+        scheduleNormalizationRefresh();
     });
 }
 
@@ -417,6 +1962,15 @@ export function initializeEventHandlers() {
     initializeEditModeHandlers();
     initializeHelpSystem();
     initializeLabNormalizationHandlers();
+    initializeCorrectionMethodOption();
+    initializePlotSmoothingHandlers();
+    initializeSmartPointDragOption();
+    initializeCorrectionOverlayOption();
+    initializeLightBlockingOverlayOption();
+    initializeCompositeWeightingOption();
+    initializeRedistributionSmoothingOption();
+    initializeAutoRaiseInkOption();
+    initializeCompositeDebugOption();
 
     console.log('✅ UI event handlers initialized');
 }
@@ -621,6 +2175,7 @@ function initializeScaleHandlers() {
     }
 
     configureScalingStateSubscription();
+    refreshGlobalScaleLockState();
 
     const MIN_SCALE = 1;
     const MAX_SCALE = 1000;
@@ -638,6 +2193,15 @@ function initializeScaleHandlers() {
 
         if (!elements.scaleAllInput) {
             console.log(`🔍 [SCALE DEBUG] No scaleAllInput element found`);
+            return;
+        }
+
+        const lockedChannels = getLockedChannels(getCurrentPrinter()?.channels || []);
+        if (lockedChannels.length > 0) {
+            const lockMessage = getGlobalScaleLockMessage(lockedChannels);
+            showStatus(lockMessage);
+            elements.scaleAllInput.value = formatScalePercent(getCurrentScale());
+            refreshGlobalScaleLockState();
             return;
         }
 
@@ -1009,6 +2573,11 @@ function resolvePendingCommitHold(input, computedValue, tolerance = 0.5) {
 
 function refreshEffectiveInkDisplays() {
     if (!elements.rows) return;
+
+    if (typeof isSmartPointDragActive === 'function' && isSmartPointDragActive()) {
+        return;
+    }
+
     const rows = elements.rows.querySelectorAll('tr.channel-row[data-channel]');
     const activeElement = typeof document !== 'undefined' ? document.activeElement : null;
     rows.forEach((row) => {
@@ -1122,9 +2691,10 @@ function refreshEffectiveInkDisplays() {
             if (typeof getStateManager === 'function') {
             try {
                 const manager = getStateManager();
-                manager.setChannelValue(channelName, 'percentage', Number(percentForState));
-                manager.setChannelValue(channelName, 'endValue', Math.round(endForState));
-                manager.setChannelEnabled(channelName, endForState > 0);
+                const options = { skipHistory: true, allowDuringRestore: true };
+                manager.setChannelValue(channelName, 'percentage', Number(percentForState), options);
+                manager.setChannelValue(channelName, 'endValue', Math.round(endForState), options);
+                manager.setChannelEnabled(channelName, endForState > 0, options);
             } catch (err) {
                 if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
                     console.warn('[INK DISPLAY] Failed to sync state for', channelName, err);
@@ -1137,6 +2707,7 @@ function refreshEffectiveInkDisplays() {
             }
         }
     });
+
 }
 
 function rebaseChannelsToCorrectedCurves(channelNames = [], options = {}) {
@@ -1157,12 +2728,23 @@ function rebaseChannelsToCorrectedCurves(channelNames = [], options = {}) {
 
     const manager = typeof getStateManager === 'function' ? getStateManager() : null;
     const rebased = [];
-    const updateQueue = [];
+    const appSnapshot = getAppState();
+    const correctionMethod = appSnapshot?.correctionMethod || getCorrectionMethod();
+    const globalData = LinearizationState.getGlobalData?.();
+    const simpleScalingPreferred = correctionMethod === CORRECTION_METHODS.SIMPLE_SCALING;
+    const hasLabMeasurement = simpleScalingPreferred &&
+        globalData &&
+        isLabLinearizationData(globalData) &&
+        Array.isArray(globalData.originalData) &&
+        globalData.originalData.length >= 2;
+    const useSimpleScaling = !!hasLabMeasurement;
 
     const isGlobalSource = options.source === 'globalLoad' || options.source === 'globalToggle';
     const globalAppliedState = typeof options.globalAppliedState === 'boolean' ? options.globalAppliedState : undefined;
     const useOriginalBaseline = !!options.useOriginalBaseline;
     const skipScaleBaselineUpdate = !!options.skipScaleBaselineUpdate;
+
+    const channelContexts = [];
 
     channelNames.forEach((channelName) => {
         const row = getChannelRow(channelName);
@@ -1172,68 +2754,443 @@ function rebaseChannelsToCorrectedCurves(channelNames = [], options = {}) {
         const endInput = row.querySelector('.end-input');
         if (!percentInput || !endInput) return;
 
-        const currentEnd = InputValidator.clampEnd(endInput.getAttribute('data-base-end') ?? endInput.value);
+        const perChannelEntry = (options.source === 'perChannelLoad')
+            ? (LinearizationState.getPerChannelData?.(channelName) || null)
+            : null;
 
-        const preferOriginalBaseline = useOriginalBaseline && Array.isArray(loadedData?.originalCurves?.[channelName]);
-        const make256Options = preferOriginalBaseline
-            ? { preferOriginalBaseline: true, forceSmartApplied: false }
-            : undefined;
+        if (isGlobalSource) {
+            try {
+                if (loadedData?.keyPointsMeta && loadedData.keyPointsMeta[channelName]) {
+                    delete loadedData.keyPointsMeta[channelName].bakedGlobal;
+                }
+                if (typeof setGlobalBakedState === 'function') {
+                    setGlobalBakedState(null, { skipHistory: true });
+                }
+                if (typeof LinearizationState?.setGlobalBakedMeta === 'function') {
+                    const existingMeta = LinearizationState.getGlobalBakedMeta?.();
+                    if (existingMeta && Array.isArray(existingMeta.channels)) {
+                        const nextChannels = existingMeta.channels.filter((name) => name !== channelName);
+                        if (nextChannels.length !== existingMeta.channels.length) {
+                            LinearizationState.setGlobalBakedMeta({
+                                ...existingMeta,
+                                channels: nextChannels
+                            });
+                        }
+                    }
+                }
+            } catch (metaErr) {
+                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                    console.warn('[INK REBASE] Failed to clear bakedGlobal metadata during global load:', metaErr);
+                }
+            }
+        }
 
-        let curve = make256(currentEnd, channelName, true, make256Options);
-        let effectiveEnd = Array.isArray(curve) && curve.length ? Math.max(...curve) : 0;
+        if (options.source === 'perChannelLoad') {
+            try {
+                if (!loadedData.sources || typeof loadedData.sources !== 'object') {
+                    loadedData.sources = {};
+                }
 
-        const effectivePercent = InputValidator.computePercentFromEnd(effectiveEnd);
+                const previousTag = loadedData.sources[channelName];
+                if (isSmartCurveSourceTag(previousTag)) {
+                    delete loadedData.sources[channelName];
+                }
 
-        const finalCurve = Array.isArray(curve) ? curve.slice() : [];
+                const fmt = typeof perChannelEntry?.format === 'string'
+                    ? perChannelEntry.format.toLowerCase()
+                    : '';
 
-        loadedData.curves[channelName] = finalCurve.slice();
-        loadedData.rebasedCurves[channelName] = finalCurve.slice();
-        loadedData.rebasedSources[channelName] = finalCurve.slice();
-        loadedData.baselineEnd[channelName] = effectiveEnd;
+                let nextTag = 'per-channel';
+                if (perChannelEntry?.is3DLUT) {
+                    nextTag = 'per-lut';
+                } else if (fmt.includes('lab') || fmt.includes('manual')) {
+                    nextTag = 'per-lab';
+                } else if (fmt.includes('acv')) {
+                    nextTag = 'per-acv';
+                }
 
-        rebased.push(channelName);
+                loadedData.sources[channelName] = nextTag;
 
-        updateQueue.push({
+                if (loadedData.keyPointsMeta && loadedData.keyPointsMeta[channelName]) {
+                    delete loadedData.keyPointsMeta[channelName].smartTouched;
+                }
+
+            } catch (tagErr) {
+                console.warn('[INK REBASE] Failed to normalize source tag for', channelName, tagErr);
+            }
+        }
+
+        let currentEnd = InputValidator.clampEnd(endInput.getAttribute('data-base-end') ?? endInput.value);
+        if (options.resetEndsToBaseline) {
+            if (!loadedData._originalBaselineEnd) {
+                loadedData._originalBaselineEnd = {};
+            }
+
+            let baselineValue = loadedData._originalBaselineEnd[channelName];
+            if (typeof baselineValue !== 'number') {
+                if (Array.isArray(loadedData.originalCurves?.[channelName])) {
+                    baselineValue = Math.max(...loadedData.originalCurves[channelName]);
+                } else if (typeof loadedData.baselineEnd?.[channelName] === 'number') {
+                    baselineValue = loadedData.baselineEnd[channelName];
+                }
+                if (typeof baselineValue === 'number') {
+                    loadedData._originalBaselineEnd[channelName] = baselineValue;
+                }
+            }
+
+            if (typeof baselineValue === 'number') {
+                currentEnd = InputValidator.clampEnd(baselineValue);
+                if (loadedData.baselineEnd && typeof currentEnd === 'number') {
+                    loadedData.baselineEnd[channelName] = currentEnd;
+                }
+                const percentValue = InputValidator.computePercentFromEnd(currentEnd);
+                if (endInput) {
+                    endInput.value = String(currentEnd);
+                    endInput.setAttribute('data-base-end', String(currentEnd));
+                    InputValidator.clearValidationStyling(endInput);
+                }
+                if (percentInput) {
+                    percentInput.value = formatPercentDisplay(percentValue);
+                    percentInput.setAttribute('data-base-percent', String(percentValue));
+                    InputValidator.clearValidationStyling(percentInput);
+                }
+            }
+        }
+        channelContexts.push({
             channelName,
             row,
             percentInput,
             endInput,
-            effectivePercent,
-            effectiveEnd,
-            perChannelToggle: row.querySelector('.per-channel-toggle'),
-            perChannelDataEntry: options.source === 'perChannelLoad'
-                ? LinearizationState.getPerChannelData?.(channelName)
-                : null
+            currentEnd,
+            perChannelEntry,
+            perChannelToggle: row.querySelector('.per-channel-toggle')
         });
-
-        if (options.source === 'perChannelLoad') {
-            try {
-                const entry = LinearizationState.getPerChannelData?.(channelName);
-                if (entry) {
-                    LinearizationState.setPerChannelData(channelName, entry, false);
-                }
-            } catch (err) {
-                console.warn('[INK REBASE] Failed to disable per-channel data after rebase:', channelName, err);
-            }
-
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.log('[LabNormalization] Channel context prepared', channelName, { currentEnd });
         }
     });
 
-    if (!rebased.length) {
+    if (!channelContexts.length) {
         return;
     }
 
-    updateQueue.forEach((entry) => {
+    const endValuesMap = {};
+    channelContexts.forEach((ctx) => {
+        endValuesMap[ctx.channelName] = ctx.currentEnd;
+    });
+
+    const compositeEligible = !!(
+        LinearizationState.isGlobalEnabled?.() &&
+        globalData &&
+        isLabLinearizationData(globalData)
+    );
+
+    const interpolationType = elements.curveSmoothingMethod?.value || 'cubic';
+    let smoothingPercent = 0;
+    if (compositeEligible) {
+        if (globalData && typeof globalData.previewSmoothingPercent === 'number') {
+            smoothingPercent = globalData.previewSmoothingPercent;
+        } else {
+            smoothingPercent = getLabSmoothingPercent();
+        }
+    }
+
+    const channelNamesForOverrides = channelContexts.map((ctx) => ctx.channelName);
+    const densityOverrides = getDensityOverridesSnapshot(channelNamesForOverrides);
+    const autoDensityCompute = isAutoDensityComputeEnabled();
+
+    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+        console.log('[COMPOSITE] preparing begin', {
+            compositeEligible,
+            channelCount: channelContexts.length,
+            autoDensityCompute
+        });
+    }
+
+    const treatAsBakedMeasurement = isBakedMeasurement(globalData);
+    if (treatAsBakedMeasurement) {
+        smoothingPercent = 0;
+    }
+
+    let compositeSessionActive = false;
+    if (!useSimpleScaling) {
+        compositeSessionActive = compositeEligible && beginCompositeLabRedistribution({
+            channelNames: channelContexts.map((ctx) => ctx.channelName),
+            endValues: endValuesMap,
+            labEntry: globalData,
+            interpolationType,
+            smoothingPercent,
+            densityOverrides,
+            autoComputeDensity: autoDensityCompute,
+            analysisOnly: treatAsBakedMeasurement
+        });
+    }
+
+    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+        console.log('[COMPOSITE] begin result', { compositeSessionActive, treatAsBakedMeasurement });
+    }
+
+    loadedData.plotBaseCurves = {};
+    const pendingEntries = [];
+
+    channelContexts.forEach((ctx) => {
+        const preferOriginalBaseline = useOriginalBaseline && Array.isArray(loadedData?.originalCurves?.[ctx.channelName]);
+        const make256Options = preferOriginalBaseline
+            ? { preferOriginalBaseline: true, forceSmartApplied: false }
+            : undefined;
+
+        const curve = make256(ctx.currentEnd, ctx.channelName, !useSimpleScaling, make256Options);
+        pendingEntries.push({
+            ...ctx,
+            curve: Array.isArray(curve) ? curve.slice() : []
+        });
+        rebased.push(ctx.channelName);
+
+        if (options.source === 'perChannelLoad') {
+            try {
+                if (ctx.perChannelEntry) {
+                    LinearizationState.setPerChannelData(ctx.channelName, ctx.perChannelEntry, false);
+                }
+            } catch (err) {
+                console.warn('[INK REBASE] Failed to disable per-channel data after rebase:', ctx.channelName, err);
+            }
+        }
+    });
+
+    if (!pendingEntries.length) {
+        LinearizationState.setGlobalWarnings([]);
+        return;
+    }
+
+    let simpleScalingResult = null;
+    if (useSimpleScaling && compositeEligible && Array.isArray(globalData?.originalData)) {
+        try {
+            const resolution = Array.isArray(pendingEntries[0]?.curve) ? pendingEntries[0].curve.length : 256;
+            const channelMap = {};
+            pendingEntries.forEach((entry) => {
+                channelMap[entry.channelName] = {
+                    samples: Array.isArray(entry.curve) ? entry.curve.slice() : [],
+                    endValue: Number(entry.currentEnd) || 0,
+                    enabled: true
+                };
+            });
+            const densityWeights = {};
+            pendingEntries.forEach((entry) => {
+                const resolved = getResolvedDensity(entry.channelName);
+                densityWeights[entry.channelName] = Number.isFinite(resolved?.value) ? resolved.value : 0;
+            });
+            const allowCeilingLift = isAutoRaiseInkLimitsEnabled();
+            simpleScalingResult = runSimpleScalingCorrection({
+                measurements: globalData.originalData,
+                channels: channelMap,
+                densityWeights,
+                options: {
+                    resolution,
+                    allowCeilingLift,
+                    maxLiftPercent: allowCeilingLift ? 0.15 : 0,
+                    residualThreshold: 0.01,
+                    maxIterations: 2,
+                    residualIntensity: 0.35,
+                    blendPercent: 100
+                }
+            });
+
+            const correctedCurves = {};
+            pendingEntries.forEach((entry) => {
+                const channelResult = simpleScalingResult.channels?.[entry.channelName];
+                if (!channelResult) {
+                    return;
+                }
+                const samples = Array.isArray(channelResult.samples) ? channelResult.samples.slice() : entry.curve;
+                entry.curve = samples;
+                entry.currentEnd = Number(channelResult.endValue) || samples.reduce((max, value) => (value > max ? value : max), 0);
+                correctedCurves[entry.channelName] = samples.slice();
+            });
+
+            if (LinearizationState && typeof LinearizationState.setGlobalCorrectedCurves === 'function') {
+                LinearizationState.setGlobalCorrectedCurves(correctedCurves);
+            }
+            if (LinearizationState && typeof LinearizationState.setGlobalBakedMeta === 'function') {
+                LinearizationState.setGlobalBakedMeta({
+                    source: 'simpleScaling',
+                    timestamp: Date.now(),
+                    channels: Object.keys(correctedCurves)
+                });
+            }
+            if (LinearizationState) {
+                LinearizationState.globalPeakIndices = null;
+                LinearizationState.setCompositeCoverageSummary?.(null);
+                LinearizationState.getCompositeDensityProfile = () => null;
+                LinearizationState.getCompositeCoverageSummary = () => null;
+            }
+            loadedData.simpleScalingSummary = simpleScalingResult.metadata;
+            loadedData.correctionMethod = CORRECTION_METHODS.SIMPLE_SCALING;
+        } catch (simpleErr) {
+            console.warn('[SimpleScaling] Failed to compute simple scaling correction:', simpleErr);
+        }
+    } else if (useSimpleScaling) {
+        loadedData.correctionMethod = CORRECTION_METHODS.SIMPLE_SCALING;
+    } else {
+        loadedData.correctionMethod = CORRECTION_METHODS.DENSITY_SOLVER;
+        if (loadedData.simpleScalingSummary) {
+            delete loadedData.simpleScalingSummary;
+        }
+    }
+
+    if (!pendingEntries.length) {
+        LinearizationState.setGlobalWarnings([]);
+        return;
+    }
+
+    let pendingWarnings = [];
+
+    if (simpleScalingResult?.metadata?.residual?.max && simpleScalingResult.metadata.residual.max > 0.05) {
+        pendingWarnings.push(`Simple scaling residual exceeds ${(simpleScalingResult.metadata.residual.max * 100).toFixed(1)}% in parts of the range.`);
+    }
+
+    if (compositeSessionActive) {
+        const compositeResult = finalizeCompositeLabRedistribution();
+        if (compositeResult?.curves) {
+            pendingEntries.forEach((entry) => {
+                const adjusted = compositeResult.curves[entry.channelName];
+                if (Array.isArray(adjusted)) {
+                    entry.curve = adjusted.slice();
+                }
+            });
+        }
+        if (compositeResult?.peakIndices && typeof compositeResult.peakIndices === 'object') {
+            loadedData.channelPeaks = { ...compositeResult.peakIndices };
+            if (LinearizationState && typeof LinearizationState === 'object') {
+                LinearizationState.globalPeakIndices = { ...compositeResult.peakIndices };
+            }
+        } else {
+            delete loadedData.channelPeaks;
+            if (LinearizationState && typeof LinearizationState === 'object') {
+                delete LinearizationState.globalPeakIndices;
+            }
+        }
+        const warnings = compositeResult?.warnings || [];
+        pendingWarnings = warnings.slice();
+        if (warnings.length) {
+            showStatus(warnings[0]);
+        }
+
+    } else {
+        delete loadedData.channelPeaks;
+        if (LinearizationState && typeof LinearizationState === 'object') {
+            delete LinearizationState.globalPeakIndices;
+        }
+    }
+
+    const plotSmoothingPercent = getPlotSmoothingPercent();
+    applyPlotSmoothingToEntries(pendingEntries, plotSmoothingPercent, loadedData);
+
+    pendingEntries.forEach((entry) => {
         const {
             channelName,
             row,
             percentInput,
             endInput,
-            effectivePercent,
-            effectiveEnd,
             perChannelToggle,
-            perChannelDataEntry
+            perChannelEntry
         } = entry;
+
+        let finalCurve = entry.curve;
+        let effectiveEnd = Array.isArray(finalCurve) && finalCurve.length ? Math.max(...finalCurve) : 0;
+        if (plotSmoothingPercent <= 0) {
+            const originalTarget = (() => {
+                const stored = Number(loadedData._plotSmoothingOriginalEnds?.[channelName]);
+                if (Number.isFinite(stored) && stored > 0) {
+                    return stored;
+                }
+                const baselineOriginal = Number(loadedData._originalBaselineEnd?.[channelName]);
+                if (Number.isFinite(baselineOriginal) && baselineOriginal > 0) {
+                    return baselineOriginal;
+                }
+                const zeroSnapshot = Array.isArray(loadedData._zeroSmoothingCurves?.[channelName])
+                    ? loadedData._zeroSmoothingCurves[channelName]
+                    : null;
+                if (zeroSnapshot && zeroSnapshot.length) {
+                    return zeroSnapshot.reduce((max, value) => (value > max ? value : max), 0);
+                }
+                return null;
+            })();
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.log('[LabNormalization] baseline comparison', {
+                    channelName,
+                    effectiveEnd,
+                    originalTarget
+                });
+            }
+            if (Number.isFinite(originalTarget) && originalTarget > 0 && Math.abs(effectiveEnd - originalTarget) > 0.5) {
+                const previousEnd = effectiveEnd;
+                const rescaledCurve = rescaleCurveToEnd(finalCurve, originalTarget);
+                if (Array.isArray(rescaledCurve) && rescaledCurve.length) {
+                    finalCurve = rescaledCurve.slice();
+                    entry.curve = finalCurve.slice();
+                    effectiveEnd = Math.max(...finalCurve);
+                    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                        console.log('[LabNormalization] rescaled curve to original baseline', {
+                            channelName,
+                            originalTarget,
+                            previousEnd,
+                            rescaledEnd: effectiveEnd
+                        });
+                    }
+                }
+            }
+        }
+        const effectivePercent = InputValidator.computePercentFromEnd(effectiveEnd);
+
+        emitCompositeAudit('ui.pendingEntry', (targetIndex) => {
+            if (!Array.isArray(finalCurve) || targetIndex >= finalCurve.length) return null;
+            return {
+                channel: channelName,
+                sampleIndex: targetIndex,
+                curveValue: finalCurve[targetIndex],
+                effectiveEnd,
+                normalized: effectiveEnd > 0 ? finalCurve[targetIndex] / effectiveEnd : 0
+            };
+        });
+
+        entry.currentEnd = effectiveEnd;
+        loadedData.curves[channelName] = finalCurve.slice();
+        loadedData.rebasedCurves[channelName] = finalCurve.slice();
+        if (plotSmoothingPercent <= 0) {
+            loadedData.rebasedSources[channelName] = finalCurve.slice();
+        } else if (!Array.isArray(loadedData.rebasedSources[channelName])) {
+            loadedData.rebasedSources[channelName] = finalCurve.slice();
+        }
+        loadedData.baselineEnd[channelName] = effectiveEnd;
+
+        if (plotSmoothingPercent <= 0) {
+            if (!loadedData.plotBaseCurves || typeof loadedData.plotBaseCurves !== 'object') {
+                loadedData.plotBaseCurves = {};
+            }
+            loadedData.plotBaseCurves[channelName] = finalCurve.slice();
+            if (!loadedData._plotSmoothingOriginalCurves || typeof loadedData._plotSmoothingOriginalCurves !== 'object') {
+                loadedData._plotSmoothingOriginalCurves = {};
+            }
+            loadedData._plotSmoothingOriginalCurves[channelName] = finalCurve.slice();
+        }
+
+        if (compositeSessionActive) {
+            if (!loadedData.keyPointsMeta || typeof loadedData.keyPointsMeta !== 'object') {
+                loadedData.keyPointsMeta = {};
+            }
+            const meta = loadedData.keyPointsMeta[channelName] || {};
+            if (smoothingPercent > 0) {
+                meta.bakedGlobal = true;
+            } else if (meta.bakedGlobal) {
+                delete meta.bakedGlobal;
+            }
+            loadedData.keyPointsMeta[channelName] = meta;
+        } else if (loadedData?.keyPointsMeta && loadedData.keyPointsMeta[channelName]?.bakedGlobal) {
+            delete loadedData.keyPointsMeta[channelName].bakedGlobal;
+            if (typeof setGlobalBakedState === 'function') {
+                setGlobalBakedState(null, { skipHistory: true });
+            }
+        }
 
         percentInput.value = formatPercentDisplay(effectivePercent);
         percentInput.setAttribute('data-base-percent', String(effectivePercent));
@@ -1262,9 +3219,9 @@ function rebaseChannelsToCorrectedCurves(channelNames = [], options = {}) {
         }
 
         if (options.source === 'perChannelLoad') {
-            if (perChannelDataEntry) {
+            if (perChannelEntry) {
                 try {
-                    perChannelDataEntry.edited = false;
+                    perChannelEntry.edited = false;
                 } catch (err) { /* ignore */ }
             }
             if (perChannelToggle) {
@@ -1275,6 +3232,60 @@ function rebaseChannelsToCorrectedCurves(channelNames = [], options = {}) {
             }
         }
     });
+
+    if (!compositeSessionActive) {
+        pendingWarnings = collectCurveWarnings(pendingEntries);
+        if (pendingWarnings.length) {
+            showStatus(pendingWarnings[0]);
+        }
+    }
+
+    if (plotSmoothingPercent <= 0) {
+        if (!loadedData._plotSmoothingOriginalCurves || typeof loadedData._plotSmoothingOriginalCurves !== 'object') {
+            loadedData._plotSmoothingOriginalCurves = {};
+        }
+        if (!loadedData.plotBaseCurves || typeof loadedData.plotBaseCurves !== 'object') {
+            loadedData.plotBaseCurves = {};
+        }
+        const zeroSnapshot = loadedData._zeroSmoothingCurves && typeof loadedData._zeroSmoothingCurves === 'object'
+            ? loadedData._zeroSmoothingCurves
+            : null;
+        channelContexts.forEach((ctx) => {
+            const sourceCurve = Array.isArray(loadedData.rebasedCurves?.[ctx.channelName])
+                ? loadedData.rebasedCurves[ctx.channelName]
+                : loadedData.curves?.[ctx.channelName];
+            if (!Array.isArray(sourceCurve)) {
+                return;
+            }
+            const zeroCurve = zeroSnapshot && Array.isArray(zeroSnapshot[ctx.channelName])
+                ? zeroSnapshot[ctx.channelName]
+                : null;
+            const existingOriginal = Array.isArray(loadedData._plotSmoothingOriginalCurves[ctx.channelName])
+                ? loadedData._plotSmoothingOriginalCurves[ctx.channelName]
+                : null;
+            const baseCurve = zeroCurve
+                ? zeroCurve.slice()
+                : existingOriginal
+                    ? existingOriginal.slice()
+                    : sourceCurve.slice();
+            loadedData.plotBaseCurves[ctx.channelName] = baseCurve.slice();
+            if (!existingOriginal || existingOriginal.length === 0 || (!zeroCurve && !zeroSnapshot)) {
+                loadedData._plotSmoothingOriginalCurves[ctx.channelName] = baseCurve.slice();
+            } else if (zeroCurve) {
+                loadedData._plotSmoothingOriginalCurves[ctx.channelName] = baseCurve.slice();
+            }
+        });
+        const targetNames = pendingEntries
+            .map((entry) => entry.channelName)
+            .filter((name, index, arr) => typeof name === 'string' && arr.indexOf(name) === index);
+        syncPlotSmoothingBaselines(loadedData, targetNames, {
+            source: 'rebasedCurves',
+            force: true,
+            preserveExistingSnapshot: true
+        });
+    }
+
+    LinearizationState.setGlobalWarnings(pendingWarnings);
 
     if (isEditModeEnabled()) {
         try {
@@ -1324,7 +3335,45 @@ function rebaseChannelsToCorrectedCurves(channelNames = [], options = {}) {
         } catch (err) {
             console.warn('[INK REBASE] Failed to ensure global applied state after rebase:', err);
         }
+        if (compositeSessionActive && smoothingPercent <= 0) {
+            try {
+                setGlobalBakedState(null, { skipHistory: true });
+            } catch (err) {
+                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                    console.warn('[INK REBASE] Failed to clear global baked state for zero smoothing:', err);
+                }
+            }
+        }
+        if (smoothingPercent <= 0 && globalData?.filename) {
+            storeZeroSmoothingSnapshot(globalData.filename);
+        }
     }
+
+    if (plotSmoothingPercent <= 0) {
+        if (!loadedData._plotSmoothingOriginalCurves || typeof loadedData._plotSmoothingOriginalCurves !== 'object') {
+            loadedData._plotSmoothingOriginalCurves = {};
+        }
+        if (!loadedData.plotBaseCurves || typeof loadedData.plotBaseCurves !== 'object') {
+            loadedData.plotBaseCurves = {};
+        }
+        Object.entries(loadedData.rebasedCurves || {}).forEach(([channelName, curve]) => {
+            if (!Array.isArray(curve)) {
+                return;
+            }
+            loadedData.plotBaseCurves[channelName] = curve.slice();
+            loadedData._plotSmoothingOriginalCurves[channelName] = curve.slice();
+        });
+    }
+
+    if (!loadedData._plotSmoothingBaselineCurves || typeof loadedData._plotSmoothingBaselineCurves !== 'object') {
+        loadedData._plotSmoothingBaselineCurves = {};
+    }
+    Object.entries(loadedData.rebasedCurves || {}).forEach(([channelName, curve]) => {
+        if (!Array.isArray(curve)) {
+            return;
+        }
+        loadedData._plotSmoothingBaselineCurves[channelName] = curve.slice();
+    });
 }
 
 function restoreChannelsToRebasedSources(channelNames = [], options = {}) {
@@ -1598,6 +3647,29 @@ function handlePercentInput(input, options = {}) {
     }
     const channelName = row?.getAttribute('data-channel');
 
+    if (channelName && isChannelLocked(channelName)) {
+        const lockInfo = getChannelLockInfo(channelName);
+        const lockedPercent = InputValidator.clampPercent(lockInfo.percentLimit);
+        if (input) {
+            InputValidator.clearValidationStyling(input);
+            input.value = formatPercentDisplay(lockedPercent);
+            setBasePercentOnInput(input, lockedPercent);
+            clearPendingCommitHold(input);
+        }
+        const siblingEnd = row?.querySelector('.end-input');
+        if (siblingEnd) {
+            const lockedEnd = InputValidator.clampEnd(lockInfo.endValue);
+            siblingEnd.value = String(lockedEnd);
+            setBaseEndOnInput(siblingEnd, lockedEnd);
+            InputValidator.clearValidationStyling(siblingEnd);
+            clearPendingCommitHold(siblingEnd);
+        }
+        if (commit) {
+            showStatus(`${channelName} ink limit is locked. Unlock before editing.`);
+        }
+        return lockedPercent;
+    }
+
     if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
         console.log('[INK LIMIT percentInput]', {
             channelName,
@@ -1849,6 +3921,29 @@ function handleEndInput(input, options = {}) {
         delete row.dataset.userEditing;
     }
     const channelName = row?.getAttribute('data-channel');
+
+    if (channelName && isChannelLocked(channelName)) {
+        const lockInfo = getChannelLockInfo(channelName);
+        const lockedEnd = InputValidator.clampEnd(lockInfo.endValue);
+        const lockedPercent = InputValidator.clampPercent(lockInfo.percentLimit);
+        if (input) {
+            InputValidator.clearValidationStyling(input);
+            input.value = String(lockedEnd);
+            setBaseEndOnInput(input, lockedEnd);
+            clearPendingCommitHold(input);
+        }
+        const siblingPercent = row?.querySelector('.percent-input');
+        if (siblingPercent) {
+            InputValidator.clearValidationStyling(siblingPercent);
+            siblingPercent.value = formatPercentDisplay(lockedPercent);
+            setBasePercentOnInput(siblingPercent, lockedPercent);
+            clearPendingCommitHold(siblingPercent);
+        }
+        if (commit) {
+            showStatus(`${channelName} ink limit is locked. Unlock before editing.`);
+        }
+        return lockedEnd;
+    }
 
     const baselines = row ? getRowBaselines(row) : { percent: null, end: null };
     let previousPercent = baselines.percent;
@@ -2164,6 +4259,19 @@ function initializeFileHandlers() {
                         });
                     }
 
+                    if (!enriched._originalBaselineEnd) {
+                        const originalBaselineEnd = {};
+                        channelList.forEach((channelName) => {
+                            if (typeof enriched.baselineEnd?.[channelName] === 'number') {
+                                originalBaselineEnd[channelName] = enriched.baselineEnd[channelName];
+                            } else if (Array.isArray(enriched.originalCurves?.[channelName])) {
+                                originalBaselineEnd[channelName] = Math.max(...enriched.originalCurves[channelName]);
+                            }
+                        });
+                        enriched._originalBaselineEnd = originalBaselineEnd;
+                    }
+
+
                     // Store parsed data in global state
                     setLoadedQuadData(enriched);
                     console.log('📁 Stored .quad data in global state');
@@ -2265,6 +4373,9 @@ function initializeFileHandlers() {
             const currentGlobalData = LinearizationState.getGlobalData?.();
             const correctedSnapshot = LinearizationState.getGlobalCorrectedCurves?.();
             const baselineSnapshot = LinearizationState.getGlobalBaselineCurves?.();
+            const smoothingPercent = typeof currentGlobalData?.previewSmoothingPercent === 'number'
+                ? currentGlobalData.previewSmoothingPercent
+                : getLabSmoothingPercent();
             let usedSnapshot = false;
 
             if (channels.length) {
@@ -2287,7 +4398,7 @@ function initializeFileHandlers() {
                     rebaseChannelsToCorrectedCurves(channels, {
                         source: 'globalToggle',
                         filename: currentGlobalData?.filename || null,
-                        useOriginalBaseline: true,
+                        useOriginalBaseline: smoothingPercent > 0,
                         globalAppliedState: applied,
                         skipScaleBaselineUpdate: true
                     });
@@ -2370,6 +4481,52 @@ function initializeFileHandlers() {
                         setGlobalBakedState(null, { skipHistory: true });
                         updateAppState({ linearizationData: normalized, linearizationApplied: true });
 
+                        try {
+                            const loadedData = getLoadedQuadData?.();
+                            if (loadedData && loadedData.originalCurves && typeof loadedData.originalCurves === 'object') {
+                                if (!loadedData.curves || typeof loadedData.curves !== 'object') {
+                                    loadedData.curves = {};
+                                }
+                                loadedData.rebasedCurves = {};
+                                loadedData.rebasedSources = {};
+                                const baselineEndSnapshot = {};
+                                Object.entries(loadedData.originalCurves).forEach(([channelName, curve]) => {
+                                    if (!Array.isArray(curve)) {
+                                        return;
+                                    }
+                                    const cloned = curve.slice();
+                                    loadedData.curves[channelName] = cloned.slice();
+                                    loadedData.rebasedCurves[channelName] = cloned.slice();
+                                    loadedData.rebasedSources[channelName] = cloned.slice();
+                                    baselineEndSnapshot[channelName] = Math.max(...cloned);
+                                });
+                                if (Object.keys(baselineEndSnapshot).length) {
+                                    loadedData.baselineEnd = { ...baselineEndSnapshot };
+                                }
+                                const originalChannels = Object.keys(loadedData.originalCurves).filter((name) => Array.isArray(loadedData.originalCurves[name]));
+                                if (originalChannels.length) {
+                                    restoreChannelsToRebasedSources(originalChannels, {
+                                        skipRefresh: false,
+                                        skipScaleBaselineUpdate: true
+                                    });
+                                }
+                            }
+                        } catch (resetErr) {
+                            console.warn('Failed to restore original curves before applying new global linearization:', resetErr);
+                        }
+
+                        try {
+                            reapplyCurrentGlobalScale({ skipHistory: true, reason: 'globalLinearizationLoad' });
+                        } catch (scaleErr) {
+                            console.warn('[GLOBAL LOAD] Failed to reapply existing global scale:', scaleErr);
+                        }
+
+                        maybeAutoRaiseInkLimits(normalized, {
+                            scope: 'global',
+                            label: 'global correction',
+                            source: 'global-linearization'
+                        });
+
                         if (isEditModeEnabled()) {
                             refreshSmartCurvesFromMeasurements();
                         }
@@ -2441,6 +4598,7 @@ function initializeFileHandlers() {
                                 console.warn('[LabTechSummary] Failed to post summary after global load:', summaryErr);
                             }
                         }
+                        updateCoverageIndicators();
 
                         console.log('✅ Global linearization applied successfully');
 
@@ -2449,17 +4607,67 @@ function initializeFileHandlers() {
 
                         try {
                             const baselineData = getLoadedQuadData?.();
-                            if (baselineData?.curves) {
-                                LinearizationState.setGlobalBaselineCurves(baselineData.curves);
+                            if (baselineData) {
+                                const originalCurves = baselineData.originalCurves;
+                                if (originalCurves && typeof LinearizationState.setGlobalBaselineCurves === 'function') {
+                                    const clonedOriginal = {};
+                                    Object.keys(originalCurves).forEach((name) => {
+                                        const curve = originalCurves[name];
+                                        if (Array.isArray(curve)) {
+                                            clonedOriginal[name] = curve.slice();
+                                        }
+                                    });
+                                    if (Object.keys(clonedOriginal).length) {
+                                        LinearizationState.setGlobalBaselineCurves(clonedOriginal);
+                                    }
+                                } else if (baselineData.curves) {
+                                    LinearizationState.setGlobalBaselineCurves(baselineData.curves);
+                                }
+                            }
+                            if (baselineData) {
+                                delete baselineData.rebasedCurves;
+                                delete baselineData.rebasedSources;
                             }
                         } catch (snapshotErr) {
                             console.warn('Failed to capture global baseline snapshot:', snapshotErr);
                         }
 
+                        if (typeof LinearizationState.setGlobalCorrectedCurves === 'function') {
+                            try {
+                                LinearizationState.setGlobalCorrectedCurves(null);
+                            } catch (snapshotErr) {
+                                console.warn('Failed to clear global corrected snapshot before reload:', snapshotErr);
+                            }
+                        }
+
                         applyGlobalLinearizationToggle(true);
+
+                        if (getLabSmoothingPercent() <= 0) {
+                            const restored = restoreZeroSmoothingSnapshot(normalized.filename);
+                            if (!restored) {
+                                storeZeroSmoothingSnapshot(normalized.filename);
+                            }
+                        } else {
+                            const dataForReset = getLoadedQuadData?.();
+                            if (dataForReset) {
+                                delete dataForReset._zeroSmoothingCurves;
+                                delete dataForReset._zeroSmoothingSignature;
+                                delete dataForReset._zeroSmoothingRestored;
+                            }
+                        }
+
+                        try {
+                            refreshLinearizationDataForNormalization();
+                        } catch (refreshErr) {
+                            console.warn('Failed to refresh normalization after loading global linearization:', refreshErr);
+                        }
 
                         if (typeof CurveHistory !== 'undefined' && CurveHistory && typeof CurveHistory.captureState === 'function') {
                             CurveHistory.captureState('After: Load Global Linearization (rebased)');
+                        }
+
+                        if (getLabSmoothingPercent() <= 0) {
+                            restoreZeroSmoothingSnapshot(normalized.filename);
                         }
 
                     } else {
@@ -2552,6 +4760,12 @@ function initializeFileHandlers() {
                     console.log('[DEBUG REVERT] Baselines restored for channels', restoredChannels);
                 }
 
+                try {
+                    reapplyCurrentGlobalScale({ skipHistory: true, reason: 'globalRevert' });
+                } catch (scaleErr) {
+                    console.warn('[DEBUG REVERT] Failed to reapply global scale after revert:', scaleErr);
+                }
+
                 const globalBtnRef = document.getElementById('revertGlobalToMeasurementBtn');
                 if (globalBtnRef) {
                     globalBtnRef.disabled = true;
@@ -2629,6 +4843,28 @@ function initializeFileHandlers() {
                     showStatus('Reverted to measurement (global)');
                 } catch (err) {
                     console.warn('Failed to show status after revert:', err);
+                }
+
+                try {
+                    const scheduleClear = () => {
+                        try {
+                            setGlobalBakedState(null, { skipHistory: true });
+                        } catch (clearErr) {
+                            console.warn('Failed to clear baked state after global revert:', clearErr);
+                        }
+                    };
+
+                    if (typeof queueMicrotask === 'function') {
+                        queueMicrotask(scheduleClear);
+                    }
+                    if (typeof requestAnimationFrame === 'function') {
+                        requestAnimationFrame(() => requestAnimationFrame(scheduleClear));
+                    }
+                    setTimeout(scheduleClear, 0);
+                    setTimeout(scheduleClear, 16);
+                    setTimeout(scheduleClear, 100);
+                } catch (microErr) {
+                    console.warn('Failed to schedule baked-state reset after global revert:', microErr);
                 }
 
                 // Restore Edit Mode selection
@@ -2961,6 +5197,31 @@ if (isBrowser) {
     globalScope.applyIntentToLoadedCurve = applyIntentToLoadedCurve;
 }
 
+function refreshGlobalScaleLockState() {
+    if (!elements?.scaleAllInput) {
+        return;
+    }
+
+    const printer = typeof getCurrentPrinter === 'function' ? getCurrentPrinter() : null;
+    const lockedChannels = getLockedChannels(printer?.channels || []);
+    const anyLocked = lockedChannels.length > 0;
+    const message = getGlobalScaleLockMessage(lockedChannels);
+
+    elements.scaleAllInput.disabled = anyLocked;
+    elements.scaleAllInput.classList.toggle('bg-gray-50', anyLocked);
+    elements.scaleAllInput.classList.toggle('cursor-not-allowed', anyLocked);
+
+    if (anyLocked && message) {
+        elements.scaleAllInput.setAttribute('title', message);
+        elements.scaleAllInput.dataset.tooltip = message;
+        elements.scaleAllInput.setAttribute('aria-disabled', 'true');
+    } else {
+        elements.scaleAllInput.removeAttribute('title');
+        delete elements.scaleAllInput.dataset.tooltip;
+        elements.scaleAllInput.removeAttribute('aria-disabled');
+    }
+}
+
 /**
  * Update channel rows with data from loaded .quad file
  * @param {Object} quadData - Parsed .quad file data
@@ -2971,11 +5232,122 @@ if (isBrowser) {
  * @param {HTMLElement} tr - Channel row element
  */
 export function setupChannelRow(tr) {
+    if (tr && typeof tr._lockCleanup === 'function') {
+        try {
+            tr._lockCleanup();
+        } catch (err) {
+            console.warn('Failed to cleanup existing lock subscription for row', tr.dataset?.channel, err);
+        }
+        delete tr._lockCleanup;
+    }
+
     const percentInput = tr.querySelector('.percent-input');
     const endInput = tr.querySelector('.end-input');
     const disabledTag = tr.querySelector('[data-disabled]');
     const processingLabel = tr.querySelector('.processing-label');
     const channelName = tr.dataset.channel;
+    const densityInput = tr.querySelector('.density-input');
+
+    const lockBtn = tr.querySelector('.channel-lock-btn');
+
+    const LOCK_ICONS = {
+        locked: '<svg class="w-3.5 h-3.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="11" width="13" height="9.5" rx="2"></rect><path d="M16 11V8a4 4 0 00-8 0v3"></path><path d="M12 15v2.5"></path></svg>',
+        unlocked: '<svg class="w-3.5 h-3.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="11" width="13" height="9.5" rx="2"></rect><path d="M16 11V8.5a4 4 0 00-7.5-2"></path></svg>'
+    };
+
+    const applyLockDisabledState = (inputEl, locked) => {
+        if (!inputEl) return;
+        if (locked) {
+            if (inputEl.dataset.lockDisabled !== 'true') {
+                inputEl.dataset.lockDisabled = 'true';
+                inputEl.dataset.lockPrevDisabled = inputEl.disabled ? 'true' : 'false';
+            }
+            inputEl.disabled = true;
+            inputEl.classList.add('bg-gray-50');
+        } else if (inputEl.dataset.lockDisabled === 'true') {
+            const wasDisabled = inputEl.dataset.lockPrevDisabled === 'true';
+            inputEl.disabled = wasDisabled;
+            delete inputEl.dataset.lockPrevDisabled;
+            delete inputEl.dataset.lockDisabled;
+            if (!inputEl.disabled) {
+                inputEl.classList.remove('bg-gray-50');
+            }
+        } else if (!inputEl.disabled) {
+            inputEl.classList.remove('bg-gray-50');
+        }
+    };
+
+    const initialPercentValue = percentInput ? InputValidator.clampPercent(percentInput.value) : 0;
+    const initialEndValue = endInput ? InputValidator.clampEnd(endInput.value) : 0;
+    const initialLockState = ensureChannelLock(channelName, {
+        percentLimit: initialPercentValue,
+        endValue: initialEndValue
+    });
+
+    const updateLockButtonUI = (state) => {
+        if (!lockBtn) return;
+        const locked = !!state?.locked;
+        lockBtn.innerHTML = locked ? LOCK_ICONS.locked : LOCK_ICONS.unlocked;
+        lockBtn.setAttribute('aria-pressed', locked ? 'true' : 'false');
+        lockBtn.dataset.locked = locked ? 'true' : 'false';
+        const tooltip = locked
+            ? 'Unlock to allow edits'
+            : 'Lock to prevent edits';
+        lockBtn.dataset.tooltip = tooltip;
+        lockBtn.title = tooltip;
+        lockBtn.classList.toggle('bg-slate-600', locked);
+        lockBtn.classList.toggle('text-white', locked);
+        lockBtn.classList.toggle('border-gray-300', !locked);
+        lockBtn.classList.toggle('text-gray-600', !locked);
+        lockBtn.classList.toggle('bg-white', !locked);
+        applyLockDisabledState(percentInput, locked);
+        applyLockDisabledState(endInput, locked);
+        applyLockDisabledState(densityInput, locked);
+        refreshGlobalScaleLockState();
+    };
+
+    updateLockButtonUI(initialLockState);
+    applyDensityStateToRow(tr, getResolvedDensity(channelName));
+    let unsubscribeLock = null;
+    if (lockBtn) {
+        unsubscribeLock = subscribeToChannelLock(channelName, updateLockButtonUI);
+        lockBtn.addEventListener('click', () => {
+            const history = getHistoryManager?.();
+            const beforeState = getChannelLockInfo(channelName);
+            const currentlyLocked = !!beforeState.locked;
+            const lockBounds = {
+                percentLimit: InputValidator.clampPercent(percentInput ? percentInput.value : initialPercentValue),
+                endValue: InputValidator.clampEnd(endInput ? endInput.value : initialEndValue)
+            };
+
+            if (!currentlyLocked) {
+                updateChannelLockBounds(channelName, lockBounds);
+            }
+
+            setChannelLock(channelName, !currentlyLocked, lockBounds);
+
+            if (history && typeof history.recordChannelAction === 'function') {
+                try {
+                    const afterState = getChannelLockInfo(channelName);
+                    history.recordChannelAction(channelName, 'lock', beforeState.locked, afterState.locked, {
+                        beforeLock: beforeState,
+                        afterLock: afterState
+                    });
+                } catch (err) {
+                    console.warn('[history] Failed to record lock toggle for', channelName, err);
+                }
+            }
+
+            const statusMessage = !currentlyLocked
+                ? `${channelName} ink limit locked`
+                : `${channelName} ink limit unlocked`;
+            showStatus(statusMessage);
+        });
+    }
+
+    if (typeof unsubscribeLock === 'function') {
+        tr._lockCleanup = unsubscribeLock;
+    }
 
     ensureOriginalInkSnapshot(tr, channelName);
 
@@ -3033,12 +5405,13 @@ export function setupChannelRow(tr) {
         }
 
         const allowToggleFlag = tr.getAttribute('data-allow-toggle') === 'true';
-        const shouldAllowToggle = hasMeasurement || hasSmart || allowToggleFlag;
+        const toggleBaked = perChannelToggle?.getAttribute('data-baked') === 'true';
+        const shouldAllowToggle = (!toggleBaked) && (hasMeasurement || hasSmart || allowToggleFlag);
 
         if (perChannelToggle) {
             const isEnabled = hasMeasurement && (perChannelEnabledMap[channelName] !== false);
-            perChannelToggle.disabled = !shouldAllowToggle;
-            perChannelToggle.checked = hasMeasurement && isEnabled;
+            perChannelToggle.disabled = !shouldAllowToggle || toggleBaked;
+            perChannelToggle.checked = !toggleBaked && hasMeasurement && isEnabled;
         }
         if (perChannelRevert) {
             perChannelRevert.disabled = !hasMeasurement && !hasSmart;
@@ -3103,12 +5476,21 @@ export function setupChannelRow(tr) {
             LinearizationState.setPerChannelData(channelName, normalized, true);
             syncPerChannelAppState(channelName, normalized);
 
+            maybeAutoRaiseInkLimits(normalized, {
+                scope: 'channel',
+                channelName,
+                label: `${channelName} correction`,
+                source: 'per-channel-linearization'
+            });
+
             if (perChannelToggle) {
                 perChannelToggle.disabled = false;
                 perChannelToggle.checked = true;
             }
 
             rebaseChannelsToCorrectedCurves([channelName], { source: 'perChannelLoad' });
+
+            perChannelEnabledMap[channelName] = false;
 
             if (typeof updateInterpolationControls === 'function') {
                 try { updateInterpolationControls(); } catch (err) { /* ignore */ }
@@ -3474,6 +5856,37 @@ export function setupChannelRow(tr) {
     markEditing(percentInput, () => handlePercentInput(percentInput, { commit: true }));
     markEditing(endInput, () => handleEndInput(endInput, { commit: true }));
 
+    const commitDensityInput = () => {
+        if (!densityInput) return;
+        const raw = typeof densityInput.value === 'string' ? densityInput.value.trim() : '';
+        const numeric = raw === '' ? 0 : Number(raw);
+        if (!Number.isFinite(numeric)) {
+            clearChannelDensity(channelName);
+            applyDensityStateToRow(tr, getResolvedDensity(channelName));
+            return;
+        }
+        if (numeric === 0) {
+            const fallback = DEFAULT_CHANNEL_DENSITIES[channelName];
+            const fallbackValue = Number.isFinite(fallback) && fallback > 0 ? fallback : 1;
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.log('[density] immediate fallback', channelName, fallbackValue);
+            }
+            const result = setSolverChannelDensity(channelName, fallbackValue) || {
+                value: fallbackValue,
+                source: 'solver'
+            };
+            applyDensityStateToRow(tr, result);
+            return;
+        }
+        const result = setManualChannelDensity(channelName, numeric);
+        applyDensityStateToRow(tr, result);
+    };
+
+    if (densityInput) {
+        markEditing(densityInput, () => commitDensityInput());
+        densityInput.addEventListener('change', () => commitDensityInput());
+    }
+
     const originalPercent = parseFloat((percentInput?.getAttribute('data-base-percent') ?? percentInput?.value) || 0);
     const originalEnd = parseFloat((endInput?.getAttribute('data-base-end') ?? endInput?.value) || 0);
 
@@ -3557,13 +5970,25 @@ export function setupChannelRow(tr) {
         const isAtZero = endVal === 0;
         const percentValue = InputValidator.clampPercent(percentInput.value);
 
+        if (!isChannelLocked(channelName)) {
+            updateChannelLockBounds(channelName, {
+                percent: percentValue,
+                endValue: endVal
+            });
+        }
+
         // Show disabled label if channel is at 0 (either user-disabled or set to 0%)
         if (disabledTag) {
             disabledTag.classList.toggle('invisible', !isAtZero);
         }
-
+        if (densityInput) {
+            densityInput.disabled = isAtZero || densityInput.dataset.lockDisabled === 'true';
+            densityInput.classList.toggle('bg-gray-50', densityInput.disabled);
+        }
         // Handle ultra-compact layout for disabled channels
-        const inputsEditing = (percentInput?.dataset.userEditing === 'true') || (endInput?.dataset.userEditing === 'true');
+        const inputsEditing = (percentInput?.dataset.userEditing === 'true')
+            || (endInput?.dataset.userEditing === 'true')
+            || (densityInput?.dataset.userEditing === 'true');
 
         if (inputsEditing) {
             tr.setAttribute('data-compact', 'false');
@@ -3593,6 +6018,8 @@ export function setupChannelRow(tr) {
                 console.warn('Failed to refresh processing detail:', err);
             }
         }
+
+        updateLockButtonUI(getChannelLockInfo(channelName));
     }
 
     // Store refreshDisplay function on the tr element for access from scaling functions
@@ -3638,6 +6065,17 @@ export function setupChannelRow(tr) {
 }
 
 registerChannelRowSetup(setupChannelRow);
+
+if (unsubscribeChannelDensityStore) {
+    unsubscribeChannelDensityStore();
+}
+unsubscribeChannelDensityStore = subscribeChannelDensities((channelName, payload) => {
+    const row = getChannelRow(channelName);
+    if (!row) return;
+    if (payload && typeof payload === 'object') {
+        applyDensityStateToRow(row, payload);
+    }
+});
 
 
 /**
@@ -3695,6 +6133,10 @@ export function removeEventHandlers() {
     // Note: This is a placeholder for cleanup functionality
     // In practice, we would track listeners and remove them here
     console.log('🧹 Event handlers cleanup requested (placeholder)');
+    if (unsubscribeChannelDensityStore) {
+        unsubscribeChannelDensityStore();
+        unsubscribeChannelDensityStore = null;
+    }
 }
 function ensureContrastIntentDefault() {
     const preset = getPreset('linear');
@@ -3739,5 +6181,16 @@ function setContrastIntent(id, params = {}, source = 'preset') {
     }
 
     updateInkChart();
-    debouncedPreviewUpdate();
+   debouncedPreviewUpdate();
 }
+
+export const __plotSmoothingTestUtils = {
+    applyPlotSmoothingToLoadedChannels,
+    applyPlotSmoothingToEntries,
+    applyPlotSmoothingToCurve,
+    storeZeroSmoothingSnapshot,
+    restoreZeroSmoothingSnapshot,
+    schedulePlotSmoothingRefresh,
+    refreshLinearizationDataForNormalization,
+    refreshPlotSmoothingSnapshotsForSmartEdit
+};

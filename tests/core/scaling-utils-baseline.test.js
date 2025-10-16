@@ -3,11 +3,26 @@ import { JSDOM } from 'jsdom';
 
 const mockChannelRows = {};
 const mockRescaleCalls = [];
+const stateStore = new Map();
 const stateManagerStub = {
-  set: vi.fn(),
-  get: vi.fn(() => undefined),
+  set: vi.fn((path, value) => {
+    stateStore.set(path, value);
+  }),
+  get: vi.fn((path) => stateStore.get(path)),
   setChannelValue: vi.fn(),
-  setPrinter: vi.fn()
+  setPrinter: vi.fn(),
+  batch: vi.fn((fn) => {
+    if (typeof fn === 'function') {
+      fn();
+    }
+  }),
+  createSelector: vi.fn((paths, computeFn) => {
+    const deps = Array.isArray(paths) ? paths : [paths];
+    return () => {
+      const values = deps.map((dep) => stateStore.get(dep));
+      return computeFn(...values);
+    };
+  })
 };
 const historyStub = {
   recordBatchAction: vi.fn()
@@ -46,6 +61,9 @@ vi.mock('../../src/js/core/state-manager.js', () => ({
 
 vi.mock('../../src/js/core/history-manager.js', () => ({
   getHistoryManager: () => historyStub,
+  beginHistoryTransaction: vi.fn(),
+  commitHistoryTransaction: vi.fn(),
+  rollbackHistoryTransaction: vi.fn(),
 }));
 
 vi.mock('../../src/js/legacy/state-bridge.js', () => ({
@@ -78,10 +96,13 @@ describe('scaling-utils baseline cache behavior', () => {
     vi.resetModules();
     mockRescaleCalls.length = 0;
     Object.keys(mockChannelRows).forEach((key) => { delete mockChannelRows[key]; });
+    stateStore.clear();
     stateManagerStub.set.mockClear();
     stateManagerStub.get.mockClear();
     stateManagerStub.setChannelValue.mockClear();
     stateManagerStub.setPrinter.mockClear();
+    stateManagerStub.batch.mockClear();
+    stateManagerStub.createSelector.mockClear();
     historyStub.recordBatchAction.mockClear();
 
     dom = new JSDOM('<!doctype html><html><body></body></html>');
@@ -112,6 +133,7 @@ describe('scaling-utils baseline cache behavior', () => {
       percent.className = 'percent-input';
       percent.type = 'number';
       percent.value = '100';
+      percent.setAttribute('data-base-percent', percent.value);
       percentCell.appendChild(percent);
 
       const endCell = document.createElement('td');
@@ -119,6 +141,7 @@ describe('scaling-utils baseline cache behavior', () => {
       end.className = 'end-input';
       end.type = 'number';
       end.value = '65535';
+      end.setAttribute('data-base-end', end.value);
       endCell.appendChild(end);
 
       tr.appendChild(percentCell);
@@ -196,8 +219,10 @@ describe('scaling-utils baseline cache behavior', () => {
     expect(getCurrentScale()).toBe(50);
 
     percentInput.value = '65';
+    percentInput.setAttribute('data-base-percent', '65');
     const manualEnd = inputValidator.computeEndFromPercent(65);
     endInput.value = String(manualEnd);
+    endInput.setAttribute('data-base-end', String(manualEnd));
     updateScaleBaselineForChannel('MK');
 
     const result80 = scaleChannelEndsByPercent(80);
@@ -213,7 +238,9 @@ describe('scaling-utils baseline cache behavior', () => {
     const { scaleChannelEndsByPercent, getCurrentScale } = scalingUtils;
 
     percentInput.value = '0';
+    percentInput.setAttribute('data-base-percent', '0');
     endInput.value = '0';
+    endInput.setAttribute('data-base-end', '0');
 
     const result = scaleChannelEndsByPercent(150);
     expect(result.success).toBe(true);
@@ -239,7 +266,9 @@ describe('scaling-utils baseline cache behavior', () => {
     expect(getCurrentScale()).toBe(80);
 
     secondaryPercentInput.value = '40';
+    secondaryPercentInput.setAttribute('data-base-percent', '40');
     secondaryEndInput.value = String(inputValidator.computeEndFromPercent(40));
+    secondaryEndInput.setAttribute('data-base-end', secondaryEndInput.value);
     scalingUtils.updateScaleBaselineForChannel('C');
 
     const result60 = scaleChannelEndsByPercent(60);
@@ -253,10 +282,14 @@ describe('scaling-utils baseline cache behavior', () => {
     const { scaleChannelEndsByPercent, getCurrentScale } = scalingUtils;
 
     percentInput.value = '70';
+    percentInput.setAttribute('data-base-percent', '70');
     const manualEnd = inputValidator.computeEndFromPercent(70);
     endInput.value = String(manualEnd);
+    endInput.setAttribute('data-base-end', String(manualEnd));
     secondaryPercentInput.value = '70';
+    secondaryPercentInput.setAttribute('data-base-percent', '70');
     secondaryEndInput.value = String(inputValidator.computeEndFromPercent(70));
+    secondaryEndInput.setAttribute('data-base-end', secondaryEndInput.value);
 
     const result = scaleChannelEndsByPercent(140);
     expect(result.success).toBe(true);
@@ -272,11 +305,15 @@ describe('scaling-utils baseline cache behavior', () => {
     const { scaleChannelEndsByPercent, getCurrentScale, updateScaleBaselineForChannel } = scalingUtils;
 
     percentInput.value = '80';
+    percentInput.setAttribute('data-base-percent', '80');
     const baseEnd = inputValidator.computeEndFromPercent(80);
     endInput.value = String(baseEnd);
+    endInput.setAttribute('data-base-end', String(baseEnd));
     updateScaleBaselineForChannel('MK');
     secondaryPercentInput.value = '80';
+    secondaryPercentInput.setAttribute('data-base-percent', '80');
     secondaryEndInput.value = String(inputValidator.computeEndFromPercent(80));
+    secondaryEndInput.setAttribute('data-base-end', secondaryEndInput.value);
     updateScaleBaselineForChannel('C');
 
     const upResult = scaleChannelEndsByPercent(110);
@@ -296,11 +333,15 @@ describe('scaling-utils baseline cache behavior', () => {
     const { scaleChannelEndsByPercent, getCurrentScale, updateScaleBaselineForChannel } = scalingUtils;
 
     percentInput.value = '80';
+    percentInput.setAttribute('data-base-percent', '80');
     const baseEnd = inputValidator.computeEndFromPercent(80);
     endInput.value = String(baseEnd);
+    endInput.setAttribute('data-base-end', String(baseEnd));
     updateScaleBaselineForChannel('MK');
     secondaryPercentInput.value = '80';
+    secondaryPercentInput.setAttribute('data-base-percent', '80');
     secondaryEndInput.value = String(inputValidator.computeEndFromPercent(80));
+    secondaryEndInput.setAttribute('data-base-end', secondaryEndInput.value);
     updateScaleBaselineForChannel('C');
 
     const firstRamp = scaleChannelEndsByPercent(130);
@@ -339,7 +380,9 @@ describe('scaling-utils baseline cache behavior', () => {
     expect(getCurrentScale()).toBe(50);
 
     percentInput.value = '0';
+    percentInput.setAttribute('data-base-percent', '0');
     endInput.value = '0';
+    endInput.setAttribute('data-base-end', '0');
     updateScaleBaselineForChannel('MK');
 
     const furtherDown = scaleChannelEndsByPercent(40);

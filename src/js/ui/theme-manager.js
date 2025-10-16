@@ -79,8 +79,8 @@ export function getCurrentTheme() {
         return saved;
     }
 
-    // Default to system preference
-    return getSystemPrefersDark() ? 'dark' : 'light';
+    // Default to light so new sessions always start in the bright theme
+    return 'light';
 }
 
 /**

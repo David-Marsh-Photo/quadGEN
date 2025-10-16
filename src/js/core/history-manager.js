@@ -9,6 +9,7 @@ import { setSmartKeyPoints, ControlPoints } from '../curves/smart-curves.js';
 import { InputValidator } from './validation.js';
 import { isEditModeEnabled } from '../ui/edit-mode.js';
 import { triggerInkChartUpdate, triggerPreviewUpdate, triggerProcessingDetail, triggerRevertButtonsUpdate } from '../ui/ui-hooks.js';
+import { setChannelLock } from './channel-locks.js';
 
 const globalScope = typeof window !== 'undefined' ? window : globalThis;
 const isBrowser = typeof document !== 'undefined';
@@ -204,6 +205,10 @@ export class HistoryManager {
 
         if (extras && typeof extras === 'object') {
             Object.assign(action, extras);
+        }
+
+        if ((actionType === 'percentage' || actionType === 'endValue') && Number.isFinite(Number(oldValue)) && Number.isFinite(Number(newValue)) && Number(oldValue) === Number(newValue)) {
+            return;
         }
 
         // Check for pending key points data
@@ -658,6 +663,23 @@ export class HistoryManager {
             case 'endValue':
                 this.stateManager.setChannelValue(channelName, 'endValue', oldValue);
                 break;
+            case 'lock': {
+                const beforeLock = (action && typeof action.beforeLock === 'object') ? { ...action.beforeLock } : null;
+                const targetLocked = typeof oldValue === 'boolean'
+                    ? oldValue
+                    : (beforeLock ? !!beforeLock.locked : false);
+                const options = {};
+                if (beforeLock) {
+                    if (Number.isFinite(beforeLock.percentLimit)) {
+                        options.percentLimit = beforeLock.percentLimit;
+                    }
+                    if (Number.isFinite(beforeLock.endValue)) {
+                        options.endValue = beforeLock.endValue;
+                    }
+                }
+                setChannelLock(channelName, targetLocked, options);
+                break;
+            }
             case 'curve': {
                 if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
                     console.log('[HISTORY] undo curve', {
@@ -725,6 +747,23 @@ export class HistoryManager {
             case 'endValue':
                 this.stateManager.setChannelValue(channelName, 'endValue', newValue);
                 break;
+            case 'lock': {
+                const afterLock = (action && typeof action.afterLock === 'object') ? { ...action.afterLock } : null;
+                const targetLocked = typeof newValue === 'boolean'
+                    ? newValue
+                    : (afterLock ? !!afterLock.locked : false);
+                const options = {};
+                if (afterLock) {
+                    if (Number.isFinite(afterLock.percentLimit)) {
+                        options.percentLimit = afterLock.percentLimit;
+                    }
+                    if (Number.isFinite(afterLock.endValue)) {
+                        options.endValue = afterLock.endValue;
+                    }
+                }
+                setChannelLock(channelName, targetLocked, options);
+                break;
+            }
             case 'curve': {
                 const hasNewPoints = Array.isArray(action.newKeyPoints) && action.newKeyPoints.length > 0;
 

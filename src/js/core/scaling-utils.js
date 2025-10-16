@@ -14,6 +14,7 @@ import { showStatus } from '../ui/status-service.js';
 import { registerDebugNamespace } from '../utils/debug-registry.js';
 import { getChannelRow } from '../ui/channel-registry.js';
 import { rescaleSmartCurveForInkLimit } from '../curves/smart-curves.js';
+import { isChannelLocked, updateChannelLockBounds, getChannelLockInfo, getLockedChannels, getGlobalScaleLockMessage } from './channel-locks.js';
 import scalingCoordinator from './scaling-coordinator.js';
 import { SCALING_STATE_FLAG_EVENT, SCALING_STATE_AUDIT_EVENT } from './scaling-constants.js';
 
@@ -684,6 +685,17 @@ export function scaleChannelEndsByPercent(percent, options = {}) {
             };
         }
 
+        const lockedChannels = getLockedChannels(currentPrinter.channels);
+        if (lockedChannels.length > 0) {
+            return {
+                success: false,
+                message: getGlobalScaleLockMessage(lockedChannels),
+                details: {
+                    lockedChannels
+                }
+            };
+        }
+
         if (!scaleBaselineEnds) scaleBaselineEnds = {};
 
         const previousPercent = scaleAllPercent;
@@ -698,6 +710,16 @@ export function scaleChannelEndsByPercent(percent, options = {}) {
         for (const channelName of currentPrinter.channels) {
             const row = getChannelRow(channelName);
             if (!row) continue;
+
+            if (isChannelLocked(channelName)) {
+                const lockInfo = getChannelLockInfo(channelName);
+                const lockLimitPercent = Number.isFinite(lockInfo.percentLimit) ? lockInfo.percentLimit : 100;
+                maxAllowedPercent = Math.min(maxAllowedPercent, lockLimitPercent);
+                if (scaleBaselineEnds && Object.prototype.hasOwnProperty.call(scaleBaselineEnds, channelName)) {
+                    delete scaleBaselineEnds[channelName];
+                }
+                continue;
+            }
 
             const endInput = row.querySelector('.end-input');
             if (!endInput) continue;
@@ -786,11 +808,12 @@ export function scaleChannelEndsByPercent(percent, options = {}) {
                     oldValue: oldEndValue,
                     newValue: newEnd
                 });
+                updateChannelLockBounds(channelName, { percent: newPercent, endValue: newEnd });
             }
         });
 
         if (updates.length === 0) {
-            scaleAllPercent = previousPercent;
+            scaleAllPercent = appliedPercent;
             if (Math.abs(scaleAllPercent - 100) < 1e-6) {
                 scaleBaselineEnds = null;
                 if (scalingStateFlag) {
@@ -819,6 +842,8 @@ export function scaleChannelEndsByPercent(percent, options = {}) {
             const direction = appliedPercent > previousPercent
                 ? 'already maxed at current ink limits'
                 : 'already at minimum for active channels';
+
+            clearBakedStateAfterScaling();
 
             return {
                 success: true,
@@ -854,6 +879,8 @@ export function scaleChannelEndsByPercent(percent, options = {}) {
         if (!skipHistory && history && batchActions.length > 0) {
             history.recordBatchAction(`Scale channels to ${formatScalePercent(appliedPercent)}%`, batchActions);
         }
+
+        clearBakedStateAfterScaling();
 
         return {
             success: true,
@@ -948,6 +975,11 @@ export function resetGlobalScale() {
     if (elements.scaleAllInput) {
         elements.scaleAllInput.value = formatScalePercent(scaleAllPercent);
     }
+
+    if (scalingStateFlag) {
+        updateScalingState({ percent: scaleAllPercent, baselines: null, maxAllowed: MAX_SCALE_PERCENT });
+        validateScalingStateSync({ reason: 'resetGlobalScale', throwOnMismatch: false });
+    }
 }
 
 /**
@@ -966,6 +998,28 @@ export function getCurrentScale() {
     }
 
     return scaleAllPercent;
+}
+
+/**
+ * Reapply the active global scale to the current channel endpoints.
+ * Useful after operations that overwrite curve data (e.g., measurement loads or reverts).
+ */
+export function reapplyCurrentGlobalScale(options = {}) {
+    const opts = typeof options === 'object' && options !== null ? options : {};
+    const { percent: overridePercent, ...rest } = opts;
+
+    const currentPercent = Number.isFinite(overridePercent)
+        ? Number(overridePercent)
+        : Number(scaleAllPercent);
+
+    const effectivePercent = Number.isFinite(currentPercent) && currentPercent > 0
+        ? currentPercent
+        : 100;
+
+    return scaleChannelEndsByPercent(effectivePercent, {
+        skipHistory: true,
+        ...rest
+    });
 }
 
 function queueCoordinatorScale(rawPercent, requestedBy, options = {}) {
@@ -994,6 +1048,7 @@ function scaleChannelEndsByPercentBridge(rawPercent, options) {
 registerDebugNamespace('scalingUtils', {
     applyGlobalScale: applyGlobalScaleBridge,
     scaleChannelEndsByPercent: scaleChannelEndsByPercentBridge,
+    reapplyCurrentGlobalScale,
     updateScaleBaselineForChannel,
     resetGlobalScale,
     getCurrentScale,
@@ -1011,6 +1066,7 @@ registerDebugNamespace('scalingUtils', {
     windowAliases: [
         'applyGlobalScale',
         'scaleChannelEndsByPercent',
+        'reapplyCurrentGlobalScale',
         'updateScaleBaselineForChannel',
         'resetGlobalScale',
         'getCurrentScale',
@@ -1028,4 +1084,18 @@ registerDebugNamespace('scalingUtils', {
 
 if (typeof window !== 'undefined' && typeof window.setScalingStateEnabled !== 'function') {
     window.setScalingStateEnabled = setScalingStateEnabled;
+}
+function clearBakedStateAfterScaling() {
+    const scope = typeof window !== 'undefined' ? window : (typeof globalThis !== 'undefined' ? globalThis : null);
+    const clearFn = scope && typeof scope.setGlobalBakedState === 'function'
+        ? scope.setGlobalBakedState
+        : null;
+    if (!clearFn) return;
+    try {
+        clearFn.call(scope, null, { skipHistory: true });
+    } catch (error) {
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.warn('[SCALE] Failed to clear baked state after scaling:', error);
+        }
+    }
 }

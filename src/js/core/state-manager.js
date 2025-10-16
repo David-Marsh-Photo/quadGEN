@@ -149,6 +149,57 @@ export class QuadGenStateManager {
             return; // Prevent cascading updates during restoration
         }
 
+        if (typeof path === 'string' && path !== 'printer.channels') {
+            const activeChannels = this.get('printer.channels') || [];
+            const allowedSet = new Set(activeChannels);
+
+            const sanitizeCollection = (input, fallbackFactory = () => ({})) => {
+                if (!input || typeof input !== 'object') {
+                    return {};
+                }
+                const sanitized = {};
+                activeChannels.forEach((channelName) => {
+                    if (Object.prototype.hasOwnProperty.call(input, channelName)) {
+                        const entry = input[channelName];
+                        sanitized[channelName] = (entry && typeof entry === 'object')
+                            ? { ...entry }
+                            : fallbackFactory(channelName);
+                    }
+                });
+                return sanitized;
+            };
+
+            if (path === 'printer.channelValues') {
+                value = sanitizeCollection(value, () => ({ percentage: 0, endValue: 0 }));
+            } else if (path.startsWith('printer.channelValues.')) {
+                const parts = path.split('.');
+                const channelName = parts[2];
+                if (channelName && !allowedSet.has(channelName)) {
+                    return;
+                }
+            }
+
+            if (path === 'printer.channelStates') {
+                value = sanitizeCollection(value, () => ({ locked: false, limitPercent: 0, limitEndValue: 0, enabled: false }));
+            } else if (path.startsWith('printer.channelStates.')) {
+                const parts = path.split('.');
+                const channelName = parts[2];
+                if (channelName && !allowedSet.has(channelName)) {
+                    return;
+                }
+            }
+
+            if (path === 'printer.channelOriginalValues') {
+                value = sanitizeCollection(value, () => ({ percent: 0, end: 0 }));
+            } else if (path.startsWith('printer.channelOriginalValues.')) {
+                const parts = path.split('.');
+                const channelName = parts[2];
+                if (channelName && !allowedSet.has(channelName)) {
+                    return;
+                }
+            }
+        }
+
         if (this.isBatching) {
             const oldValue = this.get(path);
             this.setValueByPath(this.state, path, value);
@@ -549,16 +600,105 @@ export class QuadGenStateManager {
         return PRINTERS[model] || PRINTERS.P700P900;
     }
 
-    setPrinter(model) {
+    setPrinter(model, channelOverrides = null) {
         if (!PRINTERS[model]) {
             throw new Error(`Unknown printer model: ${model}`);
         }
 
-        this.batch({
-            'printer.currentModel': model,
-            'printer.channels': [...PRINTERS[model].channels],
-            'printer.channelOriginalValues': {}
+        const printer = PRINTERS[model];
+        const channels = [...printer.channels];
+        const overrides = channelOverrides && typeof channelOverrides === 'object' ? channelOverrides : null;
+
+        const primaryChannel = channels.includes('MK')
+            ? 'MK'
+            : (channels.includes('K') ? 'K' : channels[0]);
+
+        const resolveChannelSeed = (channelName) => {
+            const overrideEntry = overrides?.[channelName] || {};
+            let percent = Number.isFinite(overrideEntry.percent) ? InputValidator.clampPercent(overrideEntry.percent) : undefined;
+            let endValue = Number.isFinite(overrideEntry.endValue) ? InputValidator.clampEnd(overrideEntry.endValue) : undefined;
+
+            if (percent === undefined && endValue !== undefined) {
+                percent = InputValidator.clampPercent(InputValidator.computePercentFromEnd(endValue));
+            }
+            if (endValue === undefined && percent !== undefined) {
+                endValue = InputValidator.computeEndFromPercent(percent);
+            }
+
+            if (percent === undefined) {
+                percent = channelName === primaryChannel ? 100 : 0;
+            }
+            if (endValue === undefined) {
+                endValue = InputValidator.computeEndFromPercent(percent);
+            }
+
+            return { percent, endValue };
+        };
+
+        const initialValues = {};
+        const initialStates = {};
+        const initialOriginalValues = {};
+        channels.forEach((channelName) => {
+            const { percent, endValue } = resolveChannelSeed(channelName);
+            initialValues[channelName] = {
+                percentage: percent,
+                endValue
+            };
+            initialStates[channelName] = {
+                locked: false,
+                limitPercent: percent,
+                limitEndValue: endValue,
+                enabled: percent > 0 || endValue > 0
+            };
+            initialOriginalValues[channelName] = {
+                percent,
+                end: endValue
+            };
         });
+
+        this.batch(() => {
+            this.set('printer.currentModel', model);
+            this.set('printer.channels', channels);
+            this.set('printer.channelOriginalValues', initialOriginalValues, { skipHistory: true });
+            this.set('printer.channelValues', initialValues, { skipHistory: true });
+            this.set('printer.channelStates', initialStates, { skipHistory: true });
+        });
+
+        const pruneDisallowed = () => {
+            const currentValues = this.get('printer.channelValues') || {};
+            const currentStates = this.get('printer.channelStates') || {};
+            const currentOriginal = this.get('printer.channelOriginalValues') || {};
+
+            const copyForAllowed = (source, fallback) => {
+                const result = {};
+                channels.forEach((channelName) => {
+                    if (Object.prototype.hasOwnProperty.call(source, channelName)) {
+                        const entry = source[channelName];
+                        result[channelName] = entry && typeof entry === 'object'
+                            ? { ...entry }
+                            : { ...fallback[channelName] };
+                    } else if (fallback[channelName]) {
+                        result[channelName] = { ...fallback[channelName] };
+                    }
+                });
+                return result;
+            };
+
+            this.batch(() => {
+                this.set('printer.channelValues', copyForAllowed(currentValues, initialValues), { skipHistory: true, allowDuringRestore: true });
+                this.set('printer.channelStates', copyForAllowed(currentStates, initialStates), { skipHistory: true, allowDuringRestore: true });
+                this.set('printer.channelOriginalValues', copyForAllowed(currentOriginal, initialOriginalValues), { skipHistory: true, allowDuringRestore: true });
+            });
+        };
+
+        pruneDisallowed();
+
+        if (typeof window !== 'undefined') {
+            queueMicrotask(pruneDisallowed);
+            if (typeof window.requestAnimationFrame === 'function') {
+                window.requestAnimationFrame(() => pruneDisallowed());
+            }
+        }
     }
 
     // Channel operations
@@ -567,6 +707,10 @@ export class QuadGenStateManager {
     }
 
     setChannelValue(channelName, field, value) {
+        const activeChannels = this.get('printer.channels') || [];
+        if (!activeChannels.includes(channelName)) {
+            return;
+        }
         if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
             console.log(`[STATE DEBUG] setChannelValue(${channelName}, ${field}, ${value})`);
         }
@@ -578,10 +722,18 @@ export class QuadGenStateManager {
     }
 
     isChannelEnabled(channelName) {
+        const activeChannels = this.get('printer.channels') || [];
+        if (!activeChannels.includes(channelName)) {
+            return false;
+        }
         return this.get(`printer.channelStates.${channelName}.enabled`) || false;
     }
 
     setChannelEnabled(channelName, enabled) {
+        const activeChannels = this.get('printer.channels') || [];
+        if (!activeChannels.includes(channelName)) {
+            return;
+        }
         this.set(`printer.channelStates.${channelName}.enabled`, enabled);
     }
 

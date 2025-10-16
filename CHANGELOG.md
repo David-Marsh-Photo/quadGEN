@@ -6,41 +6,37 @@ This changelog follows a concise, user-facing format. Engineering details live i
 
 ## [Unreleased]
 ### Added
-- _Nothing yet._
+- _Nothing yet_
 
 ### Changed
-- _Nothing yet._
+- _Nothing yet_
 
 ### Fixed
-- _Nothing yet._
-
-### Removed
-- _Nothing yet._
+- _Nothing yet_
 
 ### Docs
-- _Nothing yet._
+- _Nothing yet_
 
-## [v3.1.5] — 2025-10-08
+## [4.0.0] — 2025-10-15
 ### Added
-- Added a dedicated ⚙️ Options panel beside Help to collect global settings without crowding the Global Correction and Edit panels.
-- Introduced a floating tooltip system so Options help icons render above every panel (Safari-safe) while keeping keyboard focus support.
+- Overlay controls in the ⚙️ Options panel for light blocking and correction targets, plus default-on curve dragging and snapshot flags to speed Edit Mode edits.
+- Channel ink locks, auto-raise import guard, and coverage-aware composite debug overlays keep corrections aligned with ink ceilings.
+- Density column with studio presets and one-click Compute flow so manual versus solver constants stay traceable; composite weighting and debug panels surface the same data.
+- Simple Scaling is now the default correction method, with an Options toggle to swap back to the density solver at any time.
 
 ### Changed
-- The “Use log-density for LAB / Manual measurements” toggle now lives in the Options panel (and remains in the Manual L* modal) with concise tooltip guidance.
-- LAB and Manual L* imports default to 50 % smoothing, and the Options panel slider now spans 0–300 % so you can dial in additional cleanup when noisy highlights or shadows appear.
+- Light mode now loads by default, LAB smoothing opens at 0 %, and correction overlays scale to the active ink ceiling for clearer comparisons.
+- Composite solver reuses normalized coverage ceilings, momentum weighting, and ladder tapers to hand off corrections smoothly while retaining guardrails.
+- Auto-raise and the kernel slope smoother coordinate with redistribution smoothing windows, keeping highlight hand-offs curved even after ink limits increase.
 
 ### Fixed
-- Prevented channel ink limit inputs from snapping back while typing; changes now apply on commit instead of every keystroke.
-- Resolved tooltip clipping on macOS Safari by lifting help overlays above the Options panel.
-- Restored spacing in the Edit panel so the “Calculate points” legend no longer clips against the card border.
-- Smart curve points now stay aligned with the plotted curve when nudging channel percent ink limits (regression observed with `TRIFORCE_V2.quad`).
-
-### Removed
-- _Nothing yet._
+- Global `.cube` and `.acv` imports stay monotone and correctly oriented, so default ramps show the intended shape without double flips.
+- Resetting LAB or plot smoothing to 0 % restores baseline amplitude and ink limits, and table fields stay synced with rebased curves.
+- Smart key points and undo history remain stable after channel-percent nudges or auto-raise adjustments.
 
 ### Docs
-- Documented the Options panel, relocated log-density toggle, and floating tooltips across the user guide, linearization guide, LAB workflow notes, and in-app help.
-- Updated linearization references to note the adjustable LAB smoothing slider (0–300 %) and new Options workflow.
+- Workflow guidance now lives in `docs/quadgen_user_guide.md`, and the print linearization guide consolidates the LAB pipeline, manual density defaults, and Simple Scaling notes.
+- Auto-raise, density solver, and ingestion specs document smoothing interoperability, manual density inputs, and hybrid mapping plans; in-app Help and Glossary mirror the changes.
 
 ## [v3.1.4] — 2025-10-07
 ### Added
@@ -76,6 +72,7 @@ This changelog follows a concise, user-facing format. Engineering details live i
 
 ### Docs
 - Updated `docs/investigation/INK_LIMIT_BASELINE_SIMPLIFICATION_CHECKLIST.md` to mark the rebase execution and revert-alignment steps complete.
+- Documented the density ladder workflow and debug instrumentation in `docs/features/channel-density-solver.md` and `docs/features/density_ladder_plan.md`.
 
 ## [v3.1.2] — 2025-10-06
 ### Added

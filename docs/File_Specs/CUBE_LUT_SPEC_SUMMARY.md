@@ -22,8 +22,9 @@ General Parsing Rules
   - Accepts 1–3 floats per line; the first value is used.
   - Samples collected in order of appearance.
 - Post-processing (printer-space orientation):
-  - Horizontal flip: reverse the input coordinate (index mapping i → 1−i scaled to index).
-  - Vertical inversion: sample value v → 1 − v.
+- Horizontal flip: reverse the input coordinate (index mapping i → 1−i scaled to index).
+- Vertical inversion: sample value v → 1 − v.
+- Monotonic interpolation: quadGEN resamples LUT values with a PCHIP interpolator so smooth, non-decreasing image-space curves stay monotonic after orientation.
 - Output to quadGEN:
   - `{ domainMin, domainMax, samples, originalSamples, format: '1DLUT' }`
   - `samples` are normalized floats in [0,1].
@@ -40,6 +41,7 @@ General Parsing Rules
   - Convert to a neutral luminance by simple average: L = (R+G+B)/3.
 - Post-processing (printer-space orientation):
   - Horizontal flip (reverse input coordinate) and vertical inversion (v → 1−v).
+- Monotonic interpolation: the extracted neutral axis is resampled with the same PCHIP interpolator to avoid cubic overshoot when applying the correction to printer-space ramps.
 - Output to quadGEN:
   - `{ domainMin, domainMax, samples, is3DLUT: true, lutSize, originalDataPoints }`
   - `samples` is a 256-length array of normalized floats.

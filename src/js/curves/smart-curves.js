@@ -3,7 +3,7 @@
 
 import { CURVE_RESOLUTION, createLinearRamp } from '../data/processing-utils.js';
 import { createPCHIPSpline } from '../math/interpolation.js';
-import { getLoadedQuadData, ensureLoadedQuadData, TOTAL, elements } from '../core/state.js';
+import { getLoadedQuadData, ensureLoadedQuadData, TOTAL, elements, getPlotSmoothingPercent } from '../core/state.js';
 import { LinearizationState, markLinearizationEdited } from '../data/linearization-utils.js';
 import { InputValidator } from '../core/validation.js';
 import { triggerInkChartUpdate, triggerProcessingDetail, triggerRevertButtonsUpdate, triggerPreviewUpdate } from '../ui/ui-hooks.js';
@@ -14,6 +14,10 @@ import { isEditModeEnabled } from '../ui/edit-mode.js';
 import { getHistoryManager } from '../core/history-manager.js';
 import { updateAppState, getAppState } from '../core/state.js';
 import { rescaleKeyPointsForInkLimit, normalizeKeyPoints } from './smart-rescaling-service.js';
+import { isChannelLocked, clampAbsoluteToChannelLock, getChannelLockEditMessage, updateChannelLockBounds } from '../core/channel-locks.js';
+import { showStatus } from '../ui/status-service.js';
+import { getStateManager } from '../core/state-manager.js';
+import { updateScaleBaselineForChannel } from '../core/scaling-utils.js';
 
 const globalScope = typeof window !== 'undefined' ? window : globalThis;
 const isBrowser = typeof document !== 'undefined';
@@ -85,7 +89,7 @@ function isActiveRangeModeEnabled() {
  * Smart Curve simplification configuration
  */
 export const KP_SIMPLIFY = {
-    maxErrorPercent: 0.25,
+    maxErrorPercent: 0.15,
     maxPoints: 21
 };
 
@@ -134,6 +138,230 @@ function getChannelRow(channelName) {
     }
 }
 
+export function formatPercentDisplay(value) {
+    if (!Number.isFinite(value)) return '0';
+    const rounded = Math.round(value);
+    if (Math.abs(value - rounded) < 0.05) {
+        return String(rounded);
+    }
+    const fixed = Number(value.toFixed(1));
+    return Math.abs(fixed - Math.round(fixed)) < 1e-6 ? String(Math.round(fixed)) : fixed.toString();
+}
+
+function readPercentFromInput(input) {
+    if (!input) return 0;
+    const base = input.getAttribute('data-base-percent');
+    const source = base !== null ? base : input.value;
+    return InputValidator.clampPercent(source);
+}
+
+function readEndFromInput(input) {
+    if (!input) return 0;
+    const base = input.getAttribute('data-base-end');
+    const source = base !== null ? base : input.value;
+    return InputValidator.clampEnd(source);
+}
+
+function ensureInkLimitForAbsoluteTarget(channelName, desiredAbsolute, options = {}) {
+    const clampedTarget = ControlPolicy.clampY(Number(desiredAbsolute) || 0);
+    const {
+        epsilonPercent = 0.05,
+        emitStatus = true,
+        statusMessage = null,
+        statusFormatter = null,
+        lockedStatusMessage = null,
+        lockedStatusFormatter = null,
+        source = null
+    } = options || {};
+    const epsilon = Number.isFinite(epsilonPercent) ? Math.max(0, epsilonPercent) : 0.05;
+
+    if (!isBrowser) {
+        return { absolute: clampedTarget, rescaleFactor: 1, raised: false, currentPercent: clampedTarget };
+    }
+
+    const row = getChannelRow(channelName);
+    if (!row) {
+        return { absolute: clampedTarget, rescaleFactor: 1, raised: false, currentPercent: clampedTarget };
+    }
+
+    const percentInput = row.querySelector('.percent-input');
+    const endInput = row.querySelector('.end-input');
+    const currentPercent = readPercentFromInput(percentInput);
+    const currentEnd = readEndFromInput(endInput);
+
+    if (isChannelLocked(channelName)) {
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.log('[INK HELPER] channel locked, skipping raise', { channelName, currentPercent, desired: clampedTarget });
+        }
+        if (emitStatus) {
+            let lockedMessage = null;
+            if (typeof lockedStatusFormatter === 'function') {
+                lockedMessage = lockedStatusFormatter({
+                    channelName,
+                    currentPercent,
+                    desiredAbsolute: clampedTarget,
+                    source
+                });
+            } else if (typeof lockedStatusMessage === 'string' && lockedStatusMessage) {
+                lockedMessage = lockedStatusMessage;
+            }
+            if (lockedMessage) {
+                showStatus(lockedMessage);
+            }
+        }
+        return {
+            absolute: Math.min(clampedTarget, currentPercent),
+            rescaleFactor: 1,
+            raised: false,
+            locked: true,
+            currentPercent
+        };
+    }
+
+    if (clampedTarget <= currentPercent + epsilon) {
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.log('[INK HELPER] within current limit', { channelName, currentPercent, target: clampedTarget });
+        }
+        return {
+            absolute: Math.min(clampedTarget, currentPercent),
+            rescaleFactor: 1,
+            raised: false,
+            currentPercent
+        };
+    }
+
+    const newPercent = Math.min(100, Math.max(clampedTarget, currentPercent));
+    if (Math.abs(newPercent - currentPercent) < epsilon) {
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.log('[INK HELPER] change below threshold', { channelName, currentPercent, newPercent, target: clampedTarget });
+        }
+        return {
+            absolute: Math.min(clampedTarget, newPercent),
+            rescaleFactor: 1,
+            raised: false,
+            currentPercent
+        };
+    }
+
+    const newEndRaw = InputValidator.computeEndFromPercent(newPercent);
+    const newEnd = Math.round(InputValidator.clampEnd(newEndRaw));
+
+    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+        console.log('[INK HELPER] raising limit', {
+            channelName,
+            previousPercent: currentPercent,
+            newPercent,
+            previousEnd: currentEnd,
+            newEnd,
+            target: clampedTarget
+        });
+    }
+
+    if (percentInput) {
+        percentInput.value = formatPercentDisplay(newPercent);
+        percentInput.setAttribute('data-base-percent', String(newPercent));
+    }
+    if (endInput) {
+        endInput.value = String(newEnd);
+        endInput.setAttribute('data-base-end', String(newEnd));
+    }
+
+    if (newPercent > 0 && row.hasAttribute('data-user-disabled')) {
+        row.removeAttribute('data-user-disabled');
+        const disabledTag = row.querySelector('[data-disabled]');
+        if (disabledTag) {
+            disabledTag.classList.add('invisible');
+        }
+        if (row._virtualCheckbox) {
+            try {
+                row._virtualCheckbox.checked = true;
+            } catch (err) {
+                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                    console.warn('[SMART CURVES] Failed to sync virtual checkbox on auto-enable:', err);
+                }
+            }
+        }
+    }
+
+    const loadedData = ensureLoadedQuadData(() => ({
+        curves: {},
+        baselineEnd: {},
+        sources: {},
+        keyPoints: {},
+        keyPointsMeta: {},
+        rebasedCurves: {},
+        rebasedSources: {}
+    }));
+    loadedData.baselineEnd = loadedData.baselineEnd || {};
+    loadedData.baselineEnd[channelName] = newEnd;
+
+    const manager = getStateManager?.();
+    if (manager) {
+        manager.setChannelValue(channelName, 'percentage', newPercent);
+        manager.setChannelValue(channelName, 'endValue', newEnd);
+        manager.setChannelEnabled(channelName, newEnd > 0 || newPercent > 0);
+    }
+
+    updateChannelLockBounds(channelName, { percent: newPercent, endValue: newEnd });
+    updateScaleBaselineForChannel(channelName);
+    triggerRevertButtonsUpdate();
+
+    const history = getHistoryManager?.();
+    if (history && typeof history.recordChannelAction === 'function') {
+        try {
+            history.recordChannelAction(channelName, 'percentage', currentPercent, newPercent);
+            history.recordChannelAction(channelName, 'endValue', currentEnd, newEnd);
+        } catch (err) {
+            console.warn('[SMART CURVES] Failed to record ink-limit history:', err);
+        }
+    }
+
+    let messageText = null;
+    if (typeof statusFormatter === 'function') {
+        try {
+            messageText = statusFormatter({
+                channelName,
+                previousPercent: currentPercent,
+                newPercent,
+                desiredAbsolute: clampedTarget,
+                source
+            });
+        } catch (formatterErr) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[INK HELPER] statusFormatter failed:', formatterErr);
+            }
+            messageText = null;
+        }
+    } else if (typeof statusMessage === 'string' && statusMessage) {
+        messageText = statusMessage;
+    }
+    if (!messageText) {
+        messageText = `${channelName} ink limit changed to ${formatPercentDisplay(newPercent)}%`;
+    }
+
+    if (emitStatus && messageText) {
+        showStatus(messageText);
+    }
+
+    const rescaleFactor = (currentPercent > 1e-6 && newPercent > 1e-6)
+        ? (currentPercent / newPercent)
+        : 1;
+
+    const absolute = Math.min(clampedTarget, newPercent);
+    return {
+        absolute,
+        rescaleFactor,
+        raised: true,
+        currentPercent,
+        previousPercent: currentPercent,
+        newPercent,
+        previousEnd: currentEnd,
+        newEnd,
+        message: messageText,
+        source
+    };
+}
+
 function isDefaultRampPoints(points) {
     if (!Array.isArray(points) || points.length !== 2) {
         return false;
@@ -149,7 +377,8 @@ function getChannelPercent(channelName) {
     const row = getChannelRow(channelName);
     const percentInput = row?.querySelector('.percent-input');
     if (!percentInput) return 100;
-    const percent = InputValidator.clampPercent(percentInput.value);
+    const base = percentInput.getAttribute('data-base-percent');
+    const percent = InputValidator.clampPercent(base !== null ? base : percentInput.value);
     return Number.isFinite(percent) && percent > 0 ? percent : 100;
 }
 
@@ -484,6 +713,12 @@ export function extractAdaptiveKeyPointsFromValues(values, options = {}) {
  * @returns {boolean} True if rescaling was applied
  */
 export function rescaleSmartCurveForInkLimit(channelName, fromPercent, toPercent, options = {}) {
+    if (channelName && isChannelLocked(channelName)) {
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.log('[SMART CURVES] Rescale skipped for locked channel', channelName);
+        }
+        return false;
+    }
     if (!isSmartCurve(channelName) || !Number.isFinite(fromPercent) || !Number.isFinite(toPercent) || fromPercent <= 0 || toPercent < 0) {
         return false;
     }
@@ -724,8 +959,8 @@ function ensureEditableKeyPointsForChannel(channelName, interpolationType = 'smo
 
         // Create simplified key points from the curve using adaptive algorithm
         const candidate = extractAdaptiveKeyPointsFromValues(values, {
-            maxErrorPercent: 0.25,
-            maxPoints: 21
+            maxErrorPercent: KP_SIMPLIFY.maxErrorPercent,
+            maxPoints: KP_SIMPLIFY.maxPoints
         });
 
         if (candidate.length < 2) {
@@ -774,6 +1009,19 @@ export function adjustSmartKeyPointByIndex(channelName, ordinal, params = {}) {
     }
 
     const points = kp.map(p => ({ input: p.input, output: p.output }));
+    const history = getHistoryManager?.();
+    let historyTransactionId = null;
+    const shouldRecordHistory = !params.skipHistory && history && typeof history.beginTransaction === 'function';
+    if (shouldRecordHistory) {
+        try {
+            historyTransactionId = history.beginTransaction(`Adjust ${channelName} key point`);
+        } catch (err) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[SMART CURVES] Failed to start history transaction:', err);
+            }
+            historyTransactionId = null;
+        }
+    }
     const idx = ordinal - 1;
     const target = points[idx];
 
@@ -798,7 +1046,25 @@ export function adjustSmartKeyPointByIndex(channelName, ordinal, params = {}) {
 
     // Clamp values
     newAbsoluteOutput = ControlPolicy.clampY(newAbsoluteOutput);
-    const newOutput = toRelativeOutput(channelName, newAbsoluteOutput);
+    const outputClamp = clampAbsoluteToChannelLock(channelName, newAbsoluteOutput);
+    if (outputClamp.clamped) {
+        newAbsoluteOutput = outputClamp.value;
+    }
+    const limitAdjust = ensureInkLimitForAbsoluteTarget(channelName, newAbsoluteOutput);
+    const adjustedAbsolute = Number.isFinite(limitAdjust?.absolute)
+        ? limitAdjust.absolute
+        : newAbsoluteOutput;
+    const rescaleFactor = Number.isFinite(limitAdjust?.rescaleFactor) ? limitAdjust.rescaleFactor : 1;
+
+    if (rescaleFactor !== 1) {
+        for (let j = 0; j < points.length; j += 1) {
+            if (j === idx) continue;
+            points[j].output = ControlPolicy.clampY(points[j].output * rescaleFactor);
+        }
+    }
+
+    const newOutput = toRelativeOutput(channelName, adjustedAbsolute);
+    newAbsoluteOutput = adjustedAbsolute;
 
     // Bounds for input to maintain order
     const gap = ControlPolicy.minGap;
@@ -812,7 +1078,18 @@ export function adjustSmartKeyPointByIndex(channelName, ordinal, params = {}) {
     points[idx] = { input: newInput, output: newOutput };
 
     // Normalize and persist
-    const normalizedPoints = ControlPoints.normalize(points);
+    let normalizedPoints = ControlPoints.normalize(points);
+    if (isChannelLocked(channelName)) {
+        normalizedPoints = normalizedPoints.map((point) => {
+            const absolute = toAbsoluteOutput(channelName, point.output);
+            const clamp = clampAbsoluteToChannelLock(channelName, absolute);
+            if (clamp.clamped) {
+                const adjusted = toRelativeOutput(channelName, clamp.value);
+                return { input: point.input, output: ControlPolicy.clampY(adjusted) };
+            }
+            return point;
+        });
+    }
     ControlPoints.persist(channelName, normalizedPoints, interpType);
     if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
         console.log('[SMART CURVES] adjustSmartKeyPointByIndex normalized points', {
@@ -834,8 +1111,9 @@ export function adjustSmartKeyPointByIndex(channelName, ordinal, params = {}) {
         const xi = (i / DENOM) * 100;
         const percent = ControlPoints.sampleY(normalizedPoints, interpType, xi);
         const clamped = Math.max(0, Math.min(100, percent));
-        const absolutePercent = (clamped / 100) * channelPercent;
-        samples[i] = Math.round((absolutePercent / 100) * TOTAL);
+        const rawAbsolute = (clamped / 100) * channelPercent;
+        const lockClamp = clampAbsoluteToChannelLock(channelName, rawAbsolute);
+        samples[i] = Math.round((lockClamp.value / 100) * TOTAL);
     }
     data.curves[channelName] = samples;
 
@@ -851,13 +1129,23 @@ export function adjustSmartKeyPointByIndex(channelName, ordinal, params = {}) {
         });
     }
 
-    return {
+    const resultPayload = {
         success: true,
         message: `Adjusted key point ${ordinal} for ${channelName}`,
         channelName,
         ordinal,
         newPoint: { input: newInput, output: newAbsoluteOutput }
     };
+
+    if (historyTransactionId && history && typeof history.commit === 'function') {
+        try {
+            history.commit(historyTransactionId);
+        } catch (err) {
+            console.warn('[SMART CURVES] Failed to commit history transaction:', err);
+        }
+    }
+
+    return resultPayload;
 }
 
 /**
@@ -870,6 +1158,10 @@ export function adjustSmartKeyPointByIndex(channelName, ordinal, params = {}) {
 export function insertSmartKeyPointAt(channelName, inputPercent, outputPercent = null) {
     if (!channelName || typeof inputPercent !== 'number') {
         return { success: false, message: 'Invalid channel name or input percentage' };
+    }
+
+    if (isChannelLocked(channelName)) {
+        return { success: false, message: getChannelLockEditMessage(channelName, 'inserting points') };
     }
 
     const x = ControlPolicy.clampX(inputPercent);
@@ -893,13 +1185,41 @@ export function insertSmartKeyPointAt(channelName, inputPercent, outputPercent =
     const points = kp.map(p => ({ input: p.input, output: p.output }));
     points.sort((a, b) => a.input - b.input);
 
+    const insertHistory = getHistoryManager?.();
+    let insertTransactionId = null;
+    if (insertHistory && typeof insertHistory.beginTransaction === 'function') {
+        try {
+            insertTransactionId = insertHistory.beginTransaction(`Insert point ${channelName}`);
+        } catch (err) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[SMART CURVES] Failed to start history transaction for insert:', err);
+            }
+            insertTransactionId = null;
+        }
+    }
+
     // Determine output value
     let absoluteOutput;
+    let rescaleFactor = 1;
     if (outputPercent === null || outputPercent === undefined) {
         const sampledRelative = ControlPoints.sampleY(points, interpType, x);
         absoluteOutput = ControlPolicy.clampY(toAbsoluteOutput(channelName, sampledRelative));
     } else {
-        absoluteOutput = ControlPolicy.clampY(outputPercent);
+        const clampedInput = ControlPolicy.clampY(outputPercent);
+        const lockClamp = clampAbsoluteToChannelLock(channelName, clampedInput);
+        const limitAdjust = ensureInkLimitForAbsoluteTarget(channelName, lockClamp.value);
+        absoluteOutput = Number.isFinite(limitAdjust?.absolute) ? limitAdjust.absolute : lockClamp.value;
+        rescaleFactor = Number.isFinite(limitAdjust?.rescaleFactor) ? limitAdjust.rescaleFactor : 1;
+        if (rescaleFactor !== 1) {
+            for (let i = 0; i < points.length; i += 1) {
+                points[i].output = ControlPolicy.clampY(points[i].output * rescaleFactor);
+            }
+        }
+    }
+
+    const lockClampFinal = clampAbsoluteToChannelLock(channelName, absoluteOutput);
+    if (lockClampFinal.clamped) {
+        absoluteOutput = lockClampFinal.value;
     }
 
     const relativeOutput = toRelativeOutput(channelName, absoluteOutput);
@@ -935,7 +1255,22 @@ export function insertSmartKeyPointAt(channelName, inputPercent, outputPercent =
     });
 
     if (!result.success) {
+        if (insertTransactionId && insertHistory && typeof insertHistory.rollback === 'function') {
+            try {
+                insertHistory.rollback(insertTransactionId);
+            } catch (err) {
+                console.warn('[SMART CURVES] Failed to rollback history transaction for insert:', err);
+            }
+        }
         return result;
+    }
+
+    if (insertTransactionId && insertHistory && typeof insertHistory.commit === 'function') {
+        try {
+            insertHistory.commit(insertTransactionId);
+        } catch (err) {
+            console.warn('[SMART CURVES] Failed to commit history transaction for insert:', err);
+        }
     }
 
     return {
@@ -958,6 +1293,10 @@ export function insertSmartKeyPointAt(channelName, inputPercent, outputPercent =
 export function deleteSmartKeyPointByIndex(channelName, ordinal, options = {}) {
     if (!channelName || typeof ordinal !== 'number' || ordinal < 1) {
         return { success: false, message: 'Invalid channel name or ordinal' };
+    }
+
+    if (isChannelLocked(channelName)) {
+        return { success: false, message: getChannelLockEditMessage(channelName, 'deleting points') };
     }
 
     const { points: kp, interpolation: interpType } = ControlPoints.get(channelName);
@@ -1209,6 +1548,10 @@ export function insertSmartKeyPointBetween(channelName, leftOrdinal, rightOrdina
         return { success: false, message: 'Invalid parameters' };
     }
 
+    if (isChannelLocked(channelName)) {
+        return { success: false, message: getChannelLockEditMessage(channelName, 'inserting points') };
+    }
+
     const { points: kp, interpolation: interpType } = ControlPoints.get(channelName);
     if (!kp || kp.length < 2) {
         return { success: false, message: `No Smart key points exist for ${channelName}` };
@@ -1239,7 +1582,18 @@ function applySmartKeyPointsInternal(channelName, keyPoints, interpolationType =
         return { success: false, message: 'Window context unavailable' };
     }
 
-    const normalized = ControlPoints.normalize(keyPoints);
+    let normalized = ControlPoints.normalize(keyPoints);
+    if (isChannelLocked(channelName)) {
+        normalized = normalized.map((point) => {
+            const absolute = toAbsoluteOutput(channelName, point.output);
+            const clamp = clampAbsoluteToChannelLock(channelName, absolute);
+            if (clamp.clamped) {
+                const adjusted = toRelativeOutput(channelName, clamp.value);
+                return { input: point.input, output: ControlPolicy.clampY(adjusted) };
+            }
+            return point;
+        });
+    }
     if (normalized.length < 2) {
         return { success: false, message: 'At least 2 key points are required' };
     }
@@ -1330,12 +1684,15 @@ function applySmartKeyPointsInternal(channelName, keyPoints, interpolationType =
         const x = (i / DENOM) * 100;
         const percent = ControlPoints.sampleY(normalized, interp, x);
         const clamped = Math.max(0, Math.min(100, percent));
-        const absolutePercent = (clamped / 100) * channelPercent;
+        const rawAbsolute = (clamped / 100) * channelPercent;
+        const lockClamp = clampAbsoluteToChannelLock(channelName, rawAbsolute);
+        const absolutePercent = lockClamp.value;
         samples[i] = Math.round((absolutePercent / 100) * TOTAL);
     }
 
     data.curves[channelName] = samples.slice();
     data.sources[channelName] = 'smart';
+    refreshPlotSmoothingSnapshotsForSmartEdit(channelName, samples);
 
     if (!skipHistory && history && typeof history.recordChannelAction === 'function') {
         try {
@@ -1464,4 +1821,60 @@ if (isBrowser) {
     globalScope.rescaleSmartCurveForInkLimit = rescaleSmartCurveForInkLimit;
 }
 
-export { toRelativeOutput, toAbsoluteOutput };
+export { toRelativeOutput, toAbsoluteOutput, ensureInkLimitForAbsoluteTarget };
+export function refreshPlotSmoothingSnapshotsForSmartEdit(channelName, samples) {
+    try {
+        const loadedData = ensureLoadedQuadData(() => ({}));
+        if (!loadedData || !channelName || !Array.isArray(samples)) {
+            return;
+        }
+        const clone = samples.slice();
+        const peak = clone.reduce((max, value) => (value > max ? value : max), 0);
+
+        loadedData.plotBaseCurves = loadedData.plotBaseCurves && typeof loadedData.plotBaseCurves === 'object'
+            ? loadedData.plotBaseCurves
+            : {};
+        loadedData._plotSmoothingOriginalCurves = loadedData._plotSmoothingOriginalCurves && typeof loadedData._plotSmoothingOriginalCurves === 'object'
+            ? loadedData._plotSmoothingOriginalCurves
+            : {};
+        loadedData._plotSmoothingBaselineCurves = loadedData._plotSmoothingBaselineCurves && typeof loadedData._plotSmoothingBaselineCurves === 'object'
+            ? loadedData._plotSmoothingBaselineCurves
+            : {};
+        loadedData._plotSmoothingOriginalEnds = loadedData._plotSmoothingOriginalEnds && typeof loadedData._plotSmoothingOriginalEnds === 'object'
+            ? loadedData._plotSmoothingOriginalEnds
+            : {};
+        loadedData.baselineEnd = loadedData.baselineEnd && typeof loadedData.baselineEnd === 'object'
+            ? loadedData.baselineEnd
+            : {};
+        loadedData.rebasedCurves = loadedData.rebasedCurves && typeof loadedData.rebasedCurves === 'object'
+            ? loadedData.rebasedCurves
+            : {};
+        loadedData.rebasedSources = loadedData.rebasedSources && typeof loadedData.rebasedSources === 'object'
+            ? loadedData.rebasedSources
+            : {};
+
+        loadedData.plotBaseCurves[channelName] = clone.slice();
+        loadedData._plotSmoothingOriginalCurves[channelName] = clone.slice();
+        loadedData._plotSmoothingBaselineCurves[channelName] = clone.slice();
+        loadedData._plotSmoothingOriginalEnds[channelName] = peak;
+        loadedData.baselineEnd[channelName] = peak;
+        loadedData.rebasedCurves[channelName] = clone.slice();
+        loadedData.rebasedSources[channelName] = clone.slice();
+
+        if (!loadedData._zeroSmoothingCurves || typeof loadedData._zeroSmoothingCurves !== 'object') {
+            loadedData._zeroSmoothingCurves = {};
+        }
+        const smoothingPercent = typeof getPlotSmoothingPercent === 'function'
+            ? Number(getPlotSmoothingPercent())
+            : 0;
+        if (!Number.isFinite(smoothingPercent) || smoothingPercent <= 0) {
+            loadedData._zeroSmoothingCurves[channelName] = clone.slice();
+        } else if (!Array.isArray(loadedData._zeroSmoothingCurves[channelName])) {
+            loadedData._zeroSmoothingCurves[channelName] = clone.slice();
+        }
+    } catch (err) {
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.warn('[SMART CURVES] Failed to refresh plot smoothing snapshots:', err);
+        }
+    }
+}

@@ -13,7 +13,8 @@ import {
     createDefaultKeyPoints,
     extractAdaptiveKeyPointsFromValues,
     toRelativeOutput,
-    toAbsoluteOutput
+    toAbsoluteOutput,
+    KP_SIMPLIFY
 } from '../curves/smart-curves.js';
 import { LinearizationState } from '../data/linearization-utils.js';
 import { getChannelRow } from './channel-registry.js';
@@ -23,6 +24,8 @@ import { updateSessionStatus } from './graph-status.js';
 import { registerDebugNamespace, getDebugRegistry } from '../utils/debug-registry.js';
 import { showStatus } from './status-service.js';
 import { getLegacyHelper, invokeLegacyHelper } from '../legacy/legacy-helpers.js';
+import { getHistoryManager } from '../core/history-manager.js';
+import { isChannelLocked, getChannelLockEditMessage } from '../core/channel-locks.js';
 
 /**
  * Edit mode global state
@@ -48,6 +51,359 @@ function getStateManagerSafe() {
         }
     }
     return cachedStateManager;
+}
+
+const SmartPointDragContext = {
+    active: false,
+    channel: null,
+    ordinal: 0,
+    originalPoints: null,
+    originalInterpolation: 'smooth',
+    selectionBefore: null,
+    originalCurve: null,
+    originalSource: null,
+    transactionId: null,
+    historyDescription: null,
+    originalInkLimits: null
+};
+
+function clonePoints(points) {
+    if (!Array.isArray(points)) return null;
+    return points.map((p) => ({ input: Number(p.input), output: Number(p.output) }));
+}
+
+function formatPercentForBaseline(value) {
+    if (!Number.isFinite(value)) return '0';
+    const roundedInt = Math.round(value);
+    if (Math.abs(value - roundedInt) < 0.05) {
+        return String(roundedInt);
+    }
+    return Number(value.toFixed(1)).toString();
+}
+
+function restoreInkLimitBaseline(channelName, baseline) {
+    if (!channelName || !baseline) {
+        return;
+    }
+
+    const row = getChannelRow(channelName);
+    if (!row) {
+        return;
+    }
+
+    const percentInput = row.querySelector('.percent-input');
+    const endInput = row.querySelector('.end-input');
+
+    const percentValue = Number.isFinite(baseline.percent) ? baseline.percent : 0;
+    const endValue = Number.isFinite(baseline.end) ? baseline.end : 0;
+
+    if (percentInput) {
+        percentInput.value = formatPercentForBaseline(percentValue);
+        percentInput.setAttribute('data-base-percent', String(percentValue));
+    }
+
+    if (endInput) {
+        const roundedEnd = Math.round(endValue);
+        endInput.value = String(roundedEnd);
+        endInput.setAttribute('data-base-end', String(roundedEnd));
+    }
+
+    try {
+        const manager = getStateManagerSafe();
+        if (manager) {
+            manager.setChannelValue(channelName, 'percentage', percentValue, { skipHistory: true, allowDuringRestore: true });
+            manager.setChannelValue(channelName, 'endValue', Math.round(endValue), { skipHistory: true, allowDuringRestore: true });
+        }
+    } catch (err) {
+        console.warn('[EDIT MODE] Failed to restore ink baseline in state manager:', err);
+    }
+
+    try {
+        const loadedData = ensureLoadedQuadData?.(() => ({
+            curves: {},
+            baselineEnd: {},
+            sources: {},
+            keyPoints: {},
+            keyPointsMeta: {},
+            rebasedCurves: {},
+            rebasedSources: {}
+        }));
+        if (loadedData) {
+            if (!loadedData.baselineEnd) {
+                loadedData.baselineEnd = {};
+            }
+            loadedData.baselineEnd[channelName] = Math.round(endValue);
+        }
+    } catch (stateErr) {
+        console.warn('[EDIT MODE] Failed to restore baselineEnd data:', stateErr);
+    }
+}
+
+export function isSmartPointDragActive() {
+    return SmartPointDragContext.active;
+}
+
+export function beginSmartPointDrag(channelName, ordinal) {
+    if (!isEditModeEnabled()) {
+        return { success: false, message: 'Edit mode is off' };
+    }
+    if (!channelName || !Number.isFinite(ordinal) || ordinal < 1) {
+        return { success: false, message: 'Invalid drag target' };
+    }
+
+    if (isChannelLocked(channelName)) {
+        showStatus(`${channelName} ink limit is locked. Unlock before adjusting points.`);
+        return { success: false, message: 'Channel is locked' };
+    }
+
+    ensureSmartKeyPointsForChannel(channelName);
+    const entry = ControlPoints.get(channelName);
+    const points = entry?.points;
+    if (!points || points.length < ordinal) {
+        return { success: false, message: 'Smart key point unavailable' };
+    }
+
+    SmartPointDragContext.active = true;
+    SmartPointDragContext.channel = channelName;
+    SmartPointDragContext.ordinal = ordinal;
+    SmartPointDragContext.originalPoints = clonePoints(points);
+    SmartPointDragContext.originalInterpolation = entry?.interpolation || 'smooth';
+    SmartPointDragContext.selectionBefore = {
+        channel: EDIT_STATE.selectedChannel,
+        ordinal: EDIT_STATE.selectedOrdinal
+    };
+    const loadedData = getLoadedQuadData?.();
+    SmartPointDragContext.originalCurve = Array.isArray(loadedData?.curves?.[channelName])
+        ? loadedData.curves[channelName].slice()
+        : null;
+    SmartPointDragContext.originalSource = loadedData?.sources?.[channelName] ?? null;
+    SmartPointDragContext.historyDescription = `Drag ${channelName} point ${ordinal}`;
+    SmartPointDragContext.transactionId = null;
+    SmartPointDragContext.originalInkLimits = (() => {
+        const row = getChannelRow(channelName);
+        if (!row) return null;
+        const percentInput = row.querySelector('.percent-input');
+        const endInput = row.querySelector('.end-input');
+        if (!percentInput && !endInput) return null;
+
+        const percentAttr = percentInput?.getAttribute('data-base-percent');
+        const endAttr = endInput?.getAttribute('data-base-end');
+
+        const percentBase = Number(percentAttr ?? (percentInput?.value ?? '0'));
+        const endBase = Number(endAttr ?? (endInput?.value ?? '0'));
+
+        return {
+            percent: Number.isFinite(percentBase) ? percentBase : 0,
+            end: Number.isFinite(endBase) ? endBase : 0
+        };
+    })();
+
+    const history = getHistoryManager?.();
+    if (history && typeof history.beginTransaction === 'function') {
+        try {
+            SmartPointDragContext.transactionId = history.beginTransaction(SmartPointDragContext.historyDescription);
+        } catch (err) {
+            console.warn('[EDIT MODE] Failed to start history transaction for drag:', err);
+            SmartPointDragContext.transactionId = null;
+        }
+    }
+
+    setEditSelectionState(channelName, ordinal, { skipHistory: true });
+    refreshEditState();
+    updatePointDisplay();
+
+    return { success: true };
+}
+
+export function updateSmartPointDrag(channelName, ordinal, coords = {}) {
+    if (!SmartPointDragContext.active || SmartPointDragContext.channel !== channelName || SmartPointDragContext.ordinal !== ordinal) {
+        return { success: false, message: 'Drag state mismatch' };
+    }
+
+    if (isChannelLocked(channelName)) {
+        return { success: false, message: 'Channel is locked' };
+    }
+
+    const { inputPercent, outputPercent } = coords || {};
+    const params = {};
+    if (Number.isFinite(inputPercent)) {
+        params.inputPercent = inputPercent;
+    }
+    if (Number.isFinite(outputPercent)) {
+        params.outputPercent = outputPercent;
+    }
+
+    const result = adjustSmartKeyPointByIndex(channelName, ordinal, params);
+    if (result.success) {
+        refreshEditState();
+        updatePointDisplay();
+        triggerInkChartUpdate();
+        return result;
+    }
+    return result;
+}
+
+function restoreSelection(selection) {
+    if (!selection) return;
+    const { channel, ordinal } = selection;
+    if (channel) {
+        setEditSelectionState(channel, ordinal ?? 1, { skipHistory: true });
+        refreshEditState();
+        updatePointDisplay();
+    }
+}
+
+function keyPointsChanged(beforePoints, afterPoints, beforeInterpolation, afterInterpolation) {
+    if (beforeInterpolation !== afterInterpolation) {
+        return true;
+    }
+    if ((!beforePoints || beforePoints.length === 0) && (!afterPoints || afterPoints.length === 0)) {
+        return false;
+    }
+    if (!beforePoints || !afterPoints || beforePoints.length !== afterPoints.length) {
+        return true;
+    }
+    for (let i = 0; i < beforePoints.length; i++) {
+        const prev = beforePoints[i];
+        const next = afterPoints[i];
+        if (!next) return true;
+        if (Math.abs((prev.input ?? 0) - (next.input ?? 0)) > 0.0001) {
+            return true;
+        }
+        if (Math.abs((prev.output ?? 0) - (next.output ?? 0)) > 0.0001) {
+            return true;
+        }
+    }
+    return false;
+}
+
+export function endSmartPointDrag(options = {}) {
+    if (!SmartPointDragContext.active) {
+        return { success: false, message: 'No drag in progress' };
+    }
+
+    const history = getHistoryManager?.();
+    const { commit = true } = options || {};
+    const channelName = SmartPointDragContext.channel;
+    const ordinal = SmartPointDragContext.ordinal;
+
+    if (commit && isChannelLocked(channelName)) {
+        return endSmartPointDrag({ ...options, commit: false });
+    }
+
+    const originalPoints = SmartPointDragContext.originalPoints ? clonePoints(SmartPointDragContext.originalPoints) : null;
+    const originalInterpolation = SmartPointDragContext.originalInterpolation;
+    const selectionBefore = SmartPointDragContext.selectionBefore;
+    const originalCurve = Array.isArray(SmartPointDragContext.originalCurve)
+        ? SmartPointDragContext.originalCurve.slice()
+        : (SmartPointDragContext.originalCurve || null);
+    const originalSource = SmartPointDragContext.originalSource;
+    const transactionId = SmartPointDragContext.transactionId;
+    const historyDescription = SmartPointDragContext.historyDescription;
+
+    const inkBaseline = SmartPointDragContext.originalInkLimits;
+
+    const resetDragContext = () => {
+        SmartPointDragContext.active = false;
+        SmartPointDragContext.channel = null;
+        SmartPointDragContext.ordinal = 0;
+        SmartPointDragContext.originalPoints = null;
+        SmartPointDragContext.originalInterpolation = 'smooth';
+        SmartPointDragContext.selectionBefore = null;
+        SmartPointDragContext.originalCurve = null;
+        SmartPointDragContext.originalSource = null;
+        SmartPointDragContext.transactionId = null;
+        SmartPointDragContext.historyDescription = null;
+        SmartPointDragContext.originalInkLimits = null;
+    };
+
+    if (!commit) {
+        if (originalPoints) {
+            setSmartKeyPoints(channelName, originalPoints, originalInterpolation, { skipHistory: true, skipMarkEdited: true, allowWhenEditModeOff: true });
+            restoreSelection(selectionBefore);
+            triggerInkChartUpdate();
+            triggerPreviewUpdate();
+        }
+        if (transactionId && history && typeof history.rollback === 'function') {
+            try {
+                history.rollback(transactionId);
+            } catch (err) {
+                console.warn('[EDIT MODE] Failed to rollback drag transaction:', err);
+            }
+        }
+        if (inkBaseline) {
+            restoreInkLimitBaseline(channelName, inkBaseline);
+        }
+        resetDragContext();
+        return { success: true, reverted: true };
+    }
+
+    const entry = ControlPoints.get(channelName);
+    const finalPoints = clonePoints(entry?.points || []);
+    const finalInterpolation = entry?.interpolation || 'smooth';
+
+    const loadedData = getLoadedQuadData?.();
+    const newCurve = Array.isArray(loadedData?.curves?.[channelName])
+        ? loadedData.curves[channelName].slice()
+        : null;
+    const newSource = loadedData?.sources?.[channelName] ?? null;
+
+    const changed = originalPoints
+        ? keyPointsChanged(originalPoints, finalPoints, originalInterpolation, finalInterpolation)
+        : (finalPoints.length > 0);
+
+    if (changed && history) {
+        try {
+            if (typeof history.recordKeyPointsChange === 'function') {
+                history.recordKeyPointsChange(channelName, originalPoints, finalPoints, originalInterpolation, finalInterpolation);
+            }
+            if (typeof history.recordChannelAction === 'function') {
+                const extras = {
+                    oldKeyPoints: originalPoints,
+                    newKeyPoints: finalPoints,
+                    oldInterpolation: originalInterpolation,
+                    newInterpolation: finalInterpolation,
+                    oldSource: originalSource,
+                    newSource,
+                    selectedOrdinalBefore: selectionBefore?.ordinal ?? ordinal,
+                    selectedChannelBefore: selectionBefore?.channel ?? channelName,
+                    selectedOrdinalAfter: ordinal,
+                    selectedChannelAfter: channelName
+                };
+                if (historyDescription) {
+                    extras.description = historyDescription;
+                }
+history.recordChannelAction(channelName, 'curve', originalCurve, newCurve, extras);
+            }
+        } catch (err) {
+            console.warn('[EDIT MODE] History recording failed after drag:', err);
+        }
+    }
+
+    if (transactionId && history && typeof history.commit === 'function') {
+        try {
+            history.commit(transactionId);
+        } catch (err) {
+            console.warn('[EDIT MODE] Failed to commit drag transaction:', err);
+        }
+    }
+
+    refreshEditState();
+    updatePointDisplay();
+    triggerInkChartUpdate();
+    triggerPreviewUpdate();
+
+    if (inkBaseline) {
+        restoreInkLimitBaseline(channelName, inkBaseline);
+    }
+
+    resetDragContext();
+
+    return { success: true, channel: channelName, ordinal };
+}
+
+export function cancelSmartPointDrag() {
+    return endSmartPointDrag({ commit: false });
 }
 
 function getCurrentGlobalFilename() {
@@ -320,6 +676,11 @@ function applyNudgeToSelectedPoint(deltaInput, deltaOutput, event) {
 
     const channelName = EDIT_STATE.selectedChannel;
     if (!channelName) return;
+
+    if (isChannelLocked(channelName)) {
+        showStatus(getChannelLockEditMessage(channelName, 'deleting points'));
+        return;
+    }
 
     if (!editIsChannelEnabled(channelName)) {
         showStatus('Channel disabled – enable in Channels to edit');
@@ -786,6 +1147,51 @@ export function setSelectedChannel(channelName, options = {}) {
     refreshEditState();
 }
 
+export function selectSmartPointOrdinal(channelName, ordinal, options = {}) {
+    if (!isEditModeEnabled()) {
+        return { success: false, message: 'Edit mode is off' };
+    }
+
+    const targetChannel = channelName || EDIT_STATE.selectedChannel;
+    if (!targetChannel) {
+        showStatus('No channel selected');
+        return { success: false, message: 'No channel selected' };
+    }
+
+    ensureSmartKeyPointsForChannel(targetChannel);
+    const entry = ControlPoints.get(targetChannel);
+    const points = entry?.points || [];
+    if (!Array.isArray(points) || points.length === 0) {
+        showStatus('No Smart key points available — add or recompute points first');
+        return { success: false, message: 'No Smart key points available' };
+    }
+
+    const roundedOrdinal = Math.round(Number(ordinal) || 1);
+    const clampedOrdinal = Math.max(1, Math.min(points.length, roundedOrdinal));
+    const description = options?.description || `Select ${targetChannel} Smart point ${clampedOrdinal}`;
+
+    setEditSelectionState(targetChannel, clampedOrdinal, {
+        description,
+        skipHistory: options?.skipHistory ?? false
+    });
+
+    refreshEditState();
+    updatePointDisplay();
+    triggerInkChartUpdate();
+
+    if (!options?.silent) {
+        const point = points[clampedOrdinal - 1] || null;
+        const inputLabel = point ? formatPercentForBaseline(point.input ?? 0) : String(clampedOrdinal);
+        showStatus(`Selected ${targetChannel} point ${clampedOrdinal} (${inputLabel}%)`);
+    }
+
+    return {
+        success: true,
+        channel: targetChannel,
+        ordinal: clampedOrdinal
+    };
+}
+
 /**
  * Ensure Smart key points exist for a channel
  * @param {string} channelName - Channel name
@@ -1022,8 +1428,8 @@ export function reinitializeChannelSmartCurves(channelName, options = {}) {
                         console.log(`[EDIT MODE] ✅ Directly mapped ${keyPoints.length} measurement points for ${channelName}`);
                     } else {
                         keyPoints = extractAdaptiveKeyPointsFromValues(values, {
-                            maxErrorPercent: 0.25,
-                            maxPoints: 21
+                            maxErrorPercent: KP_SIMPLIFY.maxErrorPercent,
+                            maxPoints: KP_SIMPLIFY.maxPoints
                         });
                         console.log(`[EDIT MODE] ✅ Created ${keyPoints.length} adaptive key points for ${channelName} from measurement curve`);
                     }
@@ -1501,8 +1907,8 @@ function initializeEditModeForChannels() {
 
                     if (values && values.length === 256) {
                         keyPoints = extractAdaptiveKeyPointsFromValues(values, {
-                            maxErrorPercent: 0.25,
-                            maxPoints: 21
+                            maxErrorPercent: KP_SIMPLIFY.maxErrorPercent,
+                            maxPoints: KP_SIMPLIFY.maxPoints
                         });
                         console.log(`[EDIT MODE] ✅ Created ${keyPoints.length} algorithm-extracted key points for ${channelName}`);
                     }
@@ -1958,8 +2364,10 @@ function handleRecompute() {
         const maxErrorElement = document.getElementById('editMaxError');
         const maxPointsElement = document.getElementById('editMaxPoints');
 
-        const maxError = maxErrorElement ?
-            Math.max(0.05, Math.min(5, parseFloat(maxErrorElement.value || '0.25'))) : 0.25;
+        const defaultMaxError = KP_SIMPLIFY.maxErrorPercent;
+        const maxError = maxErrorElement
+            ? Math.max(0.05, Math.min(5, parseFloat(maxErrorElement.value || String(defaultMaxError))))
+            : defaultMaxError;
         const maxPoints = maxPointsElement ?
             Math.max(2, Math.min(21, parseInt(maxPointsElement.value || '21', 10))) : 21;
 
@@ -2028,6 +2436,11 @@ function handleDeleteKeyPoint() {
 
     const channelName = EDIT_STATE.selectedChannel;
     if (!channelName) return;
+
+    if (isChannelLocked(channelName)) {
+        showStatus(getChannelLockEditMessage(channelName, 'deleting points'));
+        return;
+    }
 
     if (!editIsChannelEnabled(channelName)) {
         showStatus('Channel disabled – enable in Channels to edit');
@@ -2099,6 +2512,24 @@ function handleXYInput() {
         return;
     }
 
+    let absoluteY = y;
+    try {
+        const row = document.querySelector(`tr[data-channel="${channelName}"]`);
+        const percentInput = row?.querySelector('.percent-input');
+        const percentValue = percentInput ? InputValidator.clampPercent(percentInput.getAttribute('data-base-percent') ?? percentInput.value) : 100;
+        if (Number.isFinite(percentValue) && percentValue > 0) {
+            if (y > percentValue && y <= 100) {
+                absoluteY = (y / 100) * percentValue;
+            } else if (y > 100) {
+                absoluteY = percentValue;
+            }
+        }
+    } catch (percentErr) {
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.warn('[EDIT MODE] XY input percent clamp failed', percentErr);
+        }
+    }
+
     const { orderedPoints, sortedOrdinal, rawOrdinal } = getSelectedPointContext(channelName);
     if (orderedPoints.length === 0 || rawOrdinal == null) {
         xyInput.classList.add('border-red-300');
@@ -2110,11 +2541,11 @@ function handleXYInput() {
     try {
         const result = adjustSmartKeyPointByIndex(channelName, rawOrdinal, {
             inputPercent: x,
-            outputPercent: y
+            outputPercent: absoluteY
         });
 
         if (result.success) {
-            showStatus(`Updated key point ${sortedOrdinal} to ${x.toFixed(1)}, ${y.toFixed(1)}`);
+            showStatus(`Updated key point ${sortedOrdinal} to ${x.toFixed(1)}, ${absoluteY.toFixed(1)}`);
             refreshEditState();
             updateChartAndPreview();
             xyInput.classList.remove('border-red-300');
@@ -2270,7 +2701,13 @@ registerDebugNamespace('editMode', {
     EDIT_STATE,
     refreshEditState,
     updatePointDisplay,
-    edit_refreshPointIndex: updatePointDisplay
+    edit_refreshPointIndex: updatePointDisplay,
+    beginSmartPointDrag,
+    updateSmartPointDrag,
+    endSmartPointDrag,
+    cancelSmartPointDrag,
+    selectSmartPointOrdinal,
+    isSmartPointDragActive
 }, {
     exposeOnWindow: true,
     windowAliases: [
@@ -2279,7 +2716,13 @@ registerDebugNamespace('editMode', {
         'reinitializeChannelSmartCurves',
         'EDIT',
         'refreshEditState',
-        'edit_refreshPointIndex'
+        'edit_refreshPointIndex',
+        'beginSmartPointDrag',
+        'updateSmartPointDrag',
+        'endSmartPointDrag',
+        'cancelSmartPointDrag',
+        'isSmartPointDragActive',
+        'selectSmartPointOrdinal'
     ]
 });
 

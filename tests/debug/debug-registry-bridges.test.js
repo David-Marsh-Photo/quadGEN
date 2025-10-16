@@ -15,6 +15,8 @@ describe('Legacy bridge debug registry coverage', () => {
   beforeEach(async () => {
     vi.resetModules();
     delete globalThis.window;
+    globalThis.addEventListener = vi.fn();
+    globalThis.removeEventListener = vi.fn();
     globalThis.localStorage = {
       getItem: vi.fn(),
       setItem: vi.fn(),
@@ -51,6 +53,8 @@ describe('Legacy bridge debug registry coverage', () => {
   afterEach(() => {
     delete globalThis.localStorage;
     delete globalThis.document;
+    delete globalThis.addEventListener;
+    delete globalThis.removeEventListener;
   });
 
   it('registers scaling utilities helpers', async () => {

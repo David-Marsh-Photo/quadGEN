@@ -13,6 +13,281 @@ Goal: ensure undo removes both measurement data and the associated UI toggle sta
 
 Record the result in your test log. If either check fails, the regression guard has detected a problem.
 
+## Edit Mode — Curve Point Dragging
+Goal: confirm the curve point dragging toggle (Options panel) works and preserves Smart-curve ordering.
+
+### Manual Steps:
+1. Open the latest `index.html`, click ⚙️ Options, and confirm **Enable curve point dragging** is checked by default (re-enable it if a prior session left it off).
+2. Load `testdata/Manual-LAB-Data.txt` via **Load LAB / Manual** so Edit Mode seeds Smart points.
+3. Enter Edit Mode, select the MK channel, and navigate to point 3.
+4. Drag point 3 upward via the chart. Expect the curve to update in real time and the point to retain its ordinal.
+5. Drag point 3 far left toward point 2. Release—the X coordinate must clamp just to the right of point 2 (no crossing or reorder).
+6. Toggle the option off and refresh the page to ensure the checkbox remembers the override (it should remain unchecked until you re-enable it); restore the default-On state before leaving the session.
+7. Drag a point off the chart entirely (e.g., past the right edge) and release—the point should snap back to its original coordinates with no staircase artifacts.
+
+Document pass/fail and attach screenshots if the drag behaviour deviates (e.g., points jump, curve collapses, or the toggle fails to persist state).
+
+## Correction Overlay Toggle
+Goal: ensure the new Options toggle draws and hides the dashed correction target overlay reliably.
+
+### Manual Steps:
+1. Load `index.html`, open ⚙️ Options, and confirm **Show correction target overlay** is checked by default (re-enable it if a prior session stored an override).
+2. Load `testdata/Manual-LAB-Data.txt` via **Load LAB / Manual** and wait until the global correction applies (status toast should reference the file and the chart should redraw).
+3. With the toggle still on, confirm the chart shows the dashed red correction overlay plus the purple diagonal baseline (ending at the current ink ceiling); `window.isChartDebugShowCorrectionTarget?.()` should return `true`.
+4. Disable **Show correction target overlay** and ensure the dashed overlay disappears; the helper above should return `false`.
+5. Re-enable the toggle and confirm the overlay returns immediately with the same effective ceiling.
+6. Close the Options panel, re-open it, and verify the checkbox still reflects the current state before changing it again.
+
+Capture before/after screenshots of the chart if the overlay fails to appear/disappear or the helper state desynchronizes from the checkbox.
+
+## Light Blocking Overlay Toggle
+Goal: confirm the light-blocking overlay renders, updates with curve edits, and reports cursor samples in the tooltip.
+
+### Manual Steps:
+1. Load `index.html`, open ⚙️ Options, and enable **Show light blocking overlay** (the checkbox remembers prior sessions—turn it on if it was disabled).
+2. Load `data/P800_K36C26LK25_V6.quad` so the chart displays multiple active channels. Once curves appear, hover the chart and confirm the tooltip now includes a `Light Block: …%` line.
+3. Drag the MK channel’s Smart point 4 upward in Edit Mode (or adjust the MK percent slider) and verify the purple overlay shifts immediately while the tooltip values change without requiring a refresh.
+4. Toggle the option off and confirm the overlay disappears and the tooltip reverts to the two-line format.
+5. Re-enable the toggle, close ⚙️ Options, and reopen it to ensure the checkbox still reflects the active state.
+
+Document pass/fail with a screenshot of the overlay and tooltip. Note any lag between edits and overlay refresh, or if the tooltip fails to display the light-blocking line.
+
+## Composite Flagged Snapshots
+Goal: ensure the snapshot flagger highlights abrupt ink swings and surfaces them in both the chart and composite debug panel.
+
+### Manual Steps:
+1. Load `index.html`, open ⚙️ Options, and enable **Enable composite debug overlay** (leave the panel open).
+2. Open DevTools (⌥⌘I / F12) and in the Console run:
+   ```js
+   const channel = 'K';
+   const snapshotFlags = {
+     1: {
+       kind: 'rise',
+       magnitude: 75,
+       threshold: 7,
+       channels: [channel],
+       details: [{ channel, delta: 75, magnitude: 75, direction: 'rise' }],
+       inputPercent: 50,
+     },
+   };
+   const snapshots = [
+     { index: 0, inputPercent: 0, perChannel: { [channel]: { normalizedAfter: 0.2 } } },
+     { index: 1, inputPercent: 50, perChannel: { [channel]: { normalizedAfter: 0.95 } } },
+   ];
+   const summary = { channelNames: [channel], channelMaxima: { [channel]: 65535 } };
+   window.commitCompositeDebugSession?.({ summary, snapshots, selectionIndex: 1, snapshotFlags });
+   window.setCompositeDebugEnabled?.(true);
+   ```
+3. Confirm a 🚩 marker appears near the 50 % input on the chart and hovers show the channel/magnitude tooltip (overlay marker uses `data-flagged-snapshot="1"`).
+4. Verify the composite debug panel lists the flagged snapshot, includes rise/drop arrow + magnitude, and clicking the badge jumps the selection (panel header should show `🚩` after the snapshot label).
+5. Check `window.getCompositeDebugState()?.flags` returns an object with key `1` and the expected metadata (kind `rise`, magnitude ≈ 75, threshold 7).
+6. Clear the session via `window.commitCompositeDebugSession?.(null)` and confirm both chart markers and panel list disappear.
+
+Capture a screenshot that includes the chart flag and the composite debug badge.
+
+## Composite Slope Limiter
+Goal: confirm real composite datasets no longer produce >7 % ink jumps or snapshot flags after redistribution completes.
+
+### Manual Steps:
+1. With the composite debug overlay enabled, load `data/P800_K36C26LK25_V6.quad` followed by `data/P800_K36C26LK25_V6.txt` (Normalized weighting).
+2. Wait for the redistribution toast to clear, then open the composite debug panel and confirm `summary.snapshotFlags` is missing or reports `count: 0`; `window.getCompositeDebugState()?.flags` should return an empty object.
+3. Inspect the chart around ~86 % input: verify the K curve now ramps smoothly (no vertical jump) and no 🚩 marker renders on the canvas.
+4. Sample the final two snapshots (indices 254–255) via the debug selector; K’s `normalizedAfter` entries should differ by ≤ 0.07.
+5. Export the debug state with `window.getCompositeDebugState()` and capture a screenshot highlighting the smooth ramp where the previous build spiked.
+
+If any flags reappear or the Δ exceeds 7 %, file a regression with the exported payload attached.
+
+## Composite Slope Kernel
+Goal: validate the default-on kernel smoother reshapes steep roll-offs without violating the 7 % guard or altering roll-ons.
+
+### Manual Steps:
+1. On load confirm `window.isSlopeKernelSmoothingEnabled?.()` returns `true`. If a prior session disabled it, toggle back on via `window.enableSlopeKernelSmoothing?.(true)` or reload without `QUADGEN_ENABLE_SLOPE_KERNEL=0`.
+2. Load `data/P800_K36C26LK25_V6.quad` and `data/P800_K36C26LK25_V6.txt` with Normalized weighting. Allow redistribution to finish.
+3. Open the composite debug overlay, select the K channel, and focus snapshots 246–252 (≈88–92 % input). Record the `normalizedAfter` deltas—they should begin around 0.05–0.06 and taper below 0.02 over the final three samples (no flat 0.07 staircase).
+4. Ensure no new 🚩 markers appear and `window.getCompositeDebugState()?.flags` stays empty.
+5. For comparison, disable the flag (`window.enableSlopeKernelSmoothing(false)`), rerun the import, and confirm the roll-off reverts to the linear fallback with nearly uniform ~0.07 steps.
+6. Capture both curves (kernel on/off) for traceability and leave the flag off only if you’re intentionally testing the fallback.
+
+Document the measured deltas; if the kernel path exceeds 0.07 or flattens the transition, attach the debug payload with notes.
+
+## Composite Weighting Selector
+Goal: confirm the Isolated/Normalized/Momentum/Equal selector in ⚙️ Options changes how LAB corrections redeploy across multi-ink channels.
+
+### Manual Steps:
+1. Launch `index.html`, open the ⚙️ Options panel, and set **Composite weighting** to **Normalized**.
+2. Load `data/TRIFORCE_V4.quad`, then `data/TRIFORCE_V4.txt`. Enable the composite debug overlay (Options → Enable composite debug overlay) and the redistribution smoothing window toggle, then scrub the snapshot selector to roughly 26 % input—cyan should retain a non-zero corrected value, LK should no longer absorb 100 % of the delta, and the smoothing badge should light up when the hand-off window is active.
+3. Switch the selector back to **Isolated**, reload `data/TRIFORCE_V4.txt`, and verify the same snapshot now drives cyan to 0% while LK carries the remaining correction.
+4. Switch the selector to **Equal**, reload `data/TRIFORCE_V4.txt`, and confirm the snapshot shows cyan/LK shares within a few percent of each other (and no channel monopolizes the correction).
+5. Switch the selector to **Momentum**, reload `data/TRIFORCE_V4.txt`, and confirm:
+   - The summary card shows **Mode Momentum** with a non-empty Momentum row (cyan momentum should exceed LK around the hand-off).
+   - The channel detail list includes a Momentum line, and the snapshot at ~26 % input biases the share toward the higher-momentum channel (cyan regains a non-zero share while LK no longer takes the full delta).
+6. Record the observed cyan/LK values and the Momentum readouts (overlay card or `window.getCompositeDebugState()`) with before/after screenshots for all four modes.
+
+## Auto-Raise × Smoothing Interoperability
+Goal: ensure auto-raising ink limits does not suppress redistribution smoothing windows when Normalized weighting is active.
+
+### Manual Steps:
+1. Open `index.html`, click ⚙️ Options, and enable **Enable composite debug overlay**, **Enable redistribution smoothing window**, and **Auto-raise ink limits after import**. Set **Composite weighting** to **Normalized**.
+2. Load `data/P800_K36C26LK25_V6.quad` via **Load .quad** and wait for the status toast to clear.
+3. Load `data/P800_K36C26LK25_V6.txt` via **Load LAB / Manual** (global import). Expect multiple status toasts announcing the auto-raised channels (K, C, LK at minimum).
+4. Open the composite debug panel (Options overlay should already expose it) and confirm:
+   - `summary.autoRaisedEnds` lists the channels that were raised (you can also call `window.getCompositeDebugState()?.summary?.autoRaisedEnds`).
+   - Each auto-raised entry reports a `reason` (`coverage-exhausted` when a raise occurred, `coverage-available`/`handoff-available` when it was skipped) so coverage-driven decisions are visible without digging through the status log.
+   - `summary.smoothingWindows` reports at least one entry covering the ~55–73 % input band, with `forced: true`.
+   - Snapshot 184 shows the smoothing badge and hover tooltip indicating the taper window (K handing off to C/LK).
+5. Switch **Composite weighting** back to **Equal**, reload `data/P800_K36C26LK25_V6.txt`, and confirm smoothing windows disappear while the auto-raise entries remain—document the behaviour difference (badge missing under Equal is expected).
+6. Switch the selector back to **Normalized**, reload the LAB file one more time, and capture screenshots of the status toast stack plus the composite debug panel showing both auto-raised entries and smoothing windows.
+
+Document pass/fail and attach the screenshots. If either array is missing under Normalized weighting, note the console output from `window.getCompositeDebugState()` in your test log.
+
+## Edit Mode — XY Input Stability
+Goal: ensure editing the `X,Y` field does not rescale the entire curve when channel ink limits are below 100%.
+
+### Manual Steps:
+1. Load `index.html`, choose **P600-P800**, and import `data/TRIFORCE_V3.quad` via **Load .quad**.
+2. Enter Edit Mode, select channel `K`, and navigate to key point 6 (≈57.6%, 16.6%).
+3. In the `X,Y` input, change only the X portion to `60` while keeping the Y portion unchanged (e.g., `60.0,16.6`) and press Enter.
+4. Observe the chart and channel percent:
+   - The curve should adjust locally (point moves right) without lifting the entire midtone region.
+   - The channel percent must remain at 37% and the point’s absolute output should still be near 16.6%.
+5. Repeat, this time entering the relative output (e.g., `60.0,44.8`). Confirm the field snaps back to the channel-limited absolute value (~16.6%) and the surrounding curve remains stable.
+
+Failing either check indicates a regression in the XY input handling; capture screenshots and log the delta between the pre/post sampled curve (sample 128).
+
+## Channel Ink Lock
+Goal: ensure per-channel lock buttons prevent ink limit edits and clamp Smart curve updates.
+
+### Manual Steps:
+1. Open the latest `index.html`, locate the MK row, and click the lock (🔒) button. The percent and End inputs should disable immediately.
+2. Attempt to type a new percent value or use the spinner arrows—values must remain unchanged and a status appears noting the lock.
+3. Unlock the channel, set the percent to 60%, and lock again.
+4. Enter Edit Mode, drag Smart point 3 upward, and confirm the absolute output never exceeds ~60%.
+5. Unlock and verify inputs re-enable, then return the percent to 100% for baseline comparisons.
+
+Record the result (with screenshots if the clamp fails or inputs remain editable while locked).
+
+## Auto-Raise Ink Limit (Flagged)
+Goal: validate the gated auto-raise helper lifts ink limits after loading high-output corrections and reports blocked channels when locks are active.
+
+### Manual Steps:
+1. Load `index.html`, open the ⚙️ Options panel, and confirm **Auto-raise ink limits after import** is enabled (it is on by default).
+2. Set the K channel to 50% via the percent input and confirm the End reflects the lower ceiling.
+3. Import a global LAB correction that peaks above 50%—`testdata/TRIFORCE_V4.txt` or `P800_K36C26LK25_V6.txt` work well.
+4. Expect a status toast such as `K ink limit changed to 64% (auto-raised for global correction)`, the K percent field to update, and `window.getCompositeDebugState().summary.autoRaisedEnds` to list K with `locked: false`.
+5. Undo once and confirm both the correction and ink limit revert to their prior values.
+6. Re-open ⚙️ Options to confirm the toggle remains on, lock the K channel, repeat steps 2–3, and verify: no End change occurs, a lock-specific status appears, and `autoRaisedEnds` records the blocked state (`locked: true`).
+
+Document the observed percent values, status messages, and composite summary output in the regression log.
+
+## Simple Scaling Default Pipeline
+Goal: ensure the Simple Scaling correction method loads by default and records the expected lift summary.
+
+### Manual Steps:
+1. (Optional but recommended) Clear the saved preference: in DevTools run `localStorage.removeItem('quadgen.correctionMethod.v1')`, then refresh `index.html`.
+2. Open the ⚙️ Options panel and confirm **Simple Scaling** is selected under **Correction method**.
+3. Load `data/P800_K36C26LK25_V6.quad`, then load `data/P800_K36C26LK25_V6.txt`.
+4. Observe the chart: the corrected curves should track the Simple Scaling gain (gain overlay enabled) and the dashed baseline should match the original `.quad` draw.
+5. In the console verify the session metadata:
+   ```js
+   const data = window.getLoadedQuadData();
+   ({ method: data?.correctionMethod, summary: data?.simpleScalingSummary });
+   ```
+   Expected: `method === 'simpleScaling'` and `summary.perChannel.K.maxLift === 0`.
+6. Undo once and confirm the method and summary roll back with the curves.
+
+Record screenshots of the Options panel and chart if the default selection or lift summary differ from expectations.
+
+## Composite Redistribution Amplitude Check
+Goal: confirm the density-solver composite redistribution keeps multi-ink `.quad` files balanced without flattening bell curves or collapsing the total amplitude once the pipeline is enabled.
+
+### Manual Steps:
+1. Load `index.html`, open the ⚙️ Options panel, switch **Correction method** to **Density Solver**, and verify the selection sticks (the default Simple Scaling path must be deselected).
+2. In the DevTools console ensure composite redistribution is enabled (`window.isCompositeLabRedistributionEnabled?.()` should return `true`).
+3. Use **Load .quad** to open `data/TRIFORCE_V4.quad`, then load `data/TRIFORCE_V4.txt` via **Load LAB / Manual**.
+4. Observe the Global Correction chart: the cyan (C) and light black (LK) bells should retain their shape below the ink ceiling while the K channel stays above 20 k counts through the midtones (compare against `artifacts/triforce_v4_composite_redistribution.png`).
+5. In the console, capture the total-output spread for reference:
+   ```js
+   const data = window.getLoadedQuadData(); const totals = new Array(256).fill(0);
+   Object.values(data.curves).forEach((arr) => arr.forEach((v, i) => totals[i] += v));
+   ({ min: Math.min(...totals), max: Math.max(...totals) })
+   ```
+   Expected max ≈ 39 k. Values under ~33 k indicate an amplitude regression—re-run with `window.enableCompositeLabRedistribution(false)` to confirm the issue and file a bug with screenshots.
+6. While the files remain loaded, inspect the density solver output:
+   ```js
+   const profile = window.getCompositeDensityProfile?.(95);
+   const summary = profile ? Object.fromEntries(
+     Object.entries(profile.perChannel || {}).map(([name, stats]) => [
+       name,
+       {
+         constant: Number(stats.constant?.toFixed?.(3) ?? stats.constant ?? 0),
+         share: Number(stats.share?.toFixed?.(2) ?? stats.share ?? 0),
+         cumulative: Number(stats.cumulative?.toFixed?.(3) ?? stats.cumulative ?? 0)
+       }
+     ])
+   ) : null;
+   ({ input: profile?.input, densityDelta: profile?.densityDelta, perChannel: summary });
+   ```
+Expect constants roughly `{ LK: 0.08, C: 0.15, K: 0.77 }`, 95 % shares dominated by K (≈0.9), and `densityDelta` matching `targetDensity − measuredDensity` (negative in TRIFORCE highlights, near zero in the deepest shadows). If LK spikes above ~0.1, K drops below 0.7, or `densityDelta` mirrors the weighted baseline instead of the target delta, capture the console output and chart for investigation.
+
+## Composite Coverage Summary
+Goal: confirm coverage ceilings and usage metrics surface correctly for audits.
+
+### Manual Steps:
+1. With `P800_K36C26LK25_V6.quad` and `P800_K36C26LK25_V6.txt` loaded under **Normalized** weighting (auto-raise and smoothing windows enabled), run `window.getCompositeCoverageSummary()` in the console.
+2. Verify each active channel reports `limit`, `buffer`, `bufferedLimit`, `used`, `remaining`, and `overflow`. Highlight inks should land near 0.20 with overflow ≤0.005; K should report a larger limit and similar overflow buffer.
+3. Toggle composite weighting to **Equal**, re-run the command, and confirm the limits/usage remain unchanged (coverage is weighting-agnostic) while smoothing badges may clear as expected.
+4. In the channel table, confirm every Density column now shows a coverage indicator (`Coverage 20.0% / 20.5%`, etc.). Entries that match the console `maxNormalized` should display the same percentages, and rows that are clamped (overflow > 0) should tint amber with a tooltip listing the clamped samples.
+5. Capture both the console output and a screenshot of the channel table indicators for the regression log.
+
+Attach console stats and chart screenshots whenever the amplitude drops unexpectedly or the bell channels flatten against the ceiling.
+
+### Optional Automation
+- Run `node scripts/analyze_composite_weighting.cjs` to compare legacy (composite off) vs composite totals for TRIFORCE fixtures. The script prints total-ink ratios and warning counts so you can spot amplitude drift without taking manual measurements.
+
+## Density Ladder Sequencing (Normalized weighting)
+Goal: confirm Normalized weighting exhausts highlight inks in density order (LK → C → K) and records ladder decisions in composite debug.
+
+### Manual Steps:
+1. Launch `index.html` with default flags (auto-raise on, composite per-sample ceiling on). Ensure **Composite weighting** remains **Normalized** and the composite debug overlay is enabled.
+2. Load `data/P800_K36C26LK25_V6.quad`, then `data/P800_K36C26LK25_V6.txt`. Wait for the global correction toast, then advance the snapshot slider to indices 5, 21, and 22 (roughly 2 %, 8 %, 8.6 % input).
+3. For snapshot 5, confirm LK carries the correction (LK normalizedAfter ≈0.63), C contributes a small increase, and K remains at 0.0. `window.getCompositeDebugState().snapshots[5].ladderSelection` should list LK first, then any secondary contributions.
+4. For snapshot 21, check that LK reaches ≈1.0 normalizedAfter with headroom ≈0, C rises above its baseline (normalizedDelta > 0.25), and K stays at 0.0 (delta ≤ 0.005). `ladderSelection` should show LK then C, while `ladderBlocked` lists K blocked by lighter headroom.
+5. For snapshot 22, confirm LK remains pegged at 1.0, C continues climbing (normalizedAfter ≈0.28), and K still reports a negligible normalized increase (<0.001). The channel Density column should display amber coverage badges for LK/C only (K stays grey).
+6. Inspect `ladderSelection` for LK and C—`floorNormalized` should match the darker stack (baseline or C coverage), `layerNormalized` should report the incremental headroom, and `allowedNormalized` should equal the floating ceiling (baseline + buffer). Record these values along with ladder-blocked messages.
+7. Capture a composite debug screenshot if K activates before C or any ladder entries are missing the new fields (floor / layer / allowed).
+8. Advance to snapshots 40–60 and confirm LK never flat-lines at 1.0 before the crest (`headroomAfter` stays ≥ 0.035 until ≈ snapshot 52). Verify `frontReserveBase` / `frontReserveApplied` appear in the debug payload and that the LK → C hand-off tapers (|LK valueDelta₅₂ − valueDelta₅₃| ≤ 650). Save the snapshot JSON and chart if the reserve fails to engage.
+
+## Baked LAB Analysis
+Goal: ensure `*BAKED*` LAB corrections populate coverage summaries without mutating the underlying curves.
+
+### Manual Steps:
+1. Load `P800_K36C26LK25_V6.quad`, then apply the global `*BAKED* P800_K36C26LK25_V6.txt` correction (confirm the status toast shows the `*BAKED*` filename).
+2. Open the composite debug overlay (⚙️ Options → **Enable composite debug overlay**) and move the snapshot slider to roughly 72 % input (snapshot 184). Alternatively, run `window.getCompositeDebugState().snapshots[184]` in the console.
+3. Verify `deltaDensity` and `inkDelta` are both `0`, and the per-channel table shows `valueDelta = 0` / `normalizedDelta = 0` for K, C, and LK. The plotted curves should remain identical to the loaded `.quad`.
+4. Run `window.getCompositeCoverageSummary()` and confirm limits/usage entries populate (C/LK retain their 0.21 / 0.005 buffered ceilings) even though no redistribution occurred.
+5. Toggle the composite debug overlay off and on to ensure the snapshot data persists; attach a screenshot or console snippet if any channel reports a non-zero delta.
+
+## Linear Reference Identity Sanity
+Goal: ensure a perfectly linear LAB dataset produces zero composite correction and leaves `.quad` curves unchanged.
+
+### Manual Steps:
+1. Open `index.html`, set **LAB smoothing** in ⚙️ Options to `0%`.
+2. Load `data/TRIFORCE_V4.quad` via **Load .quad** (or any multi-ink baseline you want to sanity-check).
+3. Load `testdata/linear_reference_lab.txt` via **Load LAB / Manual** and wait for the status toast.
+4. Sample one channel before/after in the console, e.g. `window.sampleGlobalCurve?.(95, 'K')`. Expect deltas ≤ ±6 ink units (rounding noise only). `window.compareAgainstBaseline?.()` should likewise report zero differences.
+5. Re-import `testdata/linear_reference_lab.txt` while **LAB smoothing** remains at `0%`. Sample the same channel again—values should match step 4 exactly (no additional smoothing applied on reload).
+6. Inspect the density profile at 95 % input:
+   ```js
+   const profile = window.getCompositeDensityProfile?.(95);
+   profile?.densityDelta; // expect ~0
+   ```
+   The delta should be effectively zero and the per-channel corrected values should match the baseline curve.
+7. If you adjusted the slider during experimentation, return it to 0 % to match the studio default.
+
+### Automated Check
+- `npx vitest run tests/lab/triforce-linear-reference-identity.test.js`
+  - Fails if any channel moves more than 6 ink units or if the normalized delta exceeds 0.2 %.
+
 ### Automated Testing with Shell Playwright
 
 You can automate these manual tests using shell Playwright scripts:
@@ -63,6 +338,9 @@ node test-undo-regression.js
 - Faster regression detection
 - Easy integration with CI/CD
 - Clean JSON output for validation
+
+## Automated Coverage: LAB Linearization Audits
+- `tests/e2e/triforce-correction-audit.spec.ts` drives the Options modal with TRIFORCE datasets, captures correction snapshots at 5 % and 95 %, and saves a JSON artifact (see `tests/e2e/utils/lab-flow.ts` for the shared harness). Use this when validating LAB smoothing, density redistribution, or regression reports.
 
 ## Global Scale Undo Screenshot Check
 Goal: capture before/after artifacts that confirm the global scale batch history entry.

@@ -22,6 +22,7 @@
 
 2. **.cube LUT (1D/3D)**
    - Normalize orientation, map to printer-space samples, convert per-channel curves, and store as overlays (read-only) while keeping `.quad` base intact.
+   - Resample the oriented data with a monotonic PCHIP interpolator so LUTs that rise smoothly in image space stay monotonic on quadGEN’s 0–100 printer ramps.
    - Provide smoothing control points when sample counts ≤25 (for Smart seeding).
    - Metadata notes LUT size, orientation, and anchoring flags; undo reverts overlay application.
    - Baking a LUT into the baseline samples the correction once and caches the rebased curve so repeated redraws maintain the expected peak ink (e.g., 87 % for `negative.cube`).
@@ -29,6 +30,7 @@
 3. **.acv Curves**
    - Parse Photoshop curve anchors; when ≤25 anchors, seed Smart points directly; otherwise simplify plotted curve.
    - File can be global or per-channel; UI labels the source accordingly.
+   - Printer-space orientation (single flip + invert) is applied inside the parser; downstream loaders treat the data as printer-space so curves like `midtone_lift.acv` lighten the ramp without double-flipping.
 
 4. **General UI Updates**
    - Chart overlays display as dimmed markers (no ordinal labels when Smart points exist).

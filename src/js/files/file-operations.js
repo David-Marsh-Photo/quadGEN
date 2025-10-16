@@ -318,7 +318,34 @@ export function buildQuadFile() {
 
         const endInput = row.querySelector('.end-input');
         const e = InputValidator.clampEnd(endInput ? endInput.value : 0);
-        const arr = make256(e, ch, true, { normalizeToEnd: isChannelNormalizedToEnd(ch) }); // Apply linearization if enabled
+        const options = { normalizeToEnd: isChannelNormalizedToEnd(ch) };
+        const arr = make256(e, ch, true, options); // Apply linearization if enabled
+        const auditScope = typeof globalThis !== 'undefined'
+            ? globalThis
+            : (typeof window !== 'undefined' ? window : null);
+        if (auditScope && auditScope.__COMPOSITE_AUDIT__ && auditScope.__COMPOSITE_AUDIT__.enabled) {
+            try {
+                const audit = auditScope.__COMPOSITE_AUDIT__;
+                const events = Array.isArray(audit.events)
+                    ? audit.events
+                    : (audit.events = []);
+                events.push({
+                    stage: 'export.make256',
+                    payload: {
+                        channelName: ch,
+                        stage: 'export',
+                        valueSample_242: Array.isArray(arr) && arr.length > 242 ? arr[242] : null,
+                        endValue: e
+                    },
+                    ts: Date.now()
+                });
+                if (typeof audit.log === 'function') {
+                    audit.log('export.make256', events[events.length - 1].payload);
+                }
+            } catch (auditError) {
+                console.warn('[COMPOSITE_AUDIT] export logging failed:', auditError);
+            }
+        }
         lines.push("# " + ch + " curve");
         lines.push(...arr.map(String));
     });

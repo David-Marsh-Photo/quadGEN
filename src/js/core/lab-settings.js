@@ -1,13 +1,19 @@
 // Runtime setting for LAB linearization normalization mode (L* vs density)
 
 import { registerDebugNamespace } from '../utils/debug-registry.js';
+import { isLabBaselineSmoothingEnabled as featureLabBaseline } from './feature-flags.js';
 
 export const LAB_NORMALIZATION_MODES = Object.freeze({
     LSTAR: 'lstar',
     DENSITY: 'density'
 });
 
-export const DEFAULT_LAB_SMOOTHING_PERCENT = 50;
+export const DEFAULT_LAB_SMOOTHING_PERCENT = 0;
+const LEGACY_DEFAULT_LAB_SMOOTHING_PERCENT = 50;
+
+const LAB_SMOOTHING_MAX = 300;
+const LAB_SMOOTHING_EXPONENT = 1.35;
+const LAB_SMOOTHING_MAX_DELTA = 3;
 
 const SMOOTHING_STORAGE_KEY = 'quadgen.labSmoothingPercent';
 
@@ -47,7 +53,18 @@ function loadInitialSmoothingPercent() {
         if (stored == null) {
             return DEFAULT_LAB_SMOOTHING_PERCENT;
         }
-        return sanitizeSmoothingPercent(stored);
+        const sanitized = sanitizeSmoothingPercent(stored);
+        if (sanitized === LEGACY_DEFAULT_LAB_SMOOTHING_PERCENT) {
+            try {
+                if (typeof localStorage !== 'undefined') {
+                    localStorage.removeItem(SMOOTHING_STORAGE_KEY);
+                }
+            } catch (storageError) {
+                // Ignore storage cleanup issues (private mode, etc.)
+            }
+            return DEFAULT_LAB_SMOOTHING_PERCENT;
+        }
+        return sanitized;
     } catch (error) {
         return DEFAULT_LAB_SMOOTHING_PERCENT;
     }
@@ -134,7 +151,18 @@ export function getLabSmoothingPercent() {
 }
 
 export function getLabWidenFactor() {
-    return 1 + (currentSmoothingPercent / 100);
+    return mapSmoothingPercentToWiden(currentSmoothingPercent);
+}
+
+export function mapSmoothingPercentToWiden(percent) {
+    const numeric = Number(percent);
+    if (!Number.isFinite(numeric)) {
+        return 1;
+    }
+    const clamped = Math.max(0, Math.min(LAB_SMOOTHING_MAX, numeric));
+    const normalized = LAB_SMOOTHING_MAX > 0 ? (clamped / LAB_SMOOTHING_MAX) : 0;
+    const eased = Math.pow(normalized, LAB_SMOOTHING_EXPONENT);
+    return 1 + eased * LAB_SMOOTHING_MAX_DELTA;
 }
 
 export function setLabSmoothingPercent(percent) {
@@ -146,6 +174,10 @@ export function setLabSmoothingPercent(percent) {
     persistSmoothingPercent();
     notifySmoothing(currentSmoothingPercent);
     return currentSmoothingPercent;
+}
+
+export function isLabBaselineSmoothingEnabled() {
+    return featureLabBaseline?.() ?? true;
 }
 
 export function subscribeLabSmoothingPercent(listener) {
@@ -168,7 +200,9 @@ registerDebugNamespace('labSettings', {
     setLabSmoothingPercent,
     subscribeLabSmoothingPercent,
     getLabWidenFactor,
-    DEFAULT_LAB_SMOOTHING_PERCENT
+    mapSmoothingPercentToWiden,
+    DEFAULT_LAB_SMOOTHING_PERCENT,
+    isLabBaselineSmoothingEnabled
 }, {
     exposeOnWindow: typeof window !== 'undefined',
     windowAliases: ['setLabNormalizationMode', 'toggleLabNormalizationMode']

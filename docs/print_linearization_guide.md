@@ -13,22 +13,100 @@ Define a repeatable method to turn **measured L*** values from a printed step‑
 6. **Apply** the correction as a 1D LUT (e.g., 256 samples) during printing.
 7. **Iterate**: reprint the wedge with the correction applied, re‑measure, refine.
 
-## Mathematical summary
-Let the nominal inputs be \(x_i \in [0,100]\) and measured lightness \(L^*_i\). In perceptual (default) mode we normalize L* directly so \(\tilde{L}_i = (L^*_{\max} - L^*_i)/(L^*_{\max} - L^*_{\min})\). In log-density mode we instead map each lightness to CIE luminance \(Y_i\), optical density \(D_i = -\log_{10}(Y_i)\), then normalize \(\tilde{D}_i = (D_i - D_{\min})/(D_{\max} - D_{\min})\).
+## Measurement Files & Normalization
 
-Convert these discrete measurements into a monotone response function \(f\): \(x\mapsto m\), where \(m\) is \(\tilde{L}\) or \(\tilde{D}\) depending on the chosen mode. (Use interpolation between samples.) The required **correction** is the inverse mapping from target to the input that produces it:
+### Required format
+- Header: `GRAY  LAB_L  LAB_A  LAB_B` (tabs or whitespace accepted).
+- Rows: `GRAY% (0..100)` ascending; `LAB_L` in `[0..100]`. A/B components are optional and ignored.
+- Keep the series monotone in GRAY%. Noise in L* is fine—the reconstruction path smooths it while preserving endpoints.
 
-\[ x_{\text{adj}}(x) = f^{-1}\big( m_{\text{target}}(x) \big). \]
+### Channel density inputs
+- The channel table exposes a **Density** column interpreted as each ink’s normalized coverage ceiling. Factory defaults populate K/MK with 1.00, C with 0.21, and LK with 0.054. Leave other channels blank (or `0`) to let the solver infer their share on the next LAB import.
+- When a manual value is present the composite solver clamps that channel to the specified ceiling plus a 0.5 % buffer; auto-computed constants respect the same guard.
 
-In practice (discrete, noisy data), we:
-- Interpolate \(f\) (piecewise‑linear or PCHIP/monotone cubic).
-- Numerically invert by swapping axes and interpolating again.
-- Tabulate \(x_{\text{adj}}\) at uniform inputs to form the LUT.
+### Normalization modes
+- **Perceptual L\*** (default): quadGEN normalizes L* directly so midtones stay perceptually even. Set `actual = (L^*_{\max} - L^*)/(L^*_{\max} - L^*_{\min})` and target `expected = GRAY% / 100`.
+- **Log-density** (opt-in): toggle “Use log-density for LAB / Manual measurements” in the ⚙️ Options panel (mirrored in the Manual L* modal) to convert L* into CIE luminance \(Y\), optical density \(D = -\log_{10}(Y)\), then normalize relative density. Density mode emphasizes deep shadows and mirrors QuadToneRIP’s digital-negative workflow.
+- Both modes pin endpoints at paper white (0 % ink) and solid black (100 % ink).
 
-### Density mapping (opt-in)
-Enabling the log-density toggle converts measurements to **relative optical density** before interpolation:
-\[ Y = f_{\text{CIE}}(L^*), \quad D = -\log_{10}(Y), \quad D_{rel} = \frac{D - \min(D)}{\max(D) - \min(D)}. \]
-Density emphasizes deep-shadow separation and matches QuadToneRIP’s digital-negative workflows. Leave the toggle off to stay in L* when calibrating direct positive prints. The checkbox lives in the ⚙️ Options panel (for file imports) and inside the Manual L* modal.
+### Target mapping math
+Let the nominal inputs be \(x_i \in [0,100]\) with measured \(\tilde{m}_i\) (perceptual L* or relative density). The measured response is a monotone function \(f(x) = \tilde{m}\). The ideal linear target is \(m_{\text{target}}(x) = x / 100\). The correction LUT inverts the measured response so
+\[
+x_{\text{adj}}(x) = f^{-1}\!\left(m_{\text{target}}(x)\right)
+\]
+and samples it at 256 evenly spaced inputs. PCHIP interpolation keeps both the forward and inverse mappings smooth and monotone.
+
+## Processing Pipeline
+
+### 1. Parse & validate
+- Entry point: `parseLabData(fileContent, filename)`.
+- Strips comments and blank lines, parses GRAY%/L* rows, validates bounds, sorts by input, and stores `originalData` for overlays and metadata.
+
+### 2. Build per-patch corrections
+- For each row compute `position = clamp01(input / 100)`.
+- Evaluate the selected normalization mode to obtain `actual`.
+- Set `expected = position` and record `correction = expected − actual` along with original inputs and measurements. These correction points drive the reconstruction pass and provide hover detail in the UI.
+
+### 3. Reconstruct the 256-sample curve
+- quadGEN blends the sparse corrections with an adaptive Gaussian kernel: `σ(x)` scales with local patch spacing (`median` distance to ~6 neighbours) but is clamped between 0.02 and 0.15.
+- Each of the 256 output samples evaluates the weighted correction, adds it to the baseline `position`, clamps to `[0,1]`, and pins endpoints (sample 0 = 0, sample 255 = 1).
+- A baseline pass (widen ×1.0) always runs so identity datasets remain perfectly monotone. When the LAB smoothing slider sits at 0 % the pipeline skips any additional widening.
+
+### 4. Optional smoothing path
+- The LAB smoothing slider (0–300 %) widens the Gaussian kernel using `baseRadius = 0.08`, `maxRadius = 0.25`, and `radius = baseRadius + (sp/100) * (maxRadius - baseRadius)`.
+- `getSmoothingControlPoints(sp)` rebuilds the 256-sample array with the wider radius, downsamples to evenly spaced control points, and returns `{ samples, xCoords, needsDualTransformation }`. The `needsDualTransformation` flag tells downstream consumers to perform the horizontal/vertical flip that preserves plotting semantics.
+
+### 5. Apply the LUT to channel curves
+- `apply1DLUT(values, lutOrData, domainMin, domainMax, maxValue, interpolationType, smoothingPercent)` converts the 256-sample LUT into channel-specific corrections.
+- LAB objects expose either raw samples (when smoothing = 0 %) or control points (when smoothing > 0). quadGEN builds the input grid (`lutX`) and evaluates the requested interpolation:
+  - `pchip` (default) for monotone, shape-preserving results.
+  - `linear` for piecewise-linear parity with external tools.
+- The routine respects each channel’s current End value and interpolation metadata, and it keeps baselines intact when no correction is present.
+
+### 6. Smart key points & metadata
+- On load, quadGEN seeds Smart key points from the plotted curve. Datasets with ≤ 25 rows seed directly; denser sets run through the adaptive simplifier so Edit Mode stays manageable.
+- Recompute regenerates Smart key points from the active curve while preserving metadata such as `bakedGlobal`, `bakedAutoWhite`, and `bakedAutoBlack`. This prevents double-application when global corrections or rolloff knees are already baked.
+- `LinearizationHistory` captures LAB loads, smoothing changes, and pipeline switches so undo/redo can restore both the measurement state and Smart metadata.
+
+### 7. Safeguards & invariants
+- Endpoints remain locked at (0 %, 0 %) and (100 %, 100 %) through every reconstruction and interpolation stage.
+- Monotonicity is enforced by cumulative max/min guards before inversion and by PCHIP’s shape-preserving derivatives.
+- Smoothing only affects the LAB-driven path; Smart edits, dense `.quad` curves, and imported LUTs bypass the Gaussian widen unless explicitly requested.
+- Composite redistribution consumes the same `target − actual` delta per sample; density ceilings (manual or inferred) include a 0.5 % buffer so measurement noise does not cause false clamps.
+- `needsDualTransformation=true` triggers the final orientation fix so plots still render output ink on the Y axis even after smoothing.
+
+### 8. Graph interpretation
+- X axis: nominal input ink level (0 = paper white, 100 = solid black). Y axis: output ink level after correction.
+- Dips below the diagonal mean the print was too dark (reduce ink). Humps above the diagonal indicate the print was too light (add ink).
+- The LAB smoothing slider widens features while lowering peak magnitude; use it to tame noise, but leave at 0 % when validating linear reference datasets.
+
+## Correction pipelines at a glance
+- **Simple Scaling (default)** — Builds a gain envelope directly in printer space, multiplies each channel’s plotted curve by that envelope, clamps per-channel lifts to ±15 %, keeps K/MK fixed, and redistributes overflow into darker reserves. This path mirrors the industry-standard “fit to correction” workflow while respecting quadGEN’s ink-limit safeguards.
+- **Density Solver (advanced)** — Reuses the composite redistribution engine (density ladder, coverage ceilings, snapshot analysis) documented in `docs/features/channel-density-solver.md`. Enable it from ⚙️ Options → **Correction method** when you need full density accounting.
+- Switching pipelines immediately reprocesses the loaded LAB / Manual dataset, updates chart overlays, and records an undo entry so you can A/B the results.
+
+## Simple Scaling pipeline (default)
+1. **Gain envelope**  
+   - Start from the corrected mapping described above and convert the signed error into a multiplicative gain \(G(x) = 1 + \text{error}(x)\).  
+   - Run \(G(x)\) through the adaptive smoothing kernel (baseline widen ×1 pass + optional Options-panel widening).  
+   - Clamp to `0.85 ≤ G(x) ≤ 1.15` so no channel rises or falls by more than 15 % in a single application.
+2. **Per-channel application**  
+   - Sample each channel’s existing curve via `make256` to obtain the baseline draw (`baseline[i]`).  
+   - Multiply: `corrected[i] = baseline[i] * G(x_i)`.  
+   - Clamp to the original End plus the 15 % guard; always lock K/MK to 100 % of its baseline to avoid lifting the maximum black.
+3. **Overflow redistribution**  
+   - If a lighter channel hits the guard, compute `overflow = corrected[i] − clamp`.  
+   - Redistribute the overflow into darker channels using their relative baseline shares and available headroom. If all darker channels are capped, log the residual so operators can evaluate another pass.  
+   - The redistribution step maintains monotonicity and preserves the original endpoints.
+4. **Outputs and auditing**  
+   - The final per-channel arrays write directly into the 256-sample `.quad` structure.  
+   - The pipeline records channel lift percentages, overflow handling, and total-ink deltas in `loadedData.simpleScalingSummary` (also surfaced by the purpose-built capture script at `npm run capture:simple-scaling`).
+
+### Simple Scaling design notes
+- Mirrors legacy simple-scaling tools (e.g., DNPRO) by clamping the gain envelope to roughly ±15 % so highlights and shadows move predictably between passes.
+- Overflow prefers darker channels using the baseline share map and reserve logic; when every darker channel is capped the solver records residual error instead of silently clipping.
+- Auto-raise integrates with the pipeline—if the clamped gain still exceeds a channel’s End, the helper raises the limit just enough, rescales Smart key points, and logs the adjustment for undo/redo and debug badges.
+- Debug payloads surface per-channel lift percentages, overflow redistribution, and auto-raise events (`loadedData.simpleScalingSummary`, `window.getCompositeDensityProfile()`); regression coverage spans `tests/core/simple-scaling.test.js`, `tests/e2e/triforce-correction-audit.spec.ts`, and the headful capture script `npm run capture:simple-scaling`.
 
 ## Algorithm (implementation notes)
 - Use **monotone interpolation**; if data are noisy, smooth minimally.
@@ -43,6 +121,32 @@ Density emphasizes deep-shadow separation and matches QuadToneRIP’s digital-ne
   - Reprojects the target curve across that span so delayed-onset channels can compress (later starts) and early channels can expand while the zero plateau stays untouched.
   - Enforces monotonic output with `enforceMonotonic()` after remapping to avoid banding or reversals.
 - When the flag is **off**, quadGEN retains the legacy fixed-domain behavior (same correction applied at every 0–100% input). Enable the flag when validating active-range parity against DNPRO/POPS data; leave it off during legacy comparisons.
+
+## Density solver pipeline (composite redistribution, opt-in)
+Multi-ink `.quad` files frequently stagger ink usage—highlight grays, cyan midtones, and shadow blacks each dominate different thirds of the ramp. When the **Density Solver** correction method is selected, quadGEN converts the residual into density space and applies **composite redistribution**:
+
+1. **Gather measured density** – Sample the imported LAB ramp (perceptual or log-density) into incremental deltas (`ΔDensity`) between successive inputs.
+2. **Read channel shares** – For each LUT sample, compute how much of the total draw each channel supplied (`draw_channel / Σ draw_all`). Zero-output spans stay untouched.
+3. **Calibrate density constants** – Scan the ramp in the order channels appear. Whenever a channel is effectively solo (≥90 % share, or ≥70 % support), record how much darkening it achieved; that becomes the channel’s density ceiling. Mixed intervals subtract the portions already explained by earlier channels so late-arriving inks only inherit the residual density. The end result is a per-channel constant expressing how strong that ink is when given free rein.
+4. **Compute the correction delta** – For each sample quadGEN now evaluates `Δ = targetDensity − measuredDensity`. The linearized target is the law; baseline densities no longer dictate the sign. When the LAB smoothing slider sits at 0, the measurement evaluator echoes the raw ramp so an already linear dataset produces Δ = 0 everywhere.
+5. **Distribute the delta** – Use the per-channel density weights as a **funnel** only. They describe how to split the requested change across active inks while clamps, headroom, and density ceilings keep each channel in range. If the correction asks for zero change, every channel receives zero regardless of weight magnitude.
+6. **Guard amplitude** – After distribution the solver verifies the composite still matches the LAB request within the guard band (±10 % by default) and restores the original end samples so the curve keeps its exact anchors.
+
+### TRIFORCE example
+- **Inputs:** `TRIFORCE_V4.quad` and its LAB ramp (`TRIFORCE_V4.txt`).
+- **Highlights:** LK runs solo through 7 % input, accumulating ~0.08 relative density. That ceiling prevents LK from claiming more than ~8 % of the total darkening even when it overlaps midtone inks later.
+- **Midtones:** Cyan joins between 20–40 % input. After subtracting the LK share, the residual darkening settles near 0.15, which becomes C’s density constant.
+- **Shadows:** K dominates past 70 %; the solver assigns the remaining ~0.77 to black so the redistribution knows K can legitimately supply nearly all of the shadow density.
+- **Runtime inspection:** With both files loaded, run `window.getCompositeDensityProfile(95)` in DevTools. The result reports the per-channel density constants, cumulative usage, and the weighted shares applied at 95 % input—expect K to carry ~90 % of the correction, C the remainder, and LK almost none.
+
+When you switch the correction method to **Density Solver**, composite redistribution runs with the behaviours above; toggle it off for diagnostics via `window.enableCompositeLabRedistribution(false)` if you need to compare against the legacy per-channel application. Additional implementation notes and troubleshooting tips live in `MULTICHANNEL_CORRECTION.md`, while the solver math is broken down in `docs/features/channel-density-solver.md`.
+
+You can now choose how the solver splits multi-ink deltas (⚙️ Options → *Composite weighting*):
+
+- **Normalized weighting (default when the density solver is active)** mirrors the ink mix from the loaded `.quad`, blending corrections so the updated curve stays proportional to the baseline composition unless a channel runs out of headroom.
+- **Equal weighting** ignores the baseline mix and distributes the correction evenly across whichever channels are currently active, handy for sanity checks against the legacy even-share output.
+- **Isolated weighting** keeps the current behaviour—each channel absorbs as much of the correction as its headroom allows before we move on to the next ink.
+- **Momentum weighting** biases redistribution toward channels whose curves are already climbing or dropping fastest, using a Gaussian momentum window.
 
 ## Python example
 Reads a CSV with columns: `input_percent,Lstar`. Produces a 256‑sample correction LUT (`x_adj[0..255]`) mapping nominal input 0..100 to adjusted input 0..100.
@@ -113,7 +217,7 @@ def build_correction(xs, Ls, use_density=False):
     inv_x[0] = 0.0
     inv_x[-1] = 100.0
     # Optional: slight smoothing to remove stair-steps while preserving monotonicity
-    # quadGEN now applies a 50% (≈1.5× sigma) smoothing profile by default when rebuilding LAB data; adjust it in the Options panel if needed.
+    # quadGEN always runs a legacy ×1 Gaussian pass when rebuilding LAB data; the Options slider (0–300 %, default 0 %; 50 % ≈ ×1.27) widens it on demand.
     # Here we just clip to be non-decreasing
     inv_x = np.maximum.accumulate(inv_x)
 
@@ -125,7 +229,7 @@ if __name__ == "__main__":
     xs = np.array([0, 5, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100], float)
     Ls = np.array([100, 97, 94, 88, 82, 75, 67, 58, 48, 36, 22, 8], float)
 
-    # Compute correction in density (default)
+    # Compute correction in perceptual L* (default)
     x_grid, x_adj = build_correction(xs, Ls)
 
     # Export 256-sample LUT (0..100% adjusted input per 0..100% nominal)

@@ -19,7 +19,8 @@ import { createPCHIPSpline, clamp01 } from '../math/interpolation.js';
 import { registerDebugNamespace } from '../utils/debug-registry.js';
 import {
     getLabNormalizationMode,
-    getLabSmoothingPercent
+    getLabSmoothingPercent,
+    mapSmoothingPercentToWiden
 } from '../core/lab-settings.js';
 
 export {
@@ -250,7 +251,7 @@ export function parseACVFile(arrayBuffer, filename = 'curve.acv') {
             originalSamples: samples.slice(),
             rawSamples: samples.slice(),
             controlPointsTransformed,
-            sourceSpace: DataSpace.SPACE.IMAGE,
+            sourceSpace: DataSpace.SPACE.PRINTER,
             domainMin: 0,
             domainMax: 1,
             interpolationType: 'pchip',
@@ -376,7 +377,7 @@ export function parseCube1D(cubeText, filename = 'lut.cube') {
             conversionMeta: converted.meta,
             domainMin,
             domainMax,
-            interpolationType: 'cubic'
+            interpolationType: 'pchip'
         };
 
     } catch (error) {
@@ -474,7 +475,8 @@ export function parseCube3D(cubeText, filename = 'lut3d.cube') {
             conversionMeta: converted.meta,
             domainMin,
             domainMax,
-            is3DLUT: true
+            is3DLUT: true,
+            interpolationType: 'pchip'
         };
 
     } catch (error) {
@@ -637,14 +639,19 @@ export function parseManualLstarData(validation, options = {}) {
     try {
         console.log('📝 parseManualLstarData: processing manual L* measurements');
 
-        if (!validation || !validation.isValid || !validation.measuredPairs) {
+        const isValid = validation?.isValid ?? validation?.valid ?? false;
+        const measuredPairsInput = Array.isArray(validation?.measuredPairs)
+            ? validation.measuredPairs
+            : [];
+
+        if (!validation || !isValid || measuredPairsInput.length === 0) {
             return {
                 valid: false,
                 error: 'Invalid validation data provided'
             };
         }
 
-        const measuredPairs = validation.measuredPairs || [];
+        const measuredPairs = measuredPairsInput;
         const measuredXs = measuredPairs.map((pair) => Number(pair.x));
         const measuredL = measuredPairs.map((pair) => Number(pair.l));
         const pairCount = measuredPairs.length;
@@ -687,11 +694,13 @@ export function parseManualLstarData(validation, options = {}) {
 
         const rawSamples = rebuildLabSamplesFromOriginal(usableData, {
             normalizationMode,
-            skipDefaultSmoothing: true
+            skipDefaultSmoothing: true,
+            useBaselineWidenFactor: true
         });
 
         const baseSamples = rebuildLabSamplesFromOriginal(usableData, {
-            normalizationMode
+            normalizationMode,
+            useBaselineWidenFactor: true
         }) || rawSamples;
 
         if (!Array.isArray(baseSamples) || baseSamples.length === 0) {
@@ -701,9 +710,18 @@ export function parseManualLstarData(validation, options = {}) {
             };
         }
 
+        const previewWiden = defaultSmoothingPercent > 0
+            ? mapSmoothingPercentToWiden(defaultSmoothingPercent)
+            : 1;
+
+        const previewSamples = rebuildLabSamplesFromOriginal(usableData, {
+            normalizationMode,
+            widenFactor: previewWiden
+        }) || baseSamples;
+
         const buildControlPoints = (smoothingPercent) => {
             const sp = Math.max(0, Math.min(300, Number(smoothingPercent) || 0));
-            const widen = 1 + sp / 100;
+            const widen = mapSmoothingPercentToWiden(sp);
             const widenedSamples = rebuildLabSamplesFromOriginal(usableData, {
                 widenFactor: widen,
                 normalizationMode
@@ -739,7 +757,7 @@ export function parseManualLstarData(validation, options = {}) {
             samples: baseSamples.slice(),
             baseSamples: baseSamples.slice(),
             rawSamples: (rawSamples || baseSamples).slice(),
-            previewSamples: baseSamples.slice(),
+            previewSamples: previewSamples.slice(),
             previewSmoothingPercent: defaultSmoothingPercent,
             originalData: usableData.map((point) => ({
                 input: point.input,

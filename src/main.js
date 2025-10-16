@@ -72,6 +72,7 @@ import {
 import { initializeManualLstar } from './js/ui/manual-lstar.js';
 import { initializeOptionsModal } from './js/ui/options-modal.js';
 import { initializeTooltipSystem } from './js/ui/tooltips.js';
+import { initializeCompositeDebugPanel } from './js/ui/composite-debug-panel.js';
 
 import {
     initializeTheme
@@ -200,6 +201,7 @@ import {
 import {
     applyGlobalScale,
     scaleChannelEndsByPercent,
+    reapplyCurrentGlobalScale,
     updateScaleBaselineForChannel,
     resetGlobalScale,
     getCurrentScale,
@@ -851,6 +853,7 @@ function initializeApplication() {
     initializeTooltipSystem();
     initializeEditMode();
     initializeChart();
+    initializeCompositeDebugPanel();
     setupStateSynchronization();
     initializePrinterUI();
     updateCompactChannelsList();
@@ -1042,6 +1045,7 @@ function initializeApplication() {
     const scalingUtilsCompat = {
         applyGlobalScale,
         scaleChannelEndsByPercent,
+        reapplyCurrentGlobalScale,
         updateScaleBaselineForChannel,
         resetGlobalScale,
         getCurrentScale,

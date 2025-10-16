@@ -444,4 +444,136 @@ test.describe('Edit Mode key point scaling', () => {
     expect(analysis.inserted?.output).toBeGreaterThanOrEqual(0);
     expect(analysis.inserted?.output).toBeLessThanOrEqual(100);
   });
+
+  test('editing X via XY input preserves surrounding curve shape', async ({ page }) => {
+    const indexUrl = pathToFileURL(resolve('index.html')).href;
+    const quadPath = resolve('data/TRIFORCE_V3.quad');
+
+    await page.goto(indexUrl);
+    await page.waitForSelector('#globalLinearizationBtn', { timeout: 20000 });
+
+    await page.setInputFiles('input#quadFile', quadPath);
+    await page.waitForFunction(() => window.getLoadedQuadData?.()?.curves?.K, undefined, { timeout: 20000 });
+
+    await page.locator('#editModeToggleBtn').click();
+    await page.waitForFunction(() => window.isEditModeEnabled?.(), undefined, { timeout: 10000 });
+
+    await page.waitForFunction(() => {
+      const control = window.ControlPoints?.get?.('K');
+      return Array.isArray(control?.points) && control.points.length >= 6;
+    }, undefined, { timeout: 20000 });
+
+    await page.waitForSelector('#editChannelSelect', { timeout: 10000 });
+    await page.selectOption('#editChannelSelect', 'K');
+
+    for (let i = 1; i < 6; i += 1) {
+      await page.locator('#editPointRight').click();
+      await page.waitForFunction(
+        (expected) => (window.EDIT?.selectedOrdinal ?? 1) === expected,
+        i + 1,
+        { timeout: 2000 }
+      );
+    }
+
+    const beforeState = await page.evaluate(() => {
+      const channel = window.EDIT?.selectedChannel;
+      const ordinal = window.EDIT?.selectedOrdinal ?? 1;
+      const row = document.querySelector('tr[data-channel="K"]');
+      const percentInput = row?.querySelector('.percent-input');
+      const endInput = row?.querySelector('.end-input');
+      const endValue = window.InputValidator?.clampEnd(endInput?.value ?? 0) ?? 0;
+      const curve = typeof window.make256 === 'function'
+        ? window.make256(endValue, channel, window.LinearizationState?.globalApplied ?? false)
+        : [];
+      const control = window.ControlPoints?.get(channel)?.points || [];
+      const compat = window.__quadDebug?.compat;
+      const toAbsolute = compat?.smartCurves?.toAbsoluteOutput;
+      const point = control[(ordinal ?? 1) - 1] || null;
+      const nextPoint = control[ordinal] || null;
+      return {
+        xyValue: document.getElementById('editXYInput')?.value ?? '',
+        sample128: curve.length > 128 ? curve[128] : null,
+        percentValue: percentInput?.value ?? null,
+        ordinal,
+        selected: point
+          ? {
+              input: point.input,
+              relative: point.output,
+              absolute: typeof toAbsolute === 'function' ? toAbsolute(channel, point.output) : point.output
+            }
+          : null,
+        nextInput: nextPoint?.input ?? null
+      };
+    });
+
+    expect(beforeState.xyValue).toContain(',');
+    expect(beforeState.sample128).not.toBeNull();
+    expect(beforeState.selected).not.toBeNull();
+
+    const [rawX, rawY] = beforeState.xyValue.split(',');
+    const xBefore = parseFloat(rawX);
+    const relativeY = beforeState.selected?.relative ?? Number.NaN;
+    expect(Number.isFinite(xBefore)).toBeTruthy();
+    expect(Number.isFinite(relativeY)).toBeTruthy();
+
+    let xTarget = xBefore + 1.5;
+    if (Number.isFinite(beforeState.nextInput)) {
+      xTarget = Math.min(xTarget, beforeState.nextInput - 0.5);
+    }
+    xTarget = Math.min(xTarget, 98);
+
+    const formattedX = xTarget.toFixed(1);
+    const formattedY = Number.isFinite(relativeY)
+      ? relativeY.toFixed(1)
+      : (Number.isFinite(parseFloat(rawY)) ? parseFloat(rawY).toFixed(1) : rawY.trim());
+    const targetString = `${formattedX},${formattedY}`;
+
+    await page.fill('#editXYInput', targetString);
+    await page.press('#editXYInput', 'Enter');
+
+    await page.waitForFunction(
+      ({ target, ordinal }) => {
+        const channel = window.EDIT?.selectedChannel;
+        const control = window.ControlPoints?.get(channel)?.points || [];
+        const point = control[(ordinal ?? 1) - 1] || null;
+        if (!point) return false;
+        return Math.abs(point.input - target) < 0.3;
+      },
+      { target: parseFloat(formattedX), ordinal: beforeState.ordinal },
+      { timeout: 5000 }
+    );
+
+    const afterState = await page.evaluate(() => {
+      const channel = window.EDIT?.selectedChannel;
+      const row = document.querySelector('tr[data-channel="K"]');
+      const percentInput = row?.querySelector('.percent-input');
+      const endInput = row?.querySelector('.end-input');
+      const endValue = window.InputValidator?.clampEnd(endInput?.value ?? 0) ?? 0;
+      const curve = typeof window.make256 === 'function'
+        ? window.make256(endValue, channel, window.LinearizationState?.globalApplied ?? false)
+        : [];
+      const compat = window.__quadDebug?.compat;
+      const toAbsolute = compat?.smartCurves?.toAbsoluteOutput;
+      const point = window.ControlPoints?.get(channel)?.points?.[(window.EDIT?.selectedOrdinal ?? 1) - 1] || null;
+      return {
+        xyValue: document.getElementById('editXYInput')?.value ?? '',
+        sample128: curve.length > 128 ? curve[128] : null,
+        percentValue: percentInput?.value ?? null,
+        selectedAbsolute: point && typeof toAbsolute === 'function'
+          ? toAbsolute(channel, point.output)
+          : point?.output ?? null
+      };
+    });
+
+    expect(afterState.xyValue).not.toEqual('');
+    expect(afterState.sample128).not.toBeNull();
+
+    const beforeSample = Number(beforeState.sample128);
+    const afterSample = Number(afterState.sample128);
+    expect(Number.isFinite(beforeSample)).toBeTruthy();
+    expect(Number.isFinite(afterSample)).toBeTruthy();
+
+    const delta = Math.abs(afterSample - beforeSample);
+    expect(delta).toBeLessThanOrEqual(1000);
+  });
 });

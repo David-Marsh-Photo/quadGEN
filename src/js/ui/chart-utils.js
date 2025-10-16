@@ -91,6 +91,125 @@ export function mapXToPercent(xPx, geom) {
   return Math.max(0, Math.min(100, (relativeX / chartWidth) * 100));
 }
 
+export function hitTestSmartPoint(canvasX, canvasY, options = {}) {
+  const { points, geom, tolerance = 10, values, maxValue = 65535 } = options || {};
+  if (!Array.isArray(points) || !geom) return null;
+  const radius = Number.isFinite(tolerance) ? Math.max(0, tolerance) : 10;
+  const radiusSq = radius * radius;
+  const sorted = points
+    .map((point, index) => ({ point, ordinal: index + 1 }))
+    .sort((a, b) => (a.point.input ?? 0) - (b.point.input ?? 0));
+
+  const sampleValues = Array.isArray(values) && values.length > 0 ? values : null;
+  const maxVal = Number.isFinite(maxValue) && maxValue > 0 ? maxValue : 65535;
+  const displayMax = normalizeDisplayMax(geom);
+
+  for (let i = 0; i < sorted.length; i++) {
+    const { point, ordinal } = sorted[i];
+    const xPercent = Number(point?.input ?? 0);
+    const x = mapPercentToX(xPercent, geom);
+
+    let absolutePercent = Number(point?.output ?? 0);
+    if (sampleValues) {
+      const normalizedX = Math.max(0, Math.min(1, xPercent / 100));
+      const t = normalizedX * (sampleValues.length - 1);
+      const i0 = Math.floor(t);
+      const i1 = Math.min(sampleValues.length - 1, i0 + 1);
+      const factor = t - i0;
+      const interpolated = ((1 - factor) * sampleValues[i0]) + (factor * sampleValues[i1]);
+      absolutePercent = (interpolated / maxVal) * 100;
+    }
+
+    const clampedPercent = Math.max(0, Math.min(displayMax, absolutePercent));
+    const y = mapPercentToY(clampedPercent, geom);
+
+    const dx = canvasX - x;
+    const dy = canvasY - y;
+    if ((dx * dx) + (dy * dy) <= radiusSq) {
+      return {
+        ordinal,
+        point,
+        canvasX: x,
+        canvasY: y,
+        percent: clampedPercent
+      };
+    }
+  }
+
+  return null;
+}
+
+export function resolveSmartPointClickSelection(options = {}) {
+  const {
+    canvasX,
+    canvasY,
+    points,
+    geom,
+    tolerance,
+    values,
+    maxValue
+  } = options || {};
+
+  if (!Number.isFinite(canvasX) || !Number.isFinite(canvasY) || !Array.isArray(points) || points.length === 0 || !geom) {
+    return null;
+  }
+
+  const hit = hitTestSmartPoint(canvasX, canvasY, {
+    points,
+    geom,
+    tolerance,
+    values,
+    maxValue
+  });
+
+  if (!hit) {
+    return null;
+  }
+
+  return {
+    ordinal: hit.ordinal,
+    point: hit.point,
+    canvasX: hit.canvasX,
+    canvasY: hit.canvasY,
+    percent: hit.percent
+  };
+}
+
+export function clampSmartPointCoordinates(inputPercent, outputPercent, options = {}) {
+  const { points, ordinal, geom, minGap = 0.01 } = options || {};
+  const clampedInput = Math.max(0, Math.min(100, Number.isFinite(inputPercent) ? inputPercent : 0));
+  const displayMax = normalizeDisplayMax(geom);
+  const clampedOutput = Math.max(0, Math.min(displayMax, Number.isFinite(outputPercent) ? outputPercent : 0));
+
+  if (!Array.isArray(points) || !Number.isFinite(ordinal) || ordinal < 1) {
+    return {
+      inputPercent: clampedInput,
+      outputPercent: clampedOutput
+    };
+  }
+
+  const sorted = points
+    .map((point) => ({ input: Number(point?.input ?? 0) }))
+    .sort((a, b) => a.input - b.input);
+
+  const index = Math.min(sorted.length - 1, ordinal - 1);
+  let minX = 0;
+  let maxX = 100;
+  if (index > 0) {
+    minX = sorted[index - 1].input + minGap;
+  }
+  if (index < sorted.length - 1) {
+    maxX = sorted[index + 1].input - minGap;
+  }
+
+  const constrainedInput = Math.max(minX, Math.min(maxX, clampedInput));
+
+  return {
+    inputPercent: constrainedInput,
+    outputPercent: clampedOutput
+  };
+}
+
 /**
  * Get chart theme colors from CSS custom properties
  * @returns {Object} Chart color scheme

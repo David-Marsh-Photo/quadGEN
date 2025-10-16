@@ -54,6 +54,8 @@ vi.mock('../../src/js/core/state.js', () => {
     ensureLoadedQuadData: vi.fn(),
     getAppState: () => appState,
     updateAppState: (updates) => Object.assign(appState, updates),
+    getPlotSmoothingPercent: () => 0,
+    setPlotSmoothingPercent: vi.fn(),
     TOTAL: 65535
   };
 });
@@ -171,7 +173,8 @@ vi.mock('../../src/js/curves/smart-curves.js', () => ({
   extractAdaptiveKeyPointsFromValues: vi.fn(),
   KP_SIMPLIFY: {},
   isSmartCurve: () => false,
-  rescaleSmartCurveForInkLimit: vi.fn()
+  rescaleSmartCurveForInkLimit: vi.fn(),
+  refreshPlotSmoothingSnapshotsForSmartEdit: vi.fn()
 }));
 
 vi.mock('../../src/js/ui/edit-mode.js', () => ({
@@ -181,7 +184,8 @@ vi.mock('../../src/js/ui/edit-mode.js', () => ({
   refreshSmartCurvesFromMeasurements: vi.fn(),
   reinitializeChannelSmartCurves: vi.fn(),
   persistSmartPoints: vi.fn(),
-  setGlobalBakedState: vi.fn()
+  setGlobalBakedState: vi.fn(),
+  isSmartPointDragActive: () => false
 }));
 
 vi.mock('../../src/js/data/lab-parser.js', () => ({
@@ -206,7 +210,10 @@ vi.mock('../../src/js/core/history-manager.js', () => ({
   getHistoryManager: () => ({
     registerHistoryAction: vi.fn(),
     captureState: vi.fn()
-  })
+  }),
+  beginHistoryTransaction: vi.fn(),
+  commitHistoryTransaction: vi.fn(),
+  rollbackHistoryTransaction: vi.fn()
 }));
 
 vi.mock('../../src/js/math/interpolation.js', () => ({
@@ -261,6 +268,7 @@ describe('UI scaling coordinator migration', () => {
   it('routes Enter commits of the global scale field through the coordinator even when disabled', async () => {
     const { elements } = await import('../../src/js/core/state.js');
     const scaleInput = document.createElement('input');
+    scaleInput.id = 'scaleAllInput';
     scaleInput.type = 'number';
     scaleInput.value = '110';
     scaleInput.blur = vi.fn();
@@ -269,6 +277,7 @@ describe('UI scaling coordinator migration', () => {
 
     const { initializeEventHandlers } = await import('../../src/js/ui/event-handlers.js');
     initializeEventHandlers();
+    scaleInput.value = '110';
 
     coordinatorMocks.isEnabled.mockReturnValue(false);
 
@@ -290,10 +299,12 @@ describe('UI scaling coordinator migration', () => {
     const percentInput = document.createElement('input');
     percentInput.className = 'percent-input';
     percentInput.value = '75';
+    percentInput.type = 'number';
 
     const endInput = document.createElement('input');
     endInput.className = 'end-input';
     endInput.value = '50000';
+    endInput.type = 'number';
 
     row.append(percentInput, endInput);
     rows.append(row);

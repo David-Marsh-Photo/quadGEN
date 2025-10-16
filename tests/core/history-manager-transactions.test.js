@@ -15,6 +15,7 @@ vi.mock('../../src/js/core/state.js', () => ({
   PRINTERS: {},
   getLoadedQuadData: vi.fn(() => mockLoadedData),
   setLoadedQuadData: vi.fn(),
+  subscribeLoadedQuadData: vi.fn(() => () => {}),
   ensureLoadedQuadData: (factory) => {
     if (typeof factory === 'function') {
       const created = factory();

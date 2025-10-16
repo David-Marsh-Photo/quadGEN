@@ -31,8 +31,7 @@ The production bundle lives at `dist/index.html` and is copied to the project ro
 ## Documentation
 Key references live under `docs/`:
 - `docs/README.md` — documentation index.
-- `docs/quadgen_user_guide.md` — user-facing guide.
-- `docs/quadgen_workflow.md` — step-by-step calibration workflow.
+- `docs/quadgen_user_guide.md` — user-facing guide with the Quick Start Workflow.
 - `docs/architecture-map.md` — auto-generated module dependency map (`node scripts/docs/export-architecture-map.js`).
 - `docs/manual_tests.md` — regression checklist.
 - `docs/File_Specs/` — format summaries for `.quad`, `.cube`, `.acv`, LAB `.txt`, CGATS/CTI3.

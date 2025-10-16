@@ -36,8 +36,17 @@
 - Intent mismatch: UI warns when measurement intent differs from current selection.
 - File validation errors surface in status/completion toasts; parsing logs gated by `DEBUG_LOGS`.
 
+## Hybrid Highlight/Density Mapping *(deferred)*
+- **Goal**: blend legacy highlight handling with CIE-accurate density in midtones and shadows so optical-density workflows converge faster without disturbing current highlight arrival.
+- **Status**: proposal tracked for future releases; implementation will gate behind a user-facing selector (planned “Hybrid (Legacy highlights + CIE density)” option) and Lab Tech command `set_lab_mapping({ mode: 'hybrid', threshold, rolloff })`.
+- **Mapping**: compute both legacy normalized density (`D_L* = 1 − (L − Lmin)/(Lmax − Lmin)`) and CIE density (`D_CIE = -log10(Y)/Dmax`), then blend them with a smootherstep weight `w(pos)` where `pos` is the normalized patch position. Default parameters: threshold ≈ 12 %, rolloff ≈ 10 %.
+- **Helpers**: planned additions include `lstarToY`, `yToDensity`, `buildHybridContext`, and `hybridDensity` in `src/js/data/linearization-utils.js`. `buildInkInterpolatorFromMeasurements` will consume hybrid values while retaining existing Gaussian smoothing and PCHIP interpolation.
+- **Persistence**: hybrid settings will store via `LAB_MAPPING_METHOD`, `LAB_MAPPING_THRESHOLD`, and `LAB_MAPPING_ROLLOFF` so operators can recall preferred thresholds.
+- **Validation**: numeric A/B comparisons against baseline datasets (e.g., `data/Color-Muse-Data.txt`), visual overlays to confirm no blend boundary kink, and regression tests to ensure undo/redo and `.quad` exports remain stable.
+- **Release criteria**: updated documentation (this spec + `docs/print_linearization_guide.md`), new automated coverage, and refreshed Help glossary entries once the feature leaves proposal status.
+
 ## Testing
-- Playwright: add coverage that loads sample LAB/CGATS files, checks metadata display, Smart seeding counts, and revert behavior.
+- Playwright: `tests/e2e/triforce-correction-audit.spec.ts` (with helper `tests/e2e/utils/lab-flow.ts`) loads TRIFORCE datasets end-to-end, captures correction snapshots, and emits a JSON artifact for audit runs. See also `docs/features/density_ladder_plan.md` for the ladder sequencing applied during redistribution.
 - Manual matrix: `docs/manual_tests.md` → LAB import section (global/per-channel enable, undo toggles).
 
 ## Debugging Aids

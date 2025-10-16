@@ -18,6 +18,7 @@
     "test:history": "playwright test tests/history/.*\\.spec\\.ts",
     "test:e2e": "node scripts/test-tools/run-playwright-test.js",
     "test:scaling:baseline": "vitest --run tests/core/scaling-utils-baseline.test.js",
+    "capture:simple-scaling": "node scripts/test-tools/simple-scaling-headful.mjs",
     "prepare": "npx simple-git-hooks",
     "diagnostics:active-range": "node analysis-correction-comparison.cjs --diff-only --output-json artifacts/active-range/active-range-diff.latest.json"
   },
