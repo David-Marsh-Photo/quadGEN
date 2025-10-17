@@ -16,6 +16,46 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '4.1.0': {
+    date: '2025-10-17',
+    title: 'Spot markers & correction gain blend',
+    sections: {
+      ADDED: [
+        'Manual L* modal remembers your last Patch % layout after Save/Generate so recurring manual workflows reopen with familiar spacing.',
+        'Measurement spot marker overlay (⚙️ Options → Show measurement spot markers) lines badges along a 70 % rail with green checks for ±1 % tolerance and directional arrows showing how much to lighten or darken each patch.',
+        'Correction gain slider (⚙️ Options) blends the identity ramp with the measured correction so you can audition partial mixes while charts, spot markers, previews, and exports stay in sync.'
+      ],
+      CHANGED: [
+        'Auto-raise ink limits now starts disabled; enable it per session when a correction needs extra headroom.',
+        'Correction overlay once again draws the dashed linear baseline for instant identity comparisons, while the light-blocking overlay keeps its reference hidden until comparison `.quad` support returns.',
+        'Measurement spot markers stay pinned to the unzoomed 70 % rail and scale with the correction gain slider—0 % shows all green checks, higher percentages expand the arrows and labels.'
+      ],
+      FIXED: [
+        'Plot smoothing reverted to the legacy boundary window to eliminate the reversal introduced by the earlier adaptive experiment.'
+      ],
+      REMOVED: [],
+      DOCS: [
+        'Manual regression checklist now calls out the auto-raise default, notes the current highlight reversal at high smoothing, and documents the measurement spot marker overlay behaviour.',
+        'Plot-smoothing start/tail notes explain the present head/tail blend order for future rework.',
+        'Help ReadMe/Glossary highlight the correction overlay baseline return, the light-blocking overlay’s missing reference guide, and the new measurement spot marker workflow.',
+        'Manual L* feature spec records that patch layouts persist after Save/Generate.'
+      ]
+    },
+    aboutDialog: [
+      {
+        label: 'Measurement spot markers',
+        desc: 'Enable the spot marker overlay in ⚙️ Options to see green checks for LAB readings within ±1 % and proportional arrows when a patch needs darkening or lightening; markers stay fixed on a 70 % rail even while you zoom.'
+      },
+      {
+        label: 'Correction gain slider',
+        desc: 'Blend between the identity ramp (0 %) and the full LAB correction (100 %); scrubbing now batches updates for ~150 ms, then redraws the chart, markers, and exports with the selected mix.'
+      },
+      {
+        label: 'Auto-raise default',
+        desc: 'Auto-raise ink limits loads disabled so you can opt in per session whenever a correction needs extra headroom.'
+      }
+    ]
+  },
   '4.0.0': {
     date: '2025-10-15',
     title: 'Options overlays & density workflow refresh',
@@ -1265,7 +1305,9 @@ Scope: This license applies to this HTML file (quadgen.html) only.</div>
         <li>Inputs: <code>.quad</code>, LAB <code>.txt</code>, LUT <code>.cube</code>, <code>.acv</code>, Manual L*.</li>
         <li>Apply intent remaps directly to a loaded <code>.quad</code> via “Apply to Loaded Curve”.</li>
         <li>⚙️ Options panel centralizes app-wide preferences (e.g., log-density normalization) without cluttering workflow panels.</li>
-        <li>Correction overlay toggle draws a dashed global target and purple baseline scaled to the current ink ceiling so you can compare edits against the measurement at a glance.</li>
+        <li>Correction overlay toggle draws a dashed red global target plus the purple linear baseline for identity checks. The light-blocking overlay remains a solid purple curve without its dashed reference until the comparison <code>.quad</code> workflow returns.</li>
+        <li>Measurement spot markers (⚙️ Options) line badges along a 70 % rail anchored to the unzoomed chart, showing green checks for LAB readings within ±1 % and colored arrows (red up for darken, blue down for lighten) with faint dots at the measured Y position—even after zooming. Hover any badge to see the exact delta.</li>
+                <li>Correction gain slider (⚙️ Options) blends the identity curve with the measured correction (0–100 %); scrubbing pauses for ~150 ms to stay smooth, then the chart, spot markers, previews, and exported curves all refresh with the selected mix.</li>
         <li>Evenly spaced or irregular targets supported.</li>
         <li>Edit Mode: point-based edits at any time.</li>
         <li>Undo/Redo: full history of edits, LAB/LUT loads, global scaling, and per-channel slider changes.</li>
@@ -1400,7 +1442,13 @@ export function getHelpGlossaryHTML(){
         <dd>Mapping that adjusts output ink levels versus input to achieve a target response. In quadGEN, plotted as Y (output ink %) vs X (input %).</dd>
 
         <dt>Correction overlay</dt>
-        <dd>Dashed global reference plotted on the chart, sampled from the active correction dataset. A purple diagonal baseline (scaled to the current ink ceiling) renders beneath the curve so additive (above baseline) and subtractive (below baseline) regions are obvious. Enable the overlay from the Options panel toggle—no debug helpers required.</dd>
+        <dd>Dashed global reference plotted on the chart, sampled from the active correction dataset, with a purple dashed linear baseline for identity comparison. Loading a secondary reference <code>.quad</code> remains on the roadmap; until that lands, the light-blocking overlay is the only one missing its reference trace. Enable the overlay from the Options panel toggle—no debug helpers required.</dd>
+
+        <dt>Measurement spot markers</dt>
+        <dd>Optional overlay that plots each LAB measurement on the chart. Patches within ±1 % tolerance show a green check badge; out-of-tolerance points show an arrow (up = darken, down = lighten) labelled with the percent delta. Hover a badge to see the input %, measured L*, and recommended action.</dd>
+
+        <dt>Light-blocking overlay</dt>
+        <dd>Solid purple curve that estimates cumulative optical density across the active channels. The dashed reference guide from the legacy build is temporarily disabled until quadGEN can load a comparison <code>.quad</code>; today the overlay only shows the measured light-block curve. Toggle it from ⚙️ Options → “Show light blocking overlay.”</dd>
 
         <dt>Density</dt>
         <dd>Measure of how much light a material absorbs or blocks. In quadGEN we treat each density value as the normalized L* coverage ceiling an ink can provide; once a channel’s cumulative darkening reaches that ceiling (with a 0.5% buffer for measurement noise), the solver hands the remaining correction to higher-density inks. Enable the log-density toggle when you want corrections based on optical density (digital negatives, contact printing); leave it off to stay in L* for perceptual printer linearization. The channel table’s Density column lets you lock these ceilings (e.g., K/MK = 1.00, C = 0.21, LK = 0.054); leaving a field blank or zero prompts the solver to regenerate the value automatically. A coverage badge now sits beneath the Density input to show “used / limit” and lights amber with a tooltip listing any clamped samples when the ceiling is hit.</dd>

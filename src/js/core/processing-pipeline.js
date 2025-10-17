@@ -2,7 +2,7 @@
 // Main curve generation, LUT application, and file building functions
 
 import { CURVE_RESOLUTION, DataSpace } from '../data/processing-utils.js';
-import { elements, getCurrentPrinter, getAppState, TOTAL, getLoadedQuadData, isChannelNormalizedToEnd } from './state.js';
+import { elements, getCurrentPrinter, getAppState, TOTAL, getLoadedQuadData, isChannelNormalizedToEnd, getCorrectionGain } from './state.js';
 import { InputValidator } from './validation.js';
 import { ControlPoints, isSmartCurve, isSmartCurveSourceTag } from '../curves/smart-curves.js';
 import { LinearizationState, ensurePrinterSpaceData, normalizeLinearizationEntry } from '../data/linearization-utils.js';
@@ -5443,7 +5443,9 @@ export function buildBaseCurve(endValue, channelName, smartCurveDetected = false
                 };
             }
 
-            const baselineCurve = preferOriginalBaseline && originalCurve ? originalCurve : loadedCurve;
+            const baselineCurve = (preferOriginalBaseline && originalCurve)
+                ? originalCurve
+                : loadedCurve;
 
             let treatAsSmart = (smartCurveDetected || isTaggedSmart) && !preferOriginalBaseline;
             if (!treatAsSmart && isTaggedSmart) {
@@ -5664,6 +5666,7 @@ export function applyGlobalLinearizationStep(values, options = {}) {
 
     // Check if this channel should skip global linearization
     const meta = getLoadedQuadData()?.keyPointsMeta?.[channelName] || {};
+    const currentGain = getCorrectionGain();
 
     let bakedGlobal = !!meta.bakedGlobal;
     if (!bakedGlobal && typeof LinearizationState?.isGlobalBaked === 'function' && LinearizationState.isGlobalBaked()) {
@@ -5675,6 +5678,10 @@ export function applyGlobalLinearizationStep(values, options = {}) {
         } else {
             bakedGlobal = true;
         }
+    }
+
+    if (bakedGlobal && currentGain < 0.999) {
+        bakedGlobal = false;
     }
 
     const shouldSkipGlobal = bakedGlobal || smartApplied;
@@ -5705,6 +5712,32 @@ export function applyGlobalLinearizationStep(values, options = {}) {
             ? normalizedEntry.previewSmoothingPercent
             : 0);
 
+    let baselineValues = null;
+    if (typeof LinearizationState?.getGlobalBaselineCurves === 'function') {
+        try {
+            const baselineCurves = LinearizationState.getGlobalBaselineCurves();
+            if (baselineCurves && Array.isArray(baselineCurves[channelName])) {
+                baselineValues = baselineCurves[channelName].slice();
+            }
+        } catch (baselineError) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[global] failed to read baseline curves from LinearizationState:', baselineError);
+            }
+        }
+    }
+
+    if ((!baselineValues || !baselineValues.length) && typeof getLoadedQuadData === 'function') {
+        const quadData = getLoadedQuadData();
+        const fallback = quadData?.plotBaseCurves?.[channelName];
+        if (Array.isArray(fallback) && fallback.length) {
+            baselineValues = fallback.slice();
+        }
+    }
+
+    if (!baselineValues || !baselineValues.length || (Array.isArray(values) && baselineValues.length !== values.length)) {
+        baselineValues = Array.isArray(values) ? values.slice() : [];
+    }
+
     let lutSource = normalizedEntry;
     let lutSmoothing = effectiveSmoothing;
     if (effectiveSmoothing > 0 && Array.isArray(normalizedEntry.previewSamples)) {
@@ -5715,7 +5748,7 @@ export function applyGlobalLinearizationStep(values, options = {}) {
         lutSmoothing = 0;
     }
 
-    return apply1DLUT(
+    const correctedValues = apply1DLUT(
         values,
         lutSource,
         domainMin,
@@ -5724,6 +5757,31 @@ export function applyGlobalLinearizationStep(values, options = {}) {
         interpolationType,
         lutSmoothing
     );
+
+    const gain = currentGain;
+    if (!Array.isArray(correctedValues) || correctedValues.length === 0) {
+        return correctedValues;
+    }
+    if (gain >= 0.999) {
+        return correctedValues;
+    }
+    if (gain <= 0.001) {
+        return baselineValues.length ? baselineValues : values;
+    }
+
+    const blendCount = Math.max(correctedValues.length, baselineValues.length);
+    const blended = new Array(blendCount);
+    for (let i = 0; i < blendCount; i += 1) {
+        const base = Number.isFinite(baselineValues[i]) ? baselineValues[i] : 0;
+        const corrected = Number.isFinite(correctedValues[i]) ? correctedValues[i] : base;
+        blended[i] = Math.round(base + (corrected - base) * gain);
+    }
+
+    if (typeof captureMake256Step === 'function') {
+        captureMake256Step(channelName, 'global_gainBlend', blended.slice());
+    }
+
+    return blended;
 }
 
 /**

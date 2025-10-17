@@ -1,7 +1,7 @@
 // quadGEN Chart Manager
 // Chart rendering, zoom management, and interaction handling
 
-import { elements, getCurrentPrinter, getAppState, updateAppState, INK_COLORS, TOTAL, isChannelNormalizedToEnd, getLoadedQuadData } from '../core/state.js';
+import { elements, getCurrentPrinter, getAppState, updateAppState, INK_COLORS, TOTAL, isChannelNormalizedToEnd, getLoadedQuadData, setCorrectionGain, getCorrectionGain } from '../core/state.js';
 import { getStateManager } from '../core/state-manager.js';
 import { InputValidator } from '../core/validation.js';
 import { make256 } from '../core/processing-pipeline.js';
@@ -10,6 +10,7 @@ import { SCALING_STATE_FLAG_EVENT } from '../core/scaling-constants.js';
 import { ControlPoints, isSmartCurve } from '../curves/smart-curves.js';
 import { registerInkChartHandler, triggerPreviewUpdate } from './ui-hooks.js';
 import { showStatus } from './status-service.js';
+import { updateSessionStatus } from './graph-status.js';
 import { LinearizationState, normalizeLinearizationEntry } from '../data/linearization-utils.js';
 import { isSmartPointDragEnabled } from '../core/feature-flags.js';
 import { isChannelLocked, getChannelLockEditMessage } from '../core/channel-locks.js';
@@ -71,10 +72,30 @@ function formatPercentDisplay(value) {
 
 const SMART_POINT_DRAG_TOLERANCE_PX = 12;
 
+const LAB_SPOT_MARKER_STORAGE_KEY = 'quadgen.showLabSpotMarkers';
+
+let storedLabSpotMarkerPreference = false;
+try {
+    if (typeof localStorage !== 'undefined') {
+        storedLabSpotMarkerPreference = localStorage.getItem(LAB_SPOT_MARKER_STORAGE_KEY) === '1';
+    }
+} catch (error) {
+    storedLabSpotMarkerPreference = false;
+}
+
 const initialAppStateSnapshot = getAppState();
+if (storedLabSpotMarkerPreference) {
+    initialAppStateSnapshot.showLabSpotMarkers = true;
+}
 const CORRECTION_OVERLAY_COLOR = '#ef4444';
-const CORRECTION_BASELINE_COLOR = '#a855f7';
 const ORIGINAL_CURVE_OVERLAY_COLOR = '#4b5563';
+const CORRECTION_BASELINE_COLOR = '#a855f7';
+const LAB_SPOT_PASS_COLOR = '#10b981';
+const LAB_SPOT_PASS_STROKE = '#047857';
+const LAB_SPOT_DARKEN_COLOR = '#ef4444';
+const LAB_SPOT_LIGHTEN_COLOR = '#0ea5e9';
+const LAB_SPOT_LABEL_BG = 'rgba(255, 255, 255, 0.92)';
+const LAB_SPOT_LABEL_TEXT = '#111827';
 const LIGHT_BLOCKING_OVERLAY_COLOR = '#7c3aed';
 const LIGHT_BLOCKING_LABEL_COLOR = '#6d28d9';
 const LIGHT_BLOCKING_REFERENCE_COLOR = '#c084fc';
@@ -84,12 +105,70 @@ const FLAG_MARKER_FALLBACK = '⚑';
 const chartDebugSettings = {
     showCorrectionTarget: !!initialAppStateSnapshot.showCorrectionOverlay,
     lastCorrectionOverlay: null,
+    showLabSpotMarkers: !!initialAppStateSnapshot.showLabSpotMarkers,
+    lastLabSpotMarkers: null,
     showLightBlockingOverlay: false,
     lastLightBlockingCurve: null,
     lastOriginalOverlays: {},
     flaggedSnapshots: [],
-    lastSelectionProbe: null
+    lastSelectionProbe: null,
+    restoreLabSpotMarkerPreference: storedLabSpotMarkerPreference
 };
+
+const CORRECTION_GAIN_DEBOUNCE_MS = 150;
+let correctionGainRefreshTimeout = null;
+let pendingGainAnnouncement = null;
+
+function runCorrectionGainSideEffects(appliedGain) {
+    if (LinearizationState && typeof LinearizationState.refreshMeasurementCorrectionsForGain === 'function') {
+        try {
+            LinearizationState.refreshMeasurementCorrectionsForGain(appliedGain);
+        } catch (error) {
+            console.warn('Failed to refresh measurement corrections after correction gain change:', error);
+        }
+    }
+
+    try {
+        updateInkChart();
+    } catch (error) {
+        console.warn('Failed to refresh chart after correction gain change:', error);
+    }
+
+    try {
+        triggerPreviewUpdate();
+    } catch (error) {
+        console.warn('Failed to refresh preview after correction gain change:', error);
+    }
+
+    try {
+        updateSessionStatus();
+    } catch (error) {
+        console.warn('Failed to refresh session status after correction gain change:', error);
+    }
+
+    if (pendingGainAnnouncement !== null) {
+        showStatus(`Correction gain set to ${pendingGainAnnouncement}%`);
+        pendingGainAnnouncement = null;
+    }
+}
+
+function scheduleCorrectionGainRefresh(appliedGain) {
+    if (correctionGainRefreshTimeout !== null) {
+        clearTimeout(correctionGainRefreshTimeout);
+    }
+    correctionGainRefreshTimeout = setTimeout(() => {
+        correctionGainRefreshTimeout = null;
+        runCorrectionGainSideEffects(appliedGain);
+    }, CORRECTION_GAIN_DEBOUNCE_MS);
+}
+
+function flushCorrectionGainRefresh(appliedGain) {
+    if (correctionGainRefreshTimeout !== null) {
+        clearTimeout(correctionGainRefreshTimeout);
+        correctionGainRefreshTimeout = null;
+    }
+    runCorrectionGainSideEffects(appliedGain);
+}
 
 function sampleLightBlockingAtPercent(inputPercent) {
     const overlay = chartDebugSettings.lastLightBlockingCurve;
@@ -188,17 +267,157 @@ export function isChartLightBlockingOverlayEnabled() {
     return !!chartDebugSettings.showLightBlockingOverlay;
 }
 
+function hasLabMeasurementCorrections() {
+    try {
+        if (typeof LinearizationState?.getLabMeasurementCorrections === 'function') {
+            const list = LinearizationState.getLabMeasurementCorrections({ skipEndpoints: false, clone: false });
+            return Array.isArray(list) && list.length > 0;
+        }
+        const legacyList = LinearizationState?.globalMeasurementCorrections;
+        return Array.isArray(legacyList) && legacyList.length > 0;
+    } catch (error) {
+        console.warn('[Chart Debug] Failed to inspect LAB measurement corrections:', error);
+        return false;
+    }
+}
+
+export function syncLabSpotMarkerToggleAvailability() {
+    const toggle = elements.labSpotMarkersToggle;
+    if (!toggle) {
+        return;
+    }
+    const hasCorrections = hasLabMeasurementCorrections();
+    toggle.disabled = !hasCorrections;
+    toggle.setAttribute('aria-disabled', String(!hasCorrections));
+    if (hasCorrections && chartDebugSettings.restoreLabSpotMarkerPreference) {
+        chartDebugSettings.restoreLabSpotMarkerPreference = false;
+        setLabSpotMarkerOverlayEnabled(true);
+        return;
+    }
+    if (!hasCorrections) {
+        toggle.checked = false;
+        toggle.setAttribute('aria-checked', 'false');
+        if (chartDebugSettings.showLabSpotMarkers) {
+            chartDebugSettings.showLabSpotMarkers = false;
+            updateAppState({ showLabSpotMarkers: false });
+            chartDebugSettings.lastLabSpotMarkers = null;
+        }
+    }
+}
+
+export function setLabSpotMarkerOverlayEnabled(enabled = true) {
+    const next = !!enabled;
+    if (next && !hasLabMeasurementCorrections()) {
+        showStatus('Load LAB measurement data to enable measurement spot markers.');
+        const toggle = elements.labSpotMarkersToggle;
+        if (toggle) {
+            toggle.checked = false;
+            toggle.setAttribute('aria-checked', 'false');
+        }
+        chartDebugSettings.showLabSpotMarkers = false;
+        updateAppState({ showLabSpotMarkers: false });
+        return false;
+    }
+
+    chartDebugSettings.showLabSpotMarkers = next;
+    updateAppState({ showLabSpotMarkers: next });
+    try {
+        if (typeof localStorage !== 'undefined') {
+            if (next) {
+                localStorage.setItem(LAB_SPOT_MARKER_STORAGE_KEY, '1');
+            } else {
+                localStorage.removeItem(LAB_SPOT_MARKER_STORAGE_KEY);
+            }
+        }
+    } catch (storageError) {
+        console.warn('[Chart Debug] Failed to persist spot marker preference:', storageError);
+    }
+
+    const toggle = elements.labSpotMarkersToggle;
+    if (toggle) {
+        toggle.checked = next;
+        toggle.setAttribute('aria-checked', String(next));
+    }
+
+    if (!next) {
+        chartDebugSettings.lastLabSpotMarkers = null;
+    }
+
+    if (typeof updateInkChart === 'function') {
+        try {
+            updateInkChart();
+        } catch (err) {
+            console.warn('[Chart Debug] Failed to refresh chart after toggling spot markers:', err);
+        }
+    }
+
+    return chartDebugSettings.showLabSpotMarkers;
+}
+
+export function isLabSpotMarkerOverlayEnabled() {
+    return !!chartDebugSettings.showLabSpotMarkers;
+}
+
+export function applyCorrectionGainNormalized(normalized, options = {}) {
+    const { announce = false, forceImmediate = false } = options || {};
+    const current = getCorrectionGain();
+    const numeric = Number(normalized);
+    const clamped = Number.isFinite(numeric) ? Math.max(0, Math.min(1, numeric)) : current;
+    const applied = setCorrectionGain(clamped);
+
+    if (Math.abs(applied - current) <= 0.0005) {
+        return applied;
+    }
+
+    const percent = Math.round(applied * 100);
+    if (elements.correctionGainSlider) {
+        elements.correctionGainSlider.value = String(percent);
+        elements.correctionGainSlider.setAttribute('aria-valuenow', String(percent));
+        elements.correctionGainSlider.setAttribute('aria-valuetext', `${percent}%`);
+    }
+    if (elements.correctionGainInput) {
+        elements.correctionGainInput.value = String(percent);
+    }
+    if (elements.correctionGainValue) {
+        elements.correctionGainValue.textContent = `${percent}%`;
+    }
+
+    pendingGainAnnouncement = announce ? percent : null;
+
+    if (forceImmediate) {
+        flushCorrectionGainRefresh(applied);
+    } else {
+        scheduleCorrectionGainRefresh(applied);
+    }
+
+    return applied;
+}
+
+export function applyCorrectionGainPercent(percent, options = {}) {
+    const numeric = Number(percent);
+    const clampedPercent = Number.isFinite(numeric) ? Math.max(0, Math.min(100, Math.round(numeric))) : Math.round(getCorrectionGain() * 100);
+    return applyCorrectionGainNormalized(clampedPercent / 100, options);
+}
+
 if (isBrowser) {
     const debugHelpers = registerDebugNamespace('chartDebug', {
         setShowCorrectionTarget: setChartDebugShowCorrectionTarget,
         isShowCorrectionTargetEnabled: isChartDebugShowCorrectionTarget,
         getLastCorrectionOverlay: () => chartDebugSettings.lastCorrectionOverlay,
+        setLabSpotMarkerOverlayEnabled,
+        isLabSpotMarkerOverlayEnabled,
+        getLabSpotMarkers: () => (Array.isArray(chartDebugSettings.lastLabSpotMarkers)
+            ? chartDebugSettings.lastLabSpotMarkers.map((entry) => ({ ...entry }))
+            : null),
+        syncLabSpotMarkerToggleAvailability,
         getLastOriginalOverlays: () => ({ ...chartDebugSettings.lastOriginalOverlays }),
         getFlaggedSnapshots: () => chartDebugSettings.flaggedSnapshots.slice(),
         setLightBlockingOverlayEnabled: setChartLightBlockingOverlayEnabled,
         isLightBlockingOverlayEnabled: isChartLightBlockingOverlayEnabled,
         getLastLightBlockingCurve: () => chartDebugSettings.lastLightBlockingCurve,
         getLastSelectionProbe: () => chartDebugSettings.lastSelectionProbe,
+        setCorrectionGainPercent: (percent, options = {}) => applyCorrectionGainPercent(percent, options),
+        getCorrectionGainPercent: () => Math.round(getCorrectionGain() * 100),
         simulateSmartPointSelection: (channel, ordinal, options = {}) => selectSmartPointOrdinal(channel, ordinal, {
             description: options?.description || `Debug select ${channel} point ${ordinal}`,
             silent: options?.silent !== undefined ? options.silent : true,
@@ -210,8 +429,13 @@ if (isBrowser) {
             'setChartDebugShowCorrectionTarget',
             'isChartDebugShowCorrectionTarget',
             'getChartDebugFlaggedSnapshots',
+            'setLabSpotMarkerOverlayEnabled',
+            'isLabSpotMarkerOverlayEnabled',
+            'syncLabSpotMarkerToggleAvailability',
             'setLightBlockingOverlayEnabled',
-            'isLightBlockingOverlayEnabled'
+            'isLightBlockingOverlayEnabled',
+            'setCorrectionGainPercent',
+            'getCorrectionGainPercent'
         ]
     });
     if (debugHelpers) {
@@ -1029,6 +1253,7 @@ export function updateInkChart() {
 
     // Get chart elements
     const canvas = elements.inkChart;
+    syncLabSpotMarkerToggleAvailability();
 
     if (ENABLE_RESPONSIVE_CHART) {
         updateResponsiveWrapperDimensions();
@@ -1160,6 +1385,15 @@ export function updateInkChart() {
         chartDebugSettings.lastLightBlockingCurve = null;
         if (isBrowser && globalScope.__quadDebug?.chartDebug) {
             globalScope.__quadDebug.chartDebug.lastLightBlockingCurve = null;
+        }
+    }
+
+    if (chartDebugSettings.showLabSpotMarkers) {
+        drawLabSpotMarkers(ctx, geom, colors);
+    } else if (chartDebugSettings.lastLabSpotMarkers) {
+        chartDebugSettings.lastLabSpotMarkers = null;
+        if (isBrowser && globalScope.__quadDebug?.chartDebug) {
+            globalScope.__quadDebug.chartDebug.lastLabSpotMarkers = null;
         }
     }
 
@@ -1346,6 +1580,31 @@ function ensureChartResizeObserver() {
     }
 }
 
+function blendNormalizedSamplesTowardIdentity(samples, gain) {
+    if (!Array.isArray(samples) || samples.length === 0) {
+        return [];
+    }
+    const numericGain = Number(gain);
+    const clampedGain = Number.isFinite(numericGain) ? Math.max(0, Math.min(1, numericGain)) : 1;
+    const lastIndex = samples.length - 1;
+    if (clampedGain >= 0.999) {
+        return samples.slice();
+    }
+    const blended = new Array(samples.length);
+    for (let i = 0; i < samples.length; i += 1) {
+        const identity = lastIndex > 0 ? i / lastIndex : 0;
+        const sampleValue = Number(samples[i]);
+        const normalized = Number.isFinite(sampleValue) ? Math.max(0, Math.min(1, sampleValue)) : identity;
+        if (clampedGain <= 0.001) {
+            blended[i] = identity;
+        } else {
+            const mixed = identity + (normalized - identity) * clampedGain;
+            blended[i] = Math.max(0, Math.min(1, mixed));
+        }
+    }
+    return blended;
+}
+
 /**
  * Draw reference intent curve (dotted line showing target)
  * @param {CanvasRenderingContext2D} ctx - Canvas context
@@ -1491,11 +1750,14 @@ function drawCorrectionTargetCurve(ctx, geom) {
             effectiveMaxPercent = geom.displayMax;
         }
 
+        const gain = getCorrectionGain();
+        const gainAdjustedSamples = blendNormalizedSamplesTowardIdentity(samples, gain);
         const overlayMeta = {
             color: CORRECTION_OVERLAY_COLOR,
             samples: [],
             baseline: null,
-            effectiveMaxPercent
+            effectiveMaxPercent,
+            gain
         };
 
         ctx.save();
@@ -1505,9 +1767,9 @@ function drawCorrectionTargetCurve(ctx, geom) {
         ctx.setLineDash([8, 6]);
 
         ctx.beginPath();
-        for (let i = 0; i < samples.length; i += 1) {
+        for (let i = 0; i < gainAdjustedSamples.length; i += 1) {
             const inputPercent = (i / (samples.length - 1)) * 100;
-            const outputPercent = Math.max(0, Math.min(effectiveMaxPercent, samples[i] * effectiveMaxPercent));
+            const outputPercent = Math.max(0, Math.min(effectiveMaxPercent, gainAdjustedSamples[i] * effectiveMaxPercent));
             const x = mapPercentToX(inputPercent, geom);
             const y = mapPercentToY(outputPercent, geom);
             overlayMeta.samples.push({ input: inputPercent, output: outputPercent });
@@ -1521,26 +1783,22 @@ function drawCorrectionTargetCurve(ctx, geom) {
         ctx.stroke();
         ctx.setLineDash([]);
 
+        // Draw the linear reference baseline so operators can compare the correction against the identity ramp.
+        const baselineMaxPercent = Math.max(0, Math.min(effectiveMaxPercent, geom.displayMax || 100));
+        ctx.save();
         ctx.strokeStyle = CORRECTION_BASELINE_COLOR;
         ctx.lineWidth = 1.5;
-        ctx.globalAlpha = 0.9;
+        ctx.globalAlpha = 0.75;
+        ctx.setLineDash([4, 4]);
         ctx.beginPath();
-        const baselinePoints = [
-            { input: 0, output: 0 },
-            { input: 100, output: effectiveMaxPercent }
-        ];
-        const startX = mapPercentToX(baselinePoints[0].input, geom);
-        const startY = mapPercentToY(baselinePoints[0].output, geom);
-        const endX = mapPercentToX(baselinePoints[1].input, geom);
-        const endY = mapPercentToY(baselinePoints[1].output, geom);
-        ctx.moveTo(startX, startY);
-        ctx.lineTo(endX, endY);
+        ctx.moveTo(mapPercentToX(0, geom), mapPercentToY(0, geom));
+        ctx.lineTo(mapPercentToX(100, geom), mapPercentToY(baselineMaxPercent, geom));
         ctx.stroke();
-
-        overlayMeta.baseline = {
-            color: CORRECTION_BASELINE_COLOR,
-            points: baselinePoints
-        };
+        ctx.restore();
+        overlayMeta.baseline = [
+            { input: 0, output: 0 },
+            { input: 100, output: baselineMaxPercent }
+        ];
 
         chartDebugSettings.lastCorrectionOverlay = overlayMeta;
         if (isBrowser && globalScope.__quadDebug?.chartDebug) {
@@ -1553,6 +1811,247 @@ function drawCorrectionTargetCurve(ctx, geom) {
         chartDebugSettings.lastCorrectionOverlay = null;
         if (isBrowser && globalScope.__quadDebug?.chartDebug) {
             globalScope.__quadDebug.chartDebug.lastCorrectionOverlay = null;
+        }
+    }
+}
+
+function drawLabSpotMarkers(ctx, geom, colors) {
+    try {
+        let points = [];
+        if (typeof LinearizationState?.getLabMeasurementCorrections === 'function') {
+            points = LinearizationState.getLabMeasurementCorrections({ skipEndpoints: true });
+        } else if (Array.isArray(LinearizationState?.globalMeasurementCorrections)) {
+            points = LinearizationState.globalMeasurementCorrections.filter((entry) => !entry?.isEndpoint);
+        }
+
+        if (!Array.isArray(points) || points.length === 0) {
+            chartDebugSettings.lastLabSpotMarkers = null;
+            return;
+        }
+        if (points.length > 256) {
+            chartDebugSettings.lastLabSpotMarkers = null;
+            if (isBrowser && globalScope.__quadDebug?.chartDebug) {
+                globalScope.__quadDebug.chartDebug.lastLabSpotMarkers = null;
+            }
+            return;
+        }
+
+        const loadedData = typeof getLoadedQuadData === 'function' ? getLoadedQuadData() : null;
+        let effectiveMaxPercent = getEffectiveGlobalInkPercent(loadedData, geom.displayMax || 100);
+        if (!Number.isFinite(effectiveMaxPercent) || effectiveMaxPercent <= 0) {
+            effectiveMaxPercent = Math.min(geom.displayMax || 100, 100);
+        }
+
+        const dpr = geom.dpr || (globalScope.devicePixelRatio || 1);
+        const baseMarkerRadius = Math.max(4 * dpr, Math.min(geom.chartHeight * 0.02, 9 * dpr));
+        const markerRadius = Math.max(baseMarkerRadius * 0.7, 2.5 * dpr);
+        const arrowPixelsPerPercent = Math.max(markerRadius * 1.4, Math.min(geom.chartHeight * 0.25, 60 * dpr)) / 8;
+        const arrowHeadSize = Math.max(markerRadius * 0.9, 5 * dpr);
+        const labelFontSize = Math.max(11 * dpr, Math.min(14 * dpr, geom.chartHeight * 0.035));
+        const textColor = colors?.text || LAB_SPOT_LABEL_TEXT;
+        const anchorGeom = { ...geom, displayMax: 100 };
+        const chartTop = geom.padding;
+        const chartBottom = geom.height - (geom.bottomPadding || geom.padding);
+        const anchorPercent = 70;
+        let rowY = mapPercentToY(anchorPercent, anchorGeom);
+        if (!Number.isFinite(rowY)) {
+            rowY = chartBottom - markerRadius;
+        }
+        const minRow = chartTop + markerRadius;
+        const maxRow = chartBottom - markerRadius;
+        if (rowY < minRow) {
+            rowY = minRow;
+        } else if (rowY > maxRow) {
+            rowY = maxRow;
+        }
+
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.font = `${Math.round(labelFontSize)}px Inter, ui-sans-serif`;
+        ctx.textBaseline = 'middle';
+
+        const bottomLimit = chartBottom;
+        const labelPaddingX = Math.max(4 * dpr, 4);
+        const labelPaddingY = Math.max(2 * dpr, 2);
+        const chartLeft = geom.padding || 0;
+        const chartRight = (geom.width || (geom.chartWidth + (geom.leftPadding || 0) + (geom.rightPadding || 0))) -
+            (geom.rightPadding || geom.padding || 0);
+        const horizontalLabelOffset = 0;
+        const arrowGap = Math.max(2 * dpr, 2);
+
+        const debugMarkers = [];
+
+        points.forEach((entry) => {
+            if (!entry || !Number.isFinite(entry.inputPercent)) {
+                return;
+            }
+            const measuredPercentRaw = Number.isFinite(entry.measuredPercent)
+                ? entry.measuredPercent
+                : (Number.isFinite(entry.measuredNormalized) ? entry.measuredNormalized * 100 : null);
+            if (!Number.isFinite(measuredPercentRaw)) {
+                return;
+            }
+            const clampedOutputPercent = Math.max(0, Math.min(effectiveMaxPercent, measuredPercentRaw));
+            const x = mapPercentToX(entry.inputPercent, geom);
+            const measuredCanvasY = mapPercentToY(clampedOutputPercent, geom);
+            const correctionGain = Number(entry.correctionGain);
+            const appliedDeltaPercentRaw = Number(entry.appliedDeltaPercent);
+            const baseDeltaPercent = Number(entry.baseDeltaPercent);
+            const residualDeltaPercent = Number(entry.residualDeltaPercent);
+            const deltaPercent = Number.isFinite(appliedDeltaPercentRaw)
+                ? appliedDeltaPercentRaw
+                : Number(entry.deltaPercent) || 0;
+            const magnitudePercent = Math.abs(deltaPercent);
+            const markerInfo = {
+                inputPercent: entry.inputPercent,
+                measuredPercent: clampedOutputPercent,
+                lab: Number.isFinite(entry.lab) ? entry.lab : null,
+                deltaPercent,
+                action: entry.action || 'within',
+                withinTolerance: entry.withinTolerance === true,
+                tolerancePercent: Number(entry.tolerancePercent) || 1,
+                magnitudePercent: Number.isFinite(entry.magnitudePercent) ? Math.abs(entry.magnitudePercent) : magnitudePercent,
+                normalizedMagnitude: Number(entry.normalizedMagnitude) || 0,
+                direction: Number(entry.direction) || (deltaPercent >= 0 ? 1 : -1),
+                canvasX: x,
+                canvasY: rowY,
+                measuredCanvasY,
+                radius: markerRadius,
+                correctionGain: Number.isFinite(correctionGain) ? correctionGain : null,
+                appliedDeltaPercent: deltaPercent,
+                residualDeltaPercent: Number.isFinite(residualDeltaPercent) ? residualDeltaPercent : (Number.isFinite(baseDeltaPercent) ? baseDeltaPercent - deltaPercent : 0),
+                baseDeltaPercent: Number.isFinite(baseDeltaPercent) ? baseDeltaPercent : deltaPercent
+            };
+
+            if (markerInfo.withinTolerance) {
+                ctx.save();
+                ctx.beginPath();
+                ctx.arc(x, rowY, markerRadius, 0, Math.PI * 2);
+                ctx.fillStyle = LAB_SPOT_PASS_COLOR;
+                ctx.fill();
+                ctx.lineWidth = Math.max(1.5 * dpr, 1.5);
+                ctx.strokeStyle = LAB_SPOT_PASS_STROKE;
+                ctx.stroke();
+
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = Math.max(2 * dpr, 2);
+                ctx.lineCap = 'round';
+                ctx.beginPath();
+                ctx.moveTo(x - markerRadius * 0.55, rowY);
+                ctx.lineTo(x - markerRadius * 0.12, rowY + markerRadius * 0.55);
+                ctx.lineTo(x + markerRadius * 0.6, rowY - markerRadius * 0.6);
+                ctx.stroke();
+                ctx.restore();
+
+                markerInfo.label = 'Within tolerance';
+                debugMarkers.push(markerInfo);
+                return;
+            }
+
+            // Draw base marker
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(x, rowY, markerRadius, 0, Math.PI * 2);
+            ctx.fillStyle = LAB_SPOT_LABEL_BG;
+            ctx.fill();
+            ctx.lineWidth = Math.max(1.25 * dpr, 1.5);
+            ctx.strokeStyle = colors?.axis || '#1f2937';
+            ctx.stroke();
+            ctx.restore();
+
+            const arrowDirection = markerInfo.direction >= 0 ? -1 : 1;
+            const arrowColor = markerInfo.direction >= 0 ? LAB_SPOT_DARKEN_COLOR : LAB_SPOT_LIGHTEN_COLOR;
+            const magnitudeClamp = Number(entry.clampedMagnitudePercent);
+            const effectiveMagnitude = Number.isFinite(magnitudeClamp) ? magnitudeClamp : markerInfo.magnitudePercent;
+            const arrowLength = Math.max(arrowPixelsPerPercent * Math.max(effectiveMagnitude, 0.25), arrowHeadSize * 0.75);
+            const arrowBaseOffset = markerRadius + arrowGap;
+            const arrowStartY = rowY + (arrowDirection >= 0 ? arrowBaseOffset : -arrowBaseOffset);
+            let arrowEndY = arrowStartY + arrowDirection * arrowLength;
+            if (arrowDirection < 0 && arrowEndY < geom.padding) {
+                arrowEndY = geom.padding;
+            } else if (arrowDirection > 0 && arrowEndY > bottomLimit) {
+                arrowEndY = bottomLimit;
+            }
+
+            ctx.save();
+            ctx.strokeStyle = arrowColor;
+            ctx.lineWidth = Math.max(2 * dpr, 2);
+            ctx.beginPath();
+            ctx.moveTo(x, arrowStartY);
+            ctx.lineTo(x, arrowEndY);
+            ctx.stroke();
+
+            const tipY = arrowEndY;
+            const baseY = tipY - arrowDirection * arrowHeadSize;
+            ctx.beginPath();
+            ctx.moveTo(x, tipY);
+            ctx.lineTo(x - arrowHeadSize * 0.6, baseY);
+            ctx.lineTo(x + arrowHeadSize * 0.6, baseY);
+            ctx.closePath();
+            ctx.fillStyle = arrowColor;
+            ctx.fill();
+            ctx.restore();
+
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(x, measuredCanvasY, Math.max(2 * dpr, 2.5), 0, Math.PI * 2);
+            ctx.fillStyle = `${arrowColor}33`;
+            ctx.fill();
+            ctx.restore();
+
+            const labelText = `${markerInfo.deltaPercent >= 0 ? '+' : ''}${markerInfo.deltaPercent.toFixed(1)}%`;
+            const textMetrics = ctx.measureText(labelText);
+            const labelWidth = textMetrics.width + labelPaddingX * 2;
+            const labelHeight = labelFontSize + labelPaddingY * 2;
+            let labelX = x - (labelWidth / 2) + horizontalLabelOffset;
+            if (labelX < chartLeft) {
+                labelX = chartLeft;
+            } else if (labelX + labelWidth > chartRight) {
+                labelX = chartRight - labelWidth;
+            }
+            let labelY;
+            if (arrowDirection < 0) {
+                labelY = Math.min(rowY - markerRadius - labelHeight - arrowGap, arrowEndY - labelHeight - arrowGap);
+                if (labelY < geom.padding) {
+                    labelY = geom.padding;
+                }
+            } else {
+                labelY = rowY - markerRadius - labelHeight - arrowGap;
+                if (labelY < geom.padding) {
+                    labelY = geom.padding;
+                }
+            }
+
+            ctx.save();
+            ctx.fillStyle = LAB_SPOT_LABEL_BG;
+            ctx.fillRect(labelX, labelY, labelWidth, labelHeight);
+            ctx.lineWidth = Math.max(1 * dpr, 1);
+            ctx.strokeStyle = colors?.axis || '#1f2937';
+            ctx.strokeRect(labelX, labelY, labelWidth, labelHeight);
+            ctx.fillStyle = textColor;
+            ctx.fillText(labelText, labelX + labelPaddingX, labelY + (labelHeight / 2));
+            ctx.restore();
+
+            markerInfo.label = labelText;
+            markerInfo.labelBounds = {
+                x: labelX,
+                y: labelY,
+                width: labelWidth,
+                height: labelHeight
+            };
+            debugMarkers.push(markerInfo);
+        });
+
+        ctx.restore();
+        chartDebugSettings.lastLabSpotMarkers = debugMarkers;
+        if (isBrowser && globalScope.__quadDebug?.chartDebug) {
+            globalScope.__quadDebug.chartDebug.lastLabSpotMarkers = debugMarkers.map((entry) => ({ ...entry }));
+        }
+    } catch (error) {
+        console.warn('[CHART DEBUG] Failed to draw LAB spot markers:', error);
+        chartDebugSettings.lastLabSpotMarkers = null;
+        if (isBrowser && globalScope.__quadDebug?.chartDebug) {
+            globalScope.__quadDebug.chartDebug.lastLabSpotMarkers = null;
         }
     }
 }
@@ -1763,6 +2262,23 @@ function renderChannelCurves(ctx, geom, colors, fontScale) {
     } catch (error) {
         console.error('Error rendering channel curves:', error);
     }
+}
+
+// Test hook: used by Vitest to inspect correction overlay metadata without rendering the full chart.
+export function __testRenderCorrectionOverlay(ctx, geom) {
+    if (!ctx || !geom) {
+        throw new Error('__testRenderCorrectionOverlay requires a rendering context and geometry');
+    }
+    drawCorrectionTargetCurve(ctx, geom);
+    return chartDebugSettings.lastCorrectionOverlay;
+}
+
+// Test hook: used by Vitest to ensure light-blocking overlays render without the dashed reference guide.
+export function __testRenderLightBlockingOverlay(ctx, geom, overlay) {
+    if (!ctx || !geom || !overlay) {
+        throw new Error('__testRenderLightBlockingOverlay requires a context, geometry, and overlay data');
+    }
+    drawLightBlockingOverlay(ctx, geom, overlay);
 }
 
 function drawPeakMarker(ctx, geom, color, inputPercent, outputPercent) {
@@ -2026,7 +2542,9 @@ function drawLightBlockingOverlay(ctx, geom, overlay) {
     ctx.stroke();
     ctx.restore();
 
-    drawLightBlockingReference(ctx, geom);
+    // TODO(light-blocking-reference-quad): Restore the dashed reference curve once the app can load a comparison
+    // `.quad` similar to the legacy jan build. Until then we suppress the dashed purple guide to avoid confusion.
+    // drawLightBlockingReference(ctx, geom);
     drawLightBlockingLabel(ctx, geom, overlay);
 }
 
@@ -2217,8 +2735,74 @@ export function setupChartCursorTooltip(geom) {
                 console.warn('Edit mode tooltip integration failed:', err);
             }
 
+            // Determine if the cursor is near a LAB spot marker
+            let labMarkerInfo = null;
+            if (chartDebugSettings.showLabSpotMarkers && Array.isArray(chartDebugSettings.lastLabSpotMarkers)) {
+                const dprValue = CHART_CURSOR_MAP?.dpr || 1;
+                const baseTolerance = Math.max(10 * dprValue, 12);
+                for (const marker of chartDebugSettings.lastLabSpotMarkers) {
+                    if (!marker) continue;
+                    const dx = cx - marker.canvasX;
+                    const dy = cy - marker.canvasY;
+                    const radius = (marker.radius || 8) + baseTolerance;
+                    if ((dx * dx) + (dy * dy) <= radius * radius) {
+                        labMarkerInfo = marker;
+                        break;
+                    }
+                    if (marker.labelBounds) {
+                        const { x: lx, y: ly, width, height } = marker.labelBounds;
+                        if (cx >= lx && cx <= lx + width && cy >= ly && cy <= ly + height) {
+                            labMarkerInfo = marker;
+                            break;
+                        }
+                    }
+                }
+            }
+
             // Update tooltip content and position
-            const tooltipLines = [`${xPct.toFixed(1)}, ${yPct.toFixed(1)}`];
+            const tooltipLines = [];
+            if (labMarkerInfo) {
+                const highlightCtx = canvas.getContext('2d');
+                if (highlightCtx) {
+                    highlightCtx.save();
+                    highlightCtx.strokeStyle = labMarkerInfo.action === 'darken' ? LAB_SPOT_DARKEN_COLOR : (labMarkerInfo.action === 'lighten' ? LAB_SPOT_LIGHTEN_COLOR : LAB_SPOT_PASS_STROKE);
+                    highlightCtx.lineWidth = Math.max((labMarkerInfo.radius || 8) * 0.35, 2 * (CHART_CURSOR_MAP?.dpr || 1));
+                    highlightCtx.setLineDash([6, 4]);
+                    highlightCtx.beginPath();
+                    highlightCtx.arc(labMarkerInfo.canvasX, labMarkerInfo.canvasY, (labMarkerInfo.radius || 8) + Math.max(4 * (CHART_CURSOR_MAP?.dpr || 1), 4), 0, Math.PI * 2);
+                    highlightCtx.stroke();
+                    if (Number.isFinite(labMarkerInfo.measuredCanvasY)) {
+                        const dprHighlight = CHART_CURSOR_MAP?.dpr || geom.dpr || 1;
+                        const bottomEdge = (CHART_CURSOR_MAP?.height ?? geom.height) - (CHART_CURSOR_MAP?.bottomPadding ?? geom.bottomPadding ?? 0);
+
+                        highlightCtx.lineWidth = Math.max(1.5 * dprHighlight, 1.5);
+                        highlightCtx.setLineDash([3, 3]);
+                        highlightCtx.beginPath();
+                        highlightCtx.moveTo(labMarkerInfo.canvasX, labMarkerInfo.canvasY + (labMarkerInfo.radius || 8));
+                        highlightCtx.lineTo(labMarkerInfo.canvasX, bottomEdge);
+                        highlightCtx.stroke();
+
+                        highlightCtx.fillStyle = `${(labMarkerInfo.action === 'darken' ? LAB_SPOT_DARKEN_COLOR : LAB_SPOT_LIGHTEN_COLOR)}66`;
+                        highlightCtx.beginPath();
+                        highlightCtx.arc(labMarkerInfo.canvasX, labMarkerInfo.measuredCanvasY, Math.max(3 * dprHighlight, 3), 0, Math.PI * 2);
+                        highlightCtx.fill();
+                    }
+                    highlightCtx.restore();
+                }
+
+                tooltipLines.push(`Input ${labMarkerInfo.inputPercent.toFixed(1)}%`);
+                if (Number.isFinite(labMarkerInfo.lab)) {
+                    tooltipLines.push(`Measured L* ${labMarkerInfo.lab.toFixed(2)}`);
+                }
+                if (labMarkerInfo.action === 'within') {
+                    tooltipLines.push(`Action: within ±${labMarkerInfo.tolerancePercent?.toFixed?.(1) ?? '1'}% (✓)`);
+                } else {
+                    const verb = labMarkerInfo.action === 'darken' ? 'Darken' : 'Lighten';
+                    tooltipLines.push(`Action: ${verb} ${Math.abs(labMarkerInfo.deltaPercent).toFixed(1)}%`);
+                }
+            } else {
+                tooltipLines.push(`${xPct.toFixed(1)}, ${yPct.toFixed(1)}`);
+            }
             if (chartDebugSettings.showLightBlockingOverlay && chartDebugSettings.lastLightBlockingCurve) {
                 const lightBlockingValue = sampleLightBlockingAtPercent(xPct);
                 if (Number.isFinite(lightBlockingValue)) {
@@ -2230,7 +2814,7 @@ export function setupChartCursorTooltip(geom) {
                     tooltipLines.push(tooltipLabel);
                 }
             }
-            if (canInsert) {
+            if (!labMarkerInfo && canInsert) {
                 tooltipLines.push('click to add point');
             }
             tip.innerHTML = tooltipLines.join('<br>');

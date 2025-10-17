@@ -13,6 +13,17 @@ Goal: ensure undo removes both measurement data and the associated UI toggle sta
 
 Record the result in your test log. If either check fails, the regression guard has detected a problem.
 
+## Manual L* Patch Layout Persistence
+Goal: confirm the Manual L* modal restores the saved Patch % layout instead of reverting to the evenly spaced defaults.
+
+### Manual Steps:
+1. Open the latest `index.html`, launch the Manual L* modal (Global Corrections → **Enter L* Values**), and increase the row count to 7. Adjust several Patch % values (e.g., `0`, `4`, `12`, `25`, `50`, `75`, `90`) and enter valid measured L* numbers in every row.
+2. Click **Save as .txt** (or **Generate Correction**) to persist the entry, then close the modal.
+3. Re-open the Manual L* modal without clearing browser storage. The row count and Patch % values should match the layout from step 1—no rows should revert to the evenly spaced defaults.
+4. Note in your log whether the layout was restored. If it did not persist, capture the console output of `localStorage.getItem('quadgen.manualLstarLayout')` before continuing other tests.
+
+Reset: Clear browser storage (e.g., `localStorage.removeItem('quadgen.manualLstarLayout')`) if you need to restore the default five evenly spaced rows before the next run.
+
 ## Edit Mode — Curve Point Dragging
 Goal: confirm the curve point dragging toggle (Options panel) works and preserves Smart-curve ordering.
 
@@ -33,7 +44,7 @@ Goal: ensure the new Options toggle draws and hides the dashed correction target
 ### Manual Steps:
 1. Load `index.html`, open ⚙️ Options, and confirm **Show correction target overlay** is checked by default (re-enable it if a prior session stored an override).
 2. Load `testdata/Manual-LAB-Data.txt` via **Load LAB / Manual** and wait until the global correction applies (status toast should reference the file and the chart should redraw).
-3. With the toggle still on, confirm the chart shows the dashed red correction overlay plus the purple diagonal baseline (ending at the current ink ceiling); `window.isChartDebugShowCorrectionTarget?.()` should return `true`.
+3. With the toggle still on, confirm the chart shows the dashed **red** correction trace and the **purple** dashed linear baseline reaching the active ink ceiling; `window.isChartDebugShowCorrectionTarget?.()` should return `true`.
 4. Disable **Show correction target overlay** and ensure the dashed overlay disappears; the helper above should return `false`.
 5. Re-enable the toggle and confirm the overlay returns immediately with the same effective ceiling.
 6. Close the Options panel, re-open it, and verify the checkbox still reflects the current state before changing it again.
@@ -46,11 +57,57 @@ Goal: confirm the light-blocking overlay renders, updates with curve edits, and 
 ### Manual Steps:
 1. Load `index.html`, open ⚙️ Options, and enable **Show light blocking overlay** (the checkbox remembers prior sessions—turn it on if it was disabled).
 2. Load `data/P800_K36C26LK25_V6.quad` so the chart displays multiple active channels. Once curves appear, hover the chart and confirm the tooltip now includes a `Light Block: …%` line.
-3. Drag the MK channel’s Smart point 4 upward in Edit Mode (or adjust the MK percent slider) and verify the purple overlay shifts immediately while the tooltip values change without requiring a refresh.
+3. Drag the MK channel’s Smart point 4 upward in Edit Mode (or adjust the MK percent slider) and verify the solid **purple** light-blocking overlay shifts immediately while the tooltip values change—no dashed reference line should appear.
 4. Toggle the option off and confirm the overlay disappears and the tooltip reverts to the two-line format.
 5. Re-enable the toggle, close ⚙️ Options, and reopen it to ensure the checkbox still reflects the active state.
 
 Document pass/fail with a screenshot of the overlay and tooltip. Note any lag between edits and overlay refresh, or if the tooltip fails to display the light-blocking line.
+
+## Measurement Spot Markers Overlay
+Goal: verify the measurement spot marker overlay highlights LAB readings correctly and exposes the ±1 % tolerance status.
+
+### Manual Steps:
+1. Load `index.html`, open ⚙️ Options, and confirm **Show measurement spot markers** is disabled (the checkbox remains disabled until a LAB dataset is active).
+2. Load `data/P800_K36C26LK25_V19.quad`, then apply `data/P800_K36C26LK25_V19.txt`. Re-open ⚙️ Options and ensure the spot marker checkbox is now enabled.
+3. Enable **Show measurement spot markers**. The chart should render a mid-rail of badges anchored to the unzoomed 70 % baseline (green checks for patches within ±1 %, colored arrows pointing up/down for out-of-tolerance points) with faint dots marking the actual measured positions on the curve. Hover 2–3 markers:
+   - Tooltip should report `Input …%`, the measured L*, and the required action (Darken/Lighten with the delta percent).
+   - Arrow direction must match the action (up = darken / add ink, down = lighten / remove ink).
+4. Toggle the option off and verify all badges disappear immediately. Re-enable to confirm the overlay redraws without requiring a reload.
+5. Refresh the page, reapply the LAB dataset, and confirm the overlay preference stored in localStorage (`localStorage.getItem('quadgen.showLabSpotMarkers')`) restores the checkbox and overlay state when LAB data is present.
+
+Capture a screenshot showing both a green check badge and at least one arrow marker, along with hover tooltip text. Log any markers that fail to render or tooltips that omit the action summary.
+
+## Correction Gain Slider
+Goal: confirm the correction gain slider blends between the identity ramp and the measured correction, and that overlays/export previews follow the current mix.
+
+### Manual Steps:
+1. Load `data/P800_K36C26LK25_V19.quad` and `data/P800_K36C26LK25_V19.txt`. Enable **Show measurement spot markers**.
+2. Open ⚙️ Options and verify the **Correction gain** slider defaults to 100 % with the label reading `100%`.
+3. Confirm that at 100 % the chart shows the fully corrected curve and several spot markers display non-zero deltas (red/blue arrows) indicating the full correction amount.
+4. Drag the slider to 50 %. Pause the thumb—within ~150 ms the chart and markers should settle at the half-strength correction (arrow lengths and delta labels roughly half) while the label reads `50%` and the debug helper reports `getCorrectionGainPercent() === 50`. Releasing the mouse/keyboard should flush the update immediately even if the pause was brief.
+5. Drag the slider to 0 %. After the short debounce window the spot markers should switch to green checks (no correction applied) and the chart should return to the identity ramp.
+6. Return the slider to 100 % and verify the chart/markers revert to the original correction magnitude.
+7. Export the `.quad` at 50 % and 100 % gains; compare the 256-point tables to confirm the 50 % export is the midpoint between the identity ramp and the fully corrected curve.
+
+Record pass/fail with screenshots for 0%, 50%, and 100%. Note any delays in redraws or mismatches between the label, debug helper, and exported data.
+
+## Plot Smoothing Tail
+Goal: confirm aggressive plot smoothing keeps the highlight region smooth.
+
+### Manual Steps:
+1. Load `data/P800_K36C26LK25_V19.quad`, then apply `data/P800_K36C26LK25_V19.txt`.
+2. Open ⚙️ Options and raise **Plot smoothing** to **120% (×1.87)**.
+3. Enable **Show correction target overlay** and the composite debug overlay (⚙️ Options → **Enable composite debug overlay**). Hover the chart near 95–100 % input or sample the snapshots via `window.__quadDebug?.compositeDebug?.getCompositeDebugState?.()`—the K channel should climb smoothly with no sharp kink at the final snapshot (the last slope should be ≤ the prior slope).
+4. Capture a screenshot of the highlight region if a kink appears; reduce **Plot smoothing** back to 0 % and confirm the original tail shape returns.
+
+## Plot Smoothing Highlight Head
+Goal: confirm aggressive plot smoothing leaves the highlight ramp smooth near 0–2 % input.
+
+### Manual Steps:
+1. Load `data/P800_K36C26LK25_V19.quad`, then apply `data/P800_K36C26LK25_V19.txt`.
+2. Open ⚙️ Options and raise **Plot smoothing** to **150% (×2.05)**.
+3. Zoom into the first 5 % of the curve (or sample deltas via `window.loadedQuadData.curves.K.slice(0, 12)`). Record the slope behaviour—LK currently shows a small reversal around ~1.3 % when smoothing is high because the legacy kernel still pads the endpoints.
+4. Revert the slider to 0 % and confirm the opening ramps return to the original `.quad` values.
 
 ## Composite Flagged Snapshots
 Goal: ensure the snapshot flagger highlights abrupt ink swings and surfaces them in both the chart and composite debug panel.
@@ -170,7 +227,7 @@ Record the result (with screenshots if the clamp fails or inputs remain editable
 Goal: validate the gated auto-raise helper lifts ink limits after loading high-output corrections and reports blocked channels when locks are active.
 
 ### Manual Steps:
-1. Load `index.html`, open the ⚙️ Options panel, and confirm **Auto-raise ink limits after import** is enabled (it is on by default).
+1. Load `index.html`, open the ⚙️ Options panel, and enable **Auto-raise ink limits after import** (the toggle defaults to off; turn it on for this run).
 2. Set the K channel to 50% via the percent input and confirm the End reflects the lower ceiling.
 3. Import a global LAB correction that peaks above 50%—`testdata/TRIFORCE_V4.txt` or `P800_K36C26LK25_V6.txt` work well.
 4. Expect a status toast such as `K ink limit changed to 64% (auto-raised for global correction)`, the K percent field to update, and `window.getCompositeDebugState().summary.autoRaisedEnds` to list K with `locked: false`.
@@ -248,7 +305,7 @@ Attach console stats and chart screenshots whenever the amplitude drops unexpect
 Goal: confirm Normalized weighting exhausts highlight inks in density order (LK → C → K) and records ladder decisions in composite debug.
 
 ### Manual Steps:
-1. Launch `index.html` with default flags (auto-raise on, composite per-sample ceiling on). Ensure **Composite weighting** remains **Normalized** and the composite debug overlay is enabled.
+1. Launch `index.html` with default flags (auto-raise off, composite per-sample ceiling on). Enable auto-raise if the scenario calls for it, ensure **Composite weighting** remains **Normalized**, and confirm the composite debug overlay is enabled.
 2. Load `data/P800_K36C26LK25_V6.quad`, then `data/P800_K36C26LK25_V6.txt`. Wait for the global correction toast, then advance the snapshot slider to indices 5, 21, and 22 (roughly 2 %, 8 %, 8.6 % input).
 3. For snapshot 5, confirm LK carries the correction (LK normalizedAfter ≈0.63), C contributes a small increase, and K remains at 0.0. `window.getCompositeDebugState().snapshots[5].ladderSelection` should list LK first, then any secondary contributions.
 4. For snapshot 21, check that LK reaches ≈1.0 normalizedAfter with headroom ≈0, C rises above its baseline (normalizedDelta > 0.25), and K stays at 0.0 (delta ≤ 0.005). `ladderSelection` should show LK then C, while `ladderBlocked` lists K blocked by lighter headroom.

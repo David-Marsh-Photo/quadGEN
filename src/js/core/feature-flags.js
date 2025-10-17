@@ -57,7 +57,7 @@ const DEFAULT_FLAGS = {
     compositeHighlightGuard: false,
     labBaselineSmoothing: true,
     redistributionSmoothingWindow: false,
-    autoRaiseInkLimitsOnImport: true,
+    autoRaiseInkLimitsOnImport: false,
     compositePerSampleCeiling: true,
     slopeKernelSmoothing: true,
     simpleScalingCorrection: false

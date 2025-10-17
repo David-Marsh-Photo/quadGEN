@@ -19,9 +19,11 @@ import { maybeAutoRaiseInkLimits } from '../core/auto-raise-on-import.js';
 const MIN_ROWS = 5;
 const MAX_ROWS = 50;
 const TARGET_LSTAR_FLOOR = 20;
+const LSTAR_LAYOUT_STORAGE_KEY = 'quadgen.manualLstarLayout';
 
 let lstarInputCount = MIN_ROWS;
 let lastLstarValues = [];
+let storedPatchPercents = [];
 
 const legacyLinearizationBridge = getLegacyLinearizationBridge();
 
@@ -45,6 +47,95 @@ function formatPatchPercent(index, total) {
   if (total <= 1) return '0.0';
   const pct = (index / (total - 1)) * 100;
   return pct.toFixed(1);
+}
+
+function clampPatchPercent(value) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return null;
+  return Math.max(0, Math.min(100, num));
+}
+
+function loadStoredLayout() {
+  if (typeof window === 'undefined' || !window.localStorage) return null;
+  let raw = null;
+  try {
+    raw = window.localStorage.getItem(LSTAR_LAYOUT_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== 'object') return null;
+
+    const rawPercents = Array.isArray(parsed.patchPercents) ? parsed.patchPercents : [];
+    const sanitizedPercents = rawPercents
+      .map(clampPatchPercent)
+      .filter((value) => value !== null);
+
+    if (!sanitizedPercents.length) return null;
+
+    let patchCount = Number(parsed.patchCount);
+    if (!Number.isFinite(patchCount) || patchCount <= 0) {
+      patchCount = sanitizedPercents.length;
+    }
+    patchCount = Math.round(patchCount);
+    patchCount = Math.max(MIN_ROWS, Math.min(MAX_ROWS, patchCount));
+    patchCount = Math.min(patchCount, sanitizedPercents.length);
+    if (patchCount < MIN_ROWS) return null;
+
+    const candidate = sanitizedPercents.slice(0, patchCount);
+    if (!isStrictlyIncreasing(candidate)) return null;
+
+    return { patchCount, patchPercents: candidate };
+  } catch {
+    return null;
+  }
+}
+
+function persistLayout(patchCount, patchPercents) {
+  const countNumber = Number(patchCount);
+  if (!Number.isFinite(countNumber) || countNumber < MIN_ROWS) {
+    return;
+  }
+  const count = Math.max(MIN_ROWS, Math.min(MAX_ROWS, Math.round(countNumber)));
+  const sanitizedPercents = Array.isArray(patchPercents)
+    ? patchPercents.map(clampPatchPercent).filter((value) => value !== null)
+    : [];
+
+  if (sanitizedPercents.length < count) {
+    return;
+  }
+  const candidate = sanitizedPercents.slice(0, count);
+  if (!isStrictlyIncreasing(candidate)) {
+    return;
+  }
+
+  storedPatchPercents = candidate;
+
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    window.localStorage.setItem(LSTAR_LAYOUT_STORAGE_KEY, JSON.stringify({
+      patchCount: count,
+      patchPercents: candidate
+    }));
+  } catch {
+    // ignore storage failures
+  }
+}
+
+function restoreLayoutFromStorage() {
+  const layout = loadStoredLayout();
+  if (!layout) {
+    storedPatchPercents = [];
+    return null;
+  }
+  lstarInputCount = layout.patchCount;
+  storedPatchPercents = layout.patchPercents.slice();
+  syncCountInputs();
+  toggleRemoveButtons();
+  return layout;
 }
 
 function createRowMarkup(index, value = '', patchValue) {
@@ -92,6 +183,7 @@ function setModalScrollLock(enabled) {
 
 function showModal() {
   if (!elements.lstarModal) return;
+  restoreLayoutFromStorage();
   updateRows();
   if (elements.manualLstarDensityToggle) {
     const isDensity = isDensityNormalizationEnabled();
@@ -131,9 +223,19 @@ function updateRows(options = {}) {
   container.innerHTML = '';
 
   const savedValues = options.savedValues || lastLstarValues;
+  if (!Array.isArray(storedPatchPercents)) {
+    storedPatchPercents = [];
+  }
+  storedPatchPercents = storedPatchPercents.slice(0, lstarInputCount);
+  const patchSource = Array.isArray(options.savedPatchPercents)
+    ? options.savedPatchPercents
+    : storedPatchPercents;
+  const patchPercents = patchSource.slice(0, lstarInputCount);
+
   for (let i = 0; i < lstarInputCount; i++) {
     const value = savedValues[i] || '';
-    container.insertAdjacentHTML('beforeend', createRowMarkup(i, value));
+    const patchValue = Number.isFinite(patchPercents[i]) ? patchPercents[i] : undefined;
+    container.insertAdjacentHTML('beforeend', createRowMarkup(i, value, patchValue));
   }
 
   syncCountInputs();
@@ -284,6 +386,7 @@ function validateInputs() {
 function addRow() {
   if (lstarInputCount >= MAX_ROWS) return;
   lstarInputCount += 1;
+  storedPatchPercents = storedPatchPercents.slice(0, lstarInputCount);
   updateRows();
 }
 
@@ -291,6 +394,7 @@ function removeRow() {
   if (lstarInputCount <= MIN_ROWS) return;
   lstarInputCount -= 1;
   lastLstarValues = lastLstarValues.slice(0, lstarInputCount);
+  storedPatchPercents = storedPatchPercents.slice(0, lstarInputCount);
   updateRows();
 }
 
@@ -298,6 +402,7 @@ function handleCountInput(event) {
   const nextValue = parseInt(event.target.value, 10);
   if (Number.isFinite(nextValue) && nextValue >= MIN_ROWS && nextValue <= MAX_ROWS) {
     lstarInputCount = nextValue;
+    storedPatchPercents = storedPatchPercents.slice(0, lstarInputCount);
     updateRows();
   }
 }
@@ -310,8 +415,26 @@ function applyManualLinearization(validation) {
 
   try {
     const baselineData = getLoadedQuadData?.();
-    if (baselineData?.curves) {
-      LinearizationState.setGlobalBaselineCurves(baselineData.curves);
+    const cloneMap = (map) => {
+      if (!map || typeof map !== 'object') {
+        return null;
+      }
+      const clone = {};
+      let hasAny = false;
+      Object.entries(map).forEach(([channelName, curve]) => {
+        if (Array.isArray(curve)) {
+          clone[channelName] = curve.slice();
+          hasAny = true;
+        }
+      });
+      return hasAny ? clone : null;
+    };
+    const baselineSnapshot = cloneMap(baselineData?.plotBaseCurvesBaseline)
+      || cloneMap(baselineData?._plotSmoothingOriginalCurves)
+      || cloneMap(baselineData?.curves);
+
+    if (baselineSnapshot) {
+      LinearizationState.setGlobalBaselineCurves(baselineSnapshot);
     }
   } catch (snapshotErr) {
     console.warn('[Manual L*] Failed to capture baseline snapshot:', snapshotErr);
@@ -369,6 +492,11 @@ function applyManualLinearization(validation) {
     }
   }
 
+  const patchPercents = Array.isArray(validation.measuredPairs)
+    ? validation.measuredPairs.map((pair) => clampPatchPercent(pair.x)).filter((value) => value !== null)
+    : [];
+  persistLayout(validation.values.length, patchPercents);
+
   hideModal();
 
   const modeLabel = normalizationMode === LAB_NORMALIZATION_MODES.DENSITY
@@ -413,6 +541,9 @@ function handleSaveClick() {
   });
   const content = header + lines.join('\n') + '\n';
   downloadFile(content, 'LAB-Data.txt', 'text/plain');
+
+  const patchPercents = measuredPairs.map((pair) => clampPatchPercent(pair.x)).filter((value) => value !== null);
+  persistLayout(validation.values.length, patchPercents);
 }
 
 export function parseManualLstarData(validation) {
@@ -483,7 +614,10 @@ const manualLstarModule = {
     validateInputs,
     updateRows,
     syncCountInputs,
-    toggleRemoveButtons
+    toggleRemoveButtons,
+    restoreLayoutFromStorage,
+    loadStoredLayout,
+    persistLayout
   }
 };
 

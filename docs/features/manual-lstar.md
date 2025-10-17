@@ -31,6 +31,11 @@
    - Target swatches show expected tone; measured swatches preview input until valid.
    - Modal supports CSV paste and keyboard navigation for efficient entry.
 
+5. **Patch Layout Persistence**
+   - Saving (`Save as .txt`) or applying (`Generate Correction`) records the current row count and Patch % positions in local storage.
+   - The modal restores those Patch % positions and row count the next time it opens so recurring manual workflows do not require re-entering patch spacing.
+   - Clearing browser storage or running in private browsing resets the modal to the default five evenly spaced rows.
+
 ## Edge Cases & Constraints
 - Duplicate measured rows allowed but flagged; smoothing minimizes oscillation.
 - Empty rows ignored; using fewer than three valid points results in modal error.

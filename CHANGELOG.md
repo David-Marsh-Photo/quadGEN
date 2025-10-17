@@ -6,16 +6,40 @@ This changelog follows a concise, user-facing format. Engineering details live i
 
 ## [Unreleased]
 ### Added
-- _Nothing yet_
+- _Nothing yet._
 
 ### Changed
-- _Nothing yet_
+- _Nothing yet._
 
 ### Fixed
-- _Nothing yet_
+- _Nothing yet._
 
 ### Docs
-- _Nothing yet_
+- _Nothing yet._
+
+## [4.1.0] — 2025-10-17
+### Added
+- Manual L* modal now remembers the last Patch % layout and row count after you save or generate a correction, so repeat manual entries reopen with the same spacing.
+- Measurement spot marker overlay lines badges along a mid-chart rail (~70 %), with green checks inside tolerance and color-coded arrows (red up for darken, blue down for lighten) labeled with percent deltas; the toggle lives in ⚙️ Options and remembers your preference per browser.
+- Correction gain slider (⚙️ Options) blends between the identity ramp and the measured correction so you can audition partial mixes while charts, spot markers, previews, and exports stay in sync with the selected percentage.
+
+### Changed
+- Auto-raise ink limits now defaults to off; enable it per session when a correction needs automatic headroom.
+- The correction overlay once again plots the dashed linear-baseline reference so you can compare corrections against the identity ramp; the light-blocking overlay remains baseline-free until reference `.quad` comparisons return.
+- Light-blocking overlay drops the dashed purple guide as well; the measured curve is all that renders until reference `.quad` support ships.
+- Measurement spot markers stay pinned to the unzoomed 70 % rail so the badges no longer slide when you change chart zoom.
+- Measurement spot markers now scale with the correction gain slider: 0 % shows green checks (no correction applied) while higher percentages grow the arrows and labels to match the applied correction.
+- Correction gain slider batches scrubbing updates with a ~150 ms debounce so chart redraws stay responsive; releasing the control (or pausing momentarily) applies the blended curve immediately.
+
+### Fixed
+- Reverted the experimental boundary-window tweak in plot smoothing; the base kernel matches prior releases while we address the downstream regressions it caused.
+
+### Docs
+- `docs/manual_tests.md` clarifies the current highlight behaviour (including the known LK reversal) and reiterates the auto-raise reminder.
+- Added measurement spot marker coverage to `docs/manual_tests.md` and refreshed Help → ReadMe/Version History to explain the new overlay and tolerance badges.
+- `docs/features/plot-smoothing-start-protection.md` and `plot-smoothing-tail-protection.md` document the head/tail blend order and cross-link for future rework.
+- Help/guide references clarify that the correction overlay shows the linear baseline again, add a glossary entry for the light-blocking overlay, and note the missing comparison `.quad` guide until that loader returns.
+- `docs/features/manual-lstar.md` and in-app help now mention that Manual L* patch layouts persist after Save/Generate.
 
 ## [4.0.0] — 2025-10-15
 ### Added

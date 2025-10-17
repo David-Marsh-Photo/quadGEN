@@ -111,9 +111,12 @@ export const elements = {
     catmullTension: null,
     catmullTensionContainer: null,
     smoothingSlider: null,
-    smoothingValue: null,
-    smoothingWarning: null,
-    kpSimplifierContainer: null,
+   smoothingValue: null,
+   smoothingWarning: null,
+   kpSimplifierContainer: null,
+    correctionGainSlider: null,
+    correctionGainInput: null,
+    correctionGainValue: null,
 
     // Intent tuning controls
     intentTuningPanel: null,
@@ -259,6 +262,7 @@ export const elements = {
     correctionMethodRadios: null,
     smartPointDragToggle: null,
     correctionOverlayToggle: null,
+    labSpotMarkersToggle: null,
     lightBlockingOverlayToggle: null,
     compositeWeightingSelect: null,
     compositeDebugToggle: null,
@@ -451,8 +455,12 @@ export function initializeElements() {
     elements.optionsContent = document.getElementById('optionsContent');
     elements.closeOptionsBtn = document.getElementById('closeOptionsBtn');
     elements.correctionMethodRadios = Array.from(document.querySelectorAll('input[name="correctionMethod"]'));
+    elements.correctionGainSlider = document.getElementById('correctionGainSlider');
+    elements.correctionGainInput = document.getElementById('correctionGainInput');
+    elements.correctionGainValue = document.getElementById('correctionGainValue');
     elements.smartPointDragToggle = document.getElementById('smartPointDragToggle');
     elements.correctionOverlayToggle = document.getElementById('correctionOverlayToggle');
+    elements.labSpotMarkersToggle = document.getElementById('labSpotMarkersToggle');
     elements.lightBlockingOverlayToggle = document.getElementById('lightBlockingOverlayToggle');
     elements.compositeWeightingSelect = document.getElementById('compositeWeightingSelect');
     elements.compositeDebugToggle = document.getElementById('compositeDebugToggle');
@@ -560,9 +568,11 @@ export const appState = {
     chartZoomIndex: 9, // Default to 100% zoom (index 9 in [10, 20, 30, 40, 50, 60, 70, 80, 90, 100])
     overlayAutoToggledOff: false,
     showCorrectionOverlay: true,
+    showLabSpotMarkers: false,
     showLightBlockingOverlay: false,
     plotSmoothingPercent: 0,
     correctionMethod: getCorrectionMethod(),
+    correctionGain: 1,
 
     // Edit mode state
     editMode: false,
@@ -572,6 +582,22 @@ export const appState = {
     debugLogs: false,
     debugAI: false
 };
+
+try {
+    if (typeof localStorage !== 'undefined') {
+        if (localStorage.getItem('quadgen.showLabSpotMarkers') === '1') {
+            appState.showLabSpotMarkers = true;
+        }
+        if (localStorage.getItem('quadgen.correctionGain') != null) {
+            const storedGain = Number(localStorage.getItem('quadgen.correctionGain'));
+            if (Number.isFinite(storedGain)) {
+                appState.correctionGain = Math.max(0, Math.min(1, storedGain));
+            }
+        }
+    }
+} catch (error) {
+    // Ignore storage access issues (private mode, etc.)
+}
 
 /**
  * Set loaded quad data
@@ -614,6 +640,20 @@ export function setLoadedQuadData(quadData) {
                 const curve = quadData.curves?.[channelName];
                 if (Array.isArray(curve)) {
                     quadData.plotBaseCurves[channelName] = curve.slice();
+                }
+            });
+        }
+        if (!quadData.plotBaseCurvesBaseline || typeof quadData.plotBaseCurvesBaseline !== 'object') {
+            quadData.plotBaseCurvesBaseline = {};
+        }
+        const baselineStore = quadData.plotBaseCurvesBaseline;
+        const baselineSource = (quadData.plotBaseCurves && typeof quadData.plotBaseCurves === 'object')
+            ? quadData.plotBaseCurves
+            : quadData.curves;
+        if (baselineSource && typeof baselineSource === 'object') {
+            Object.entries(baselineSource).forEach(([channelName, curve]) => {
+                if (!baselineStore[channelName] && Array.isArray(curve)) {
+                    baselineStore[channelName] = curve.slice();
                 }
             });
         }
@@ -730,6 +770,39 @@ export function setPlotSmoothingPercent(percent) {
     return clamped;
 }
 
+export function getCorrectionGain() {
+    const value = Number(appState.correctionGain);
+    if (!Number.isFinite(value)) {
+        return 1;
+    }
+    return Math.max(0, Math.min(1, value));
+}
+
+export function getCorrectionGainPercent() {
+    return Math.round(getCorrectionGain() * 100);
+}
+
+export function setCorrectionGain(normalizedValue, options = {}) {
+    const numeric = Number(normalizedValue);
+    const clamped = Number.isFinite(numeric) ? Math.max(0, Math.min(1, numeric)) : 1;
+    const previous = getCorrectionGain();
+    if (Math.abs(previous - clamped) <= 0.0005) {
+        return previous;
+    }
+    appState.correctionGain = clamped;
+    const { persist = true } = options || {};
+    if (persist) {
+        try {
+            if (typeof localStorage !== 'undefined') {
+                localStorage.setItem('quadgen.correctionGain', String(clamped));
+            }
+        } catch (error) {
+            console.warn('Failed to persist correction gain:', error);
+        }
+    }
+    return clamped;
+}
+
 /**
  * Reset application state to defaults
  */
@@ -741,10 +814,12 @@ export function resetAppState() {
     appState.chartZoomIndex = 0;
     appState.overlayAutoToggledOff = false;
     appState.showCorrectionOverlay = true;
+    appState.showLabSpotMarkers = false;
     appState.showLightBlockingOverlay = false;
     appState.editMode = false;
     appState.selectedChannel = null;
     appState.correctionMethod = getCorrectionMethod();
+    appState.correctionGain = 1;
 
     syncWindowLoadedQuadData();
     notifyLoadedQuadListeners(null, null);

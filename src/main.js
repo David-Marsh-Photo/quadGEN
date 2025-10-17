@@ -60,6 +60,8 @@ import {
     getChartCoordinates,
     setChartZoomIndex,
     getChartZoomIndex,
+    applyCorrectionGainPercent,
+    applyCorrectionGainNormalized,
     CHART_ZOOM_LEVELS
 } from './js/ui/chart-manager.js';
 
@@ -1060,7 +1062,9 @@ function initializeApplication() {
         stepChartZoom,
         getChartCoordinates,
         setChartZoomIndex,
-        getChartZoomIndex
+        getChartZoomIndex,
+        applyCorrectionGainPercent,
+        applyCorrectionGainNormalized
     };
 
     const processingUtilsCompat = {
@@ -1178,7 +1182,7 @@ function initializeApplication() {
         scalingCoordinator,
         scalingUtils: scalingUtilsCompat,
         eventHandlers: eventHandlersCompat,
-        chartManager: chartManagerCompat,
+    chartManager: chartManagerCompat,
         CHART_ZOOM_LEVELS,
         processingUtils: processingUtilsCompat,
         smartCurves: smartCurvesCompat,

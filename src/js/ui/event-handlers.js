@@ -1,7 +1,7 @@
 // quadGEN UI Event Handlers
 // Centralized event handler management for UI interactions
 
-import { elements, getCurrentPrinter, setLoadedQuadData, getLoadedQuadData, ensureLoadedQuadData, getAppState, updateAppState, TOTAL, getPlotSmoothingPercent, setPlotSmoothingPercent } from '../core/state.js';
+import { elements, getCurrentPrinter, setLoadedQuadData, getLoadedQuadData, ensureLoadedQuadData, getAppState, updateAppState, TOTAL, getPlotSmoothingPercent, setPlotSmoothingPercent, getCorrectionGain } from '../core/state.js';
 import { getStateManager } from '../core/state-manager.js';
 import { ensureChannelLock, setChannelLock, isChannelLocked, updateChannelLockBounds, subscribeToChannelLock, clampAbsoluteToChannelLock, getChannelLockInfo, getLockedChannels, getGlobalScaleLockMessage } from '../core/channel-locks.js';
 import { sanitizeFilename, debounce, formatScalePercent } from './ui-utils.js';
@@ -13,8 +13,12 @@ import {
     stepChartZoom,
     setChartDebugShowCorrectionTarget,
     isChartDebugShowCorrectionTarget,
+    setLabSpotMarkerOverlayEnabled,
+    isLabSpotMarkerOverlayEnabled,
+    syncLabSpotMarkerToggleAvailability,
     setChartLightBlockingOverlayEnabled,
-    isChartLightBlockingOverlayEnabled
+    isChartLightBlockingOverlayEnabled,
+    applyCorrectionGainPercent
 } from './chart-manager.js';
 import { getCurrentScale, reapplyCurrentGlobalScale, updateScaleBaselineForChannel as updateScaleBaselineForChannelCore, validateScalingStateSync } from '../core/scaling-utils.js';
 import { SCALING_STATE_FLAG_EVENT } from '../core/scaling-constants.js';
@@ -120,6 +124,45 @@ function emitCompositeAudit(stage, payloadFactory) {
         }
     } catch (err) {
         console.warn('[COMPOSITE_AUDIT] ui emit failed:', err);
+    }
+}
+
+function cloneBaselineCurvesFromLoadedData(loadedData) {
+    if (!loadedData || typeof loadedData !== 'object') {
+        return null;
+    }
+
+    const tryClone = (map) => {
+        if (!map || typeof map !== 'object') {
+            return null;
+        }
+        const clone = {};
+        let hasAny = false;
+        Object.entries(map).forEach(([channelName, curve]) => {
+            if (Array.isArray(curve)) {
+                clone[channelName] = curve.slice();
+                hasAny = true;
+            }
+        });
+        return hasAny ? clone : null;
+    };
+
+    return tryClone(loadedData.plotBaseCurvesBaseline)
+        || tryClone(loadedData._plotSmoothingOriginalCurves)
+        || tryClone(loadedData.plotBaseCurves)
+        || null;
+}
+
+function ensureBaselineStore(loadedData, channelName, curve, options = {}) {
+    if (!loadedData || !channelName || !Array.isArray(curve)) {
+        return;
+    }
+    if (!loadedData.plotBaseCurvesBaseline || typeof loadedData.plotBaseCurvesBaseline !== 'object') {
+        loadedData.plotBaseCurvesBaseline = {};
+    }
+    const { force = false } = options;
+    if (!Array.isArray(loadedData.plotBaseCurvesBaseline[channelName]) || force) {
+        loadedData.plotBaseCurvesBaseline[channelName] = curve.slice();
     }
 }
 
@@ -635,8 +678,9 @@ function applyPlotSmoothingToCurve(values, percent) {
         }
         smoothed[i] = weightTotal > 0 ? Math.round(weightedSum / weightTotal) : values[i];
     }
-    smoothed[0] = values[0];
-    smoothed[len - 1] = values[len - 1];
+    if (len > 0) {
+        smoothed[0] = values[0];
+    }
     return smoothed;
 }
 
@@ -667,6 +711,121 @@ function enforceSinglePeak(values) {
         return [];
     }
     return values.slice();
+}
+
+const PLOT_SMOOTHING_TAIL_WINDOW = 6;
+const PLOT_SMOOTHING_HEAD_WINDOW = 6;
+const PLOT_SMOOTHING_GUARD_FRACTION = 0.98;
+
+function rescaleCurveTowardTarget(values, targetEnd, guardFraction = PLOT_SMOOTHING_GUARD_FRACTION) {
+    if (!Array.isArray(values)) {
+        return [];
+    }
+    if (!Number.isFinite(targetEnd) || targetEnd <= 0) {
+        return values.slice();
+    }
+    const copy = values.slice();
+    const maxValue = copy.reduce((max, value) => (value > max ? value : max), 0);
+    if (!Number.isFinite(maxValue) || maxValue <= 0) {
+        return copy;
+    }
+    const guardTarget = Math.max(0, Math.min(targetEnd * guardFraction, targetEnd - 1));
+    if (guardTarget <= 0 || maxValue >= guardTarget) {
+        return copy;
+    }
+    const scale = guardTarget / maxValue;
+    for (let i = 0; i < copy.length; i += 1) {
+        const scaled = Math.max(0, Number(copy[i]) * scale);
+        copy[i] = Math.round(scaled);
+    }
+    return copy;
+}
+
+function blendCurveTailWithBaseline(curve, baseline, targetEnd, options = {}) {
+    if (!Array.isArray(curve)) {
+        return [];
+    }
+    const copy = curve.slice();
+    const length = copy.length;
+    if (length === 0) {
+        return copy;
+    }
+    const windowSize = Math.max(2, Math.min(options.windowSize ?? PLOT_SMOOTHING_TAIL_WINDOW, length));
+    const start = Math.max(0, length - windowSize);
+    for (let i = start; i < length; i += 1) {
+        const relative = windowSize > 1 ? (i - start) / (windowSize - 1) : 1;
+        const smoothedValue = Number(copy[i]) || 0;
+        const baselineValue = Array.isArray(baseline) && baseline[i] != null ? Number(baseline[i]) || 0 : smoothedValue;
+        const weight = 1 - relative; // 1 at window start, 0 at endpoint
+        const blended = (weight * smoothedValue) + ((1 - weight) * baselineValue);
+        copy[i] = Math.round(Math.max(0, blended));
+    }
+
+    const baselineEnd = Array.isArray(baseline) && baseline[length - 1] != null
+        ? Number(baseline[length - 1]) || 0
+        : (Number(targetEnd) || 0);
+
+    const baselineSecondLast = length >= 2 && Array.isArray(baseline) && baseline[length - 2] != null
+        ? Number(baseline[length - 2]) || 0
+        : null;
+    if (baselineSecondLast != null) {
+        const minSecondLast = baselineEnd - (baselineEnd - baselineSecondLast);
+        if (copy[length - 2] < minSecondLast) {
+            copy[length - 2] = minSecondLast;
+        }
+    }
+
+    for (let i = start; i < length - 1; i += 1) {
+        if (Array.isArray(baseline) && baseline[i] != null) {
+            const baselineValue = Number(baseline[i]) || 0;
+            if (copy[i] < baselineValue) {
+                copy[i] = baselineValue;
+            }
+        }
+    }
+
+    copy[length - 1] = baselineEnd;
+
+    for (let i = start + 1; i < length; i += 1) {
+        if (copy[i] < copy[i - 1]) {
+            copy[i] = copy[i - 1];
+        }
+    }
+
+    return copy;
+}
+
+function blendCurveHeadWithBaseline(curve, baseline, options = {}) {
+    if (!Array.isArray(curve)) {
+        return [];
+    }
+    const copy = curve.slice();
+    const length = copy.length;
+    if (length === 0) {
+        return copy;
+    }
+    const windowSize = Math.max(2, Math.min(options.windowSize ?? PLOT_SMOOTHING_HEAD_WINDOW, length));
+    const end = Math.min(windowSize, length);
+    for (let i = 0; i < end; i += 1) {
+        const relative = end > 1 ? (i / (end - 1)) : 1;
+        const smoothedValue = Number(copy[i]) || 0;
+        const baselineValue = Array.isArray(baseline) && baseline[i] != null ? Number(baseline[i]) || 0 : smoothedValue;
+        const weight = relative; // 0 at index 0 (baseline), 1 at end (smoothed)
+        const blended = (weight * smoothedValue) + ((1 - weight) * baselineValue);
+        copy[i] = Math.round(Math.max(0, blended));
+    }
+
+    for (let i = 0; i < end; i += 1) {
+        const baselineValue = Array.isArray(baseline) && baseline[i] != null ? Number(baseline[i]) || 0 : 0;
+        if (copy[i] < baselineValue) {
+            copy[i] = baselineValue;
+        }
+        if (i > 0 && copy[i] < copy[i - 1]) {
+            copy[i] = copy[i - 1];
+        }
+    }
+
+    return copy;
 }
 
 function rescaleCurveToEnd(curve, targetEnd) {
@@ -902,10 +1061,15 @@ function applyPlotSmoothingToLoadedChannels(percent) {
             return;
         }
         const smoothedCurve = clampCurveToSupport(applyPlotSmoothingToCurve(base, numeric), base);
-        const rescaledCurve = targetEnd > 0
-            ? rescaleCurveToEnd(smoothedCurve, targetEnd)
-            : smoothedCurve;
-        const finalCurve = enforceSinglePeak(clampCurveToSupport(rescaledCurve, base), peakIndex);
+        const guardedCurve = rescaleCurveTowardTarget(smoothedCurve, targetEnd);
+        const headBlendedCurve = blendCurveHeadWithBaseline(guardedCurve, base, {
+            windowSize: PLOT_SMOOTHING_HEAD_WINDOW
+        });
+        const blendedCurve = blendCurveTailWithBaseline(headBlendedCurve, base, targetEnd, {
+            windowSize: PLOT_SMOOTHING_TAIL_WINDOW
+        });
+        const clampedBlended = clampCurveToSupport(blendedCurve, base);
+        const finalCurve = enforceSinglePeak(clampedBlended, peakIndex);
         loadedData.curves[channelName] = finalCurve.slice();
         if (!loadedData.rebasedCurves) loadedData.rebasedCurves = {};
         if (!loadedData.rebasedSources) loadedData.rebasedSources = {};
@@ -987,9 +1151,10 @@ function applyPlotSmoothingToLoadedChannels(percent) {
                             console.warn('[PlotSmoothing] Failed to push zero-snapshot corrected curves:', snapshotErr);
                         }
                     }
-                    if (typeof LinearizationState?.setGlobalBaselineCurves === 'function') {
+                    const baselineSnapshot = cloneBaselineCurvesFromLoadedData(loadedData);
+                    if (baselineSnapshot && typeof LinearizationState?.setGlobalBaselineCurves === 'function') {
                         try {
-                            LinearizationState.setGlobalBaselineCurves(loadedData.plotBaseCurves);
+                            LinearizationState.setGlobalBaselineCurves(baselineSnapshot);
                         } catch (baselineErr) {
                             console.warn('[PlotSmoothing] Failed to push zero-snapshot baseline curves:', baselineErr);
                         }
@@ -1108,6 +1273,7 @@ function restoreZeroSmoothingSnapshot(filename) {
             const cloned = curve.slice();
             const peak = cloned.reduce((max, value) => (value > max ? value : max), 0);
             loadedData.plotBaseCurves[channelName] = cloned.slice();
+            ensureBaselineStore(loadedData, channelName, cloned);
             loadedData._plotSmoothingOriginalCurves[channelName] = cloned.slice();
             loadedData._plotSmoothingBaselineCurves[channelName] = cloned.slice();
             if (Number.isFinite(peak)) {
@@ -1125,9 +1291,10 @@ function restoreZeroSmoothingSnapshot(filename) {
                 console.warn('[ZeroSmoothing] Failed to sync corrected curves after restore:', err);
             }
         }
-        if (LinearizationState && typeof LinearizationState.setGlobalBaselineCurves === 'function') {
+        const baselineSnapshot = cloneBaselineCurvesFromLoadedData(loadedData);
+        if (baselineSnapshot && LinearizationState && typeof LinearizationState.setGlobalBaselineCurves === 'function') {
             try {
-                LinearizationState.setGlobalBaselineCurves(loadedData.plotBaseCurves);
+                LinearizationState.setGlobalBaselineCurves(baselineSnapshot);
             } catch (err) {
                 console.warn('[ZeroSmoothing] Failed to sync baseline curves after restore:', err);
             }
@@ -1148,6 +1315,24 @@ function syncPlotSmoothingControls(percent = getPlotSmoothingPercent()) {
     }
 }
 
+function syncCorrectionGainControls(normalized = getCorrectionGain()) {
+    const numeric = Number(normalized);
+    const clamped = Number.isFinite(numeric) ? Math.max(0, Math.min(1, numeric)) : getCorrectionGain();
+    const percent = Math.round(clamped * 100);
+
+    if (elements.correctionGainSlider && Number(elements.correctionGainSlider.value) !== percent) {
+        elements.correctionGainSlider.value = String(percent);
+        elements.correctionGainSlider.setAttribute('aria-valuenow', String(percent));
+        elements.correctionGainSlider.setAttribute('aria-valuetext', `${percent}%`);
+    }
+    if (elements.correctionGainInput && Number(elements.correctionGainInput.value) !== percent) {
+        elements.correctionGainInput.value = String(percent);
+    }
+    if (elements.correctionGainValue) {
+        elements.correctionGainValue.textContent = `${percent}%`;
+    }
+}
+
 function initializePlotSmoothingHandlers() {
     syncPlotSmoothingControls();
     if (!elements.plotSmoothingSlider) return;
@@ -1160,6 +1345,55 @@ function initializePlotSmoothingHandlers() {
         showStatus(`Plot smoothing set to ${applied}% (×${widen.toFixed(2)})`);
     });
     schedulePlotSmoothingRefresh();
+}
+
+function initializeCorrectionGainOption() {
+    syncCorrectionGainControls();
+    const slider = elements.correctionGainSlider;
+    const input = elements.correctionGainInput;
+
+    const commitGainPercent = (rawPercent, options = {}) => {
+        const { showToast = false, forceImmediate = false } = options || {};
+        const numeric = Number(rawPercent);
+        if (!Number.isFinite(numeric)) {
+            syncCorrectionGainControls();
+            return getCorrectionGain();
+        }
+        const applied = applyCorrectionGainPercent(numeric, { announce: showToast, forceImmediate });
+        syncCorrectionGainControls(applied);
+        return applied;
+    };
+
+    if (slider) {
+        slider.addEventListener('input', (event) => {
+            commitGainPercent(event.target.value, { showToast: false });
+        });
+        slider.addEventListener('change', (event) => {
+            commitGainPercent(event.target.value, { showToast: true, forceImmediate: true });
+        });
+    }
+
+    if (input) {
+        input.addEventListener('input', (event) => {
+            const numeric = Number(event.target.value);
+            if (!Number.isFinite(numeric)) {
+                return;
+            }
+            syncCorrectionGainControls(numeric / 100);
+        });
+
+        const commitFromInput = (event) => {
+            commitGainPercent(event.target.value, { showToast: true, forceImmediate: true });
+        };
+
+        input.addEventListener('blur', commitFromInput);
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                commitFromInput(event);
+            }
+        });
+    }
 }
 
 function rebuildLabEntryForNormalization(entry) {
@@ -1497,6 +1731,7 @@ function refreshLinearizationDataForNormalization() {
                     }
                     if (loadedData.plotBaseCurves && typeof loadedData.plotBaseCurves === 'object') {
                         loadedData.plotBaseCurves[channelName] = rescaled.slice();
+                        ensureBaselineStore(loadedData, channelName, rescaled);
                     }
                     if (loadedData._plotSmoothingOriginalCurves && typeof loadedData._plotSmoothingOriginalCurves === 'object') {
                         loadedData._plotSmoothingOriginalCurves[channelName] = rescaled.slice();
@@ -1514,8 +1749,9 @@ function refreshLinearizationDataForNormalization() {
                 if (LinearizationState && typeof LinearizationState.setGlobalCorrectedCurves === 'function') {
                     LinearizationState.setGlobalCorrectedCurves(loadedData.curves);
                 }
-                if (LinearizationState && typeof LinearizationState.setGlobalBaselineCurves === 'function') {
-                    LinearizationState.setGlobalBaselineCurves(loadedData.plotBaseCurves);
+                const baselineSnapshot = cloneBaselineCurvesFromLoadedData(loadedData);
+                if (baselineSnapshot && LinearizationState && typeof LinearizationState.setGlobalBaselineCurves === 'function') {
+                    LinearizationState.setGlobalBaselineCurves(baselineSnapshot);
                 }
             }
         } catch (scaleErr) {
@@ -1599,6 +1835,7 @@ function refreshLinearizationDataForNormalization() {
                     const peak = cloned.reduce((max, value) => (value > max ? value : max), 0);
                     loadedData._plotSmoothingOriginalCurves[channelName] = cloned.slice();
                     loadedData.plotBaseCurves[channelName] = cloned.slice();
+                    ensureBaselineStore(loadedData, channelName, cloned);
                     loadedData.curves[channelName] = cloned.slice();
                     loadedData.rebasedCurves[channelName] = cloned.slice();
                     loadedData.rebasedSources[channelName] = cloned.slice();
@@ -1618,9 +1855,10 @@ function refreshLinearizationDataForNormalization() {
                         }
                     }
                 }
-                if (LinearizationState && typeof LinearizationState.setGlobalBaselineCurves === 'function') {
+                const baselineSnapshot = cloneBaselineCurvesFromLoadedData(loadedData);
+                if (baselineSnapshot && LinearizationState && typeof LinearizationState.setGlobalBaselineCurves === 'function') {
                     try {
-                        LinearizationState.setGlobalBaselineCurves(loadedData.plotBaseCurves);
+                        LinearizationState.setGlobalBaselineCurves(baselineSnapshot);
                     } catch (baselineErr) {
                         if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
                             console.warn('[LabNormalization] Failed to push baseline curves after zero snapshot sync:', baselineErr);
@@ -1686,6 +1924,34 @@ function initializeCorrectionOverlayOption() {
         setChartDebugShowCorrectionTarget(enabled);
         syncCorrectionOverlayToggle();
         showStatus(enabled ? 'Correction overlay enabled.' : 'Correction overlay disabled.');
+    });
+}
+
+function syncLabSpotMarkersToggle() {
+    if (!elements.labSpotMarkersToggle) {
+        return;
+    }
+    syncLabSpotMarkerToggleAvailability();
+    const enabled = isLabSpotMarkerOverlayEnabled();
+    elements.labSpotMarkersToggle.checked = enabled;
+    elements.labSpotMarkersToggle.setAttribute('aria-checked', String(enabled));
+}
+
+function initializeLabSpotMarkersOption() {
+    syncLabSpotMarkersToggle();
+    if (!elements.labSpotMarkersToggle) {
+        return;
+    }
+    elements.labSpotMarkersToggle.addEventListener('change', (event) => {
+        const enabled = !!event.target.checked;
+        setLabSpotMarkerOverlayEnabled(enabled);
+        syncLabSpotMarkersToggle();
+        const applied = isLabSpotMarkerOverlayEnabled();
+        if (applied && enabled) {
+            showStatus('Measurement spot markers enabled.');
+        } else if (!applied && !enabled) {
+            showStatus('Measurement spot markers disabled.');
+        }
     });
 }
 
@@ -1964,8 +2230,10 @@ export function initializeEventHandlers() {
     initializeLabNormalizationHandlers();
     initializeCorrectionMethodOption();
     initializePlotSmoothingHandlers();
+    initializeCorrectionGainOption();
     initializeSmartPointDragOption();
     initializeCorrectionOverlayOption();
+    initializeLabSpotMarkersOption();
     initializeLightBlockingOverlayOption();
     initializeCompositeWeightingOption();
     initializeRedistributionSmoothingOption();
@@ -4480,6 +4748,7 @@ function initializeFileHandlers() {
                         LinearizationState.setGlobalData(normalized, true);
                         setGlobalBakedState(null, { skipHistory: true });
                         updateAppState({ linearizationData: normalized, linearizationApplied: true });
+                        syncLabSpotMarkersToggle();
 
                         try {
                             const loadedData = getLoadedQuadData?.();
@@ -4620,8 +4889,11 @@ function initializeFileHandlers() {
                                     if (Object.keys(clonedOriginal).length) {
                                         LinearizationState.setGlobalBaselineCurves(clonedOriginal);
                                     }
-                                } else if (baselineData.curves) {
-                                    LinearizationState.setGlobalBaselineCurves(baselineData.curves);
+                                } else {
+                                    const baselineSnapshot = cloneBaselineCurvesFromLoadedData(baselineData);
+                                    if (baselineSnapshot) {
+                                        LinearizationState.setGlobalBaselineCurves(baselineSnapshot);
+                                    }
                                 }
                             }
                             if (baselineData) {
@@ -6188,6 +6460,8 @@ export const __plotSmoothingTestUtils = {
     applyPlotSmoothingToLoadedChannels,
     applyPlotSmoothingToEntries,
     applyPlotSmoothingToCurve,
+    blendCurveHeadWithBaseline,
+    blendCurveTailWithBaseline,
     storeZeroSmoothingSnapshot,
     restoreZeroSmoothingSnapshot,
     schedulePlotSmoothingRefresh,

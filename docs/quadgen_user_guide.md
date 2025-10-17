@@ -98,12 +98,12 @@ quadGEN plots how much ink the printer will output (Y) for each input percentage
 `.quad` files are 256-entry lookup tables consumed by QuadToneRIP. Channels map to ink positions (e.g., `K`, `C`, `M`, `Y`, or custom alt-process pigments). Summary of the format: see `docs/File_Specs/QTR_QUAD_SPEC_SUMMARY.md`.
 
 ### LAB Measurements
-LAB `.txt` measurement files list `GRAY%` and `L*` per patch. quadGEN can normalize directly in L* (default) for perceptual printer linearization, or convert to optical density when the log-density toggle is enabled in the ⚙️ Options panel (also mirrored inside the Manual L* modal). In either mode it compares the measured curve against the ideal ramp and produces a smooth correction using the PCHIP interpolator; the LAB smoothing slider now opens at 0 % (baseline widen ×1.0) and lets you dial in additional smoothing between 0–300 % (e.g., 50 % ≈ ×1.27) when you need noise reduction. Details: `docs/print_linearization_guide.md`.
+LAB `.txt` measurement files list `GRAY%` and `L*` per patch. quadGEN can normalize directly in L* (default) for perceptual printer linearization, or convert to optical density when the log-density toggle is enabled in the ⚙️ Options panel (also mirrored inside the Manual L* modal). In either mode it compares the measured curve against the ideal ramp and produces a smooth correction using the PCHIP interpolator; the LAB smoothing slider now opens at 0 % (baseline widen ×1.0) and lets you dial in additional smoothing between 0–300 % (e.g., 50 % ≈ ×1.27) when you need noise reduction. Manual L* entry shares the same pipeline and now remembers the last Patch % layout you saved or generated, so recurring manual workflows reopen with familiar spacing. Details: `docs/print_linearization_guide.md`.
 
 ### Correction Pipelines
 - **Simple Scaling (default)** multiplies the loaded channel curves by a smoothed gain envelope derived from the measured error. The envelope is capped to ±15 % per channel, keeps K/MK locked to avoid unplanned black expansion, and redistributes overflow into darker reserves so lighter inks do not double when they hit capacity. Fresh sessions, cleared storage, and new operators all start here. Toggle it from ⚙️ Options → **Correction method**.
 - **Density Solver (advanced)** preserves the legacy composite redistribution engine documented in `docs/features/channel-density-solver.md`. Switch to it when you need density-ladder promotions, coverage ceilings, and the composite debug tooling for multi-ink balancing.
-- Changing methods immediately reprocesses the active LAB or Manual dataset, updates overlays (dashed baseline, light-blocking line, purple reference), and leaves an undo entry so you can compare outputs quickly.
+- Changing methods immediately reprocesses the active LAB or Manual dataset, updates overlays, and leaves an undo entry so you can compare outputs quickly. The correction overlay always shows a dashed **red** trace of the active correction plus the dashed **purple** linear baseline for identity comparison. The light-blocking overlay remains a solid **purple** curve only; its dashed comparison guide will return once a secondary `.quad` loader ships.
 
 ### Smart Key Points & Edit Mode
 Smart Key Points are editable control points derived from the plotted curve. Edit Mode exposes these Key Points, supports insertion/deletion, and records every action for undo/redo. Recompute pulls fresh Key Points from the current curve while tagging baked metadata (`bakedGlobal`, `bakedAutoWhite`, `bakedAutoBlack`) when auto rolloff is active.
@@ -149,6 +149,7 @@ Once the baseline wedge is printed and measured, use LAB data to refine tone.
 3. **Review the Curve**
    - The chart updates immediately. Look for dips (printing too dark) and humps (too light). Hover to inspect specific inputs.
    - Toggle Auto limit rolloff if highlights/shadows plateau before 0% or 100%.
+   - Use ⚙️ Options → **Correction gain** if you want to audition a partial mix of the correction before committing. 100 % applies the full measured correction, 0 % reverts to the identity ramp, and intermediate values blend the curve and spot-marker deltas after a brief (<0.2 s) pause while you scrub—the moment you stop moving the slider the chart catches up, and exports always reflect the visible mix.
 
 4. **Optionally Enter Edit Mode**
    - If you need to fine-tune, enter Edit Mode.
