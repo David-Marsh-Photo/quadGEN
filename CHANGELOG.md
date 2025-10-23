@@ -17,6 +17,19 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Docs
 - _Nothing yet._
 
+## [4.2.1] — 2025-10-20
+### Added
+- Cumulative ink-load overlay lives under ⚙️ Options, sums every enabled channel, and flips from dashed gray to solid red once totals clear the configurable warning threshold; tooltips now report the per-input total with an overshoot warning.
+
+### Changed
+- _Nothing yet._
+
+### Fixed
+- _Nothing yet._
+
+### Docs
+- Help → ReadMe and Glossary call out the new ink-load overlay toggle, threshold control, and tooltip behaviour.
+
 ## [4.2.0] — 2025-10-19
 ### Added
 - Light-blocking overlay can now load a reference `.quad` so you can compare live curves against a saved baseline without leaving the app.

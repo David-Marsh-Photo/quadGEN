@@ -81,6 +81,8 @@ export const elements = {
     scaleAllInput: null,
     loadQuadBtn: null,
     quadFile: null,
+    referenceQuadFile: null,
+    loadReferenceQuadBtn: null,
 
     // Disabled channels compact view
     disabledChannelsCompact: null,
@@ -264,9 +266,12 @@ export const elements = {
     correctionOverlayToggle: null,
     labSpotMarkersToggle: null,
     lightBlockingOverlayToggle: null,
+    inkLoadOverlayToggle: null,
+    inkLoadThresholdInput: null,
     compositeWeightingSelect: null,
     compositeDebugToggle: null,
     autoRaiseInkToggle: null,
+    redistributionSmoothingToggle: null,
 
     // L* modal elements
     lstarModal: null,
@@ -316,6 +321,8 @@ export function initializeElements() {
     elements.scaleAllInput = document.getElementById('scaleAllInput');
     elements.loadQuadBtn = document.getElementById('loadQuadBtn');
     elements.quadFile = document.getElementById('quadFile');
+    elements.referenceQuadFile = document.getElementById('referenceQuadFile');
+    elements.loadReferenceQuadBtn = document.getElementById('loadReferenceQuadBtn');
 
     // Disabled channels compact view
     elements.disabledChannelsCompact = document.getElementById('disabledChannelsCompact');
@@ -462,6 +469,8 @@ export function initializeElements() {
     elements.correctionOverlayToggle = document.getElementById('correctionOverlayToggle');
     elements.labSpotMarkersToggle = document.getElementById('labSpotMarkersToggle');
     elements.lightBlockingOverlayToggle = document.getElementById('lightBlockingOverlayToggle');
+    elements.inkLoadOverlayToggle = document.getElementById('inkLoadOverlayToggle');
+    elements.inkLoadThresholdInput = document.getElementById('inkLoadThresholdInput');
     elements.compositeWeightingSelect = document.getElementById('compositeWeightingSelect');
     elements.compositeDebugToggle = document.getElementById('compositeDebugToggle');
     elements.autoRaiseInkToggle = document.getElementById('autoRaiseInkToggle');
@@ -563,6 +572,7 @@ export const appState = {
     linearizationData: null,
     linearizationApplied: false,
     perChannelLinearization: {},
+    referenceQuadData: null,
 
     // Chart state
     chartZoomIndex: 9, // Default to 100% zoom (index 9 in [10, 20, 30, 40, 50, 60, 70, 80, 90, 100])
@@ -570,6 +580,8 @@ export const appState = {
     showCorrectionOverlay: true,
     showLabSpotMarkers: false,
     showLightBlockingOverlay: false,
+    showInkLoadOverlay: false,
+    inkLoadThreshold: 25,
     plotSmoothingPercent: 0,
     correctionMethod: getCorrectionMethod(),
     correctionGain: 1,
@@ -592,6 +604,20 @@ try {
             const storedGain = Number(localStorage.getItem('quadgen.correctionGain'));
             if (Number.isFinite(storedGain)) {
                 appState.correctionGain = Math.max(0, Math.min(1, storedGain));
+            }
+        }
+        const inkLoadEnabled = localStorage.getItem('quadgen.inkLoadOverlayEnabled.v1');
+        if (inkLoadEnabled === 'true') {
+            appState.showInkLoadOverlay = true;
+        } else if (inkLoadEnabled === 'false') {
+            appState.showInkLoadOverlay = false;
+        }
+        const storedInkLoadThreshold = localStorage.getItem('quadgen.inkLoadThreshold.v1');
+        if (storedInkLoadThreshold != null) {
+            const numeric = Number(storedInkLoadThreshold);
+            if (Number.isFinite(numeric)) {
+                const clamped = Math.max(10, Math.min(400, Math.round(numeric)));
+                appState.inkLoadThreshold = clamped;
             }
         }
     }
@@ -742,6 +768,48 @@ export function subscribeEditModeFlag(callback) {
 }
 
 /**
+ * Reference quad data management
+ */
+export function getReferenceQuadData() {
+    return appState.referenceQuadData;
+}
+
+export function setReferenceQuadData(data) {
+    if (data && typeof data === 'object') {
+        appState.referenceQuadData = {
+            filename: data.filename || '',
+            channels: Array.isArray(data.channels) ? data.channels.slice() : [],
+            curves: data.curves && typeof data.curves === 'object'
+                ? Object.fromEntries(
+                    Object.entries(data.curves).map(([ch, curve]) => [
+                        ch,
+                        Array.isArray(curve) ? curve.slice() : []
+                    ])
+                  )
+                : {}
+        };
+    } else {
+        appState.referenceQuadData = null;
+    }
+}
+
+export function clearReferenceQuadData() {
+    const clearedFilename = appState.referenceQuadData?.filename;
+    appState.referenceQuadData = null;
+    return clearedFilename;
+}
+
+export function isReferenceQuadLoaded() {
+    return !!appState.referenceQuadData;
+}
+
+export function hasReferenceCurve(channelName) {
+    if (!appState.referenceQuadData) return false;
+    const curve = appState.referenceQuadData.curves?.[channelName];
+    return Array.isArray(curve) && curve.length > 0;
+}
+
+/**
  * Update application state
  * @param {Object} updates - Partial state updates
  */
@@ -816,6 +884,8 @@ export function resetAppState() {
     appState.showCorrectionOverlay = true;
     appState.showLabSpotMarkers = false;
     appState.showLightBlockingOverlay = false;
+    appState.showInkLoadOverlay = false;
+    appState.inkLoadThreshold = 25;
     appState.editMode = false;
     appState.selectedChannel = null;
     appState.correctionMethod = getCorrectionMethod();

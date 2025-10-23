@@ -1,7 +1,7 @@
 // quadGEN Chart Manager
 // Chart rendering, zoom management, and interaction handling
 
-import { elements, getCurrentPrinter, getAppState, updateAppState, INK_COLORS, TOTAL, isChannelNormalizedToEnd, getLoadedQuadData, setCorrectionGain, getCorrectionGain } from '../core/state.js';
+import { elements, getCurrentPrinter, getAppState, updateAppState, INK_COLORS, TOTAL, isChannelNormalizedToEnd, getLoadedQuadData, setCorrectionGain, getCorrectionGain, getReferenceQuadData, isReferenceQuadLoaded } from '../core/state.js';
 import { getStateManager } from '../core/state-manager.js';
 import { InputValidator } from '../core/validation.js';
 import { make256 } from '../core/processing-pipeline.js';
@@ -57,6 +57,13 @@ import {
     setLightBlockingOverlayEnabled as coreSetLightBlockingOverlayEnabled,
     clearLightBlockingCache as clearLightBlockingOverlayCache
 } from '../core/light-blocking.js';
+import {
+    computeInkLoadCurve,
+    setInkLoadOverlayEnabled as coreSetInkLoadOverlayEnabled,
+    isInkLoadOverlayEnabled as coreIsInkLoadOverlayEnabled,
+    getInkLoadThreshold
+} from '../core/ink-load.js';
+import { getResolvedChannelDensity } from '../core/channel-densities.js';
 
 const globalScope = typeof window !== 'undefined' ? window : globalThis;
 const isBrowser = typeof document !== 'undefined';
@@ -101,6 +108,9 @@ const LIGHT_BLOCKING_LABEL_COLOR = '#6d28d9';
 const LIGHT_BLOCKING_REFERENCE_COLOR = '#c084fc';
 const FLAG_MARKER_EMOJI = '🚩';
 const FLAG_MARKER_FALLBACK = '⚑';
+const INK_LOAD_SAFE_COLOR = '#94A3B8';
+const INK_LOAD_OVER_COLOR = '#EF4444';
+const INK_LOAD_LABEL_COLOR = '#1f2937';
 
 const chartDebugSettings = {
     showCorrectionTarget: !!initialAppStateSnapshot.showCorrectionOverlay,
@@ -109,6 +119,8 @@ const chartDebugSettings = {
     lastLabSpotMarkers: null,
     showLightBlockingOverlay: false,
     lastLightBlockingCurve: null,
+    showInkLoadOverlay: !!initialAppStateSnapshot.showInkLoadOverlay,
+    lastInkLoadOverlay: null,
     lastOriginalOverlays: {},
     flaggedSnapshots: [],
     lastSelectionProbe: null,
@@ -207,6 +219,24 @@ function sampleRawLightBlockingAtPercent(inputPercent) {
     return leftValue + (rightValue - leftValue) * t;
 }
 
+function sampleInkLoadAtPercent(inputPercent) {
+    const overlay = chartDebugSettings.lastInkLoadOverlay;
+    const curve = overlay?.curve;
+    if (!Array.isArray(curve) || curve.length < 2) {
+        return null;
+    }
+    const percent = Math.max(0, Math.min(100, inputPercent));
+    const normalized = percent / 100;
+    const lastIndex = curve.length - 1;
+    const position = normalized * lastIndex;
+    const left = Math.floor(position);
+    const right = Math.min(lastIndex, left + 1);
+    const t = position - left;
+    const leftValue = Number(curve[left]) || 0;
+    const rightValue = Number(curve[right]) || leftValue;
+    return leftValue + (rightValue - leftValue) * t;
+}
+
 export function setChartDebugShowCorrectionTarget(enabled = true) {
     chartDebugSettings.showCorrectionTarget = !!enabled;
     updateAppState({ showCorrectionOverlay: chartDebugSettings.showCorrectionTarget });
@@ -265,6 +295,37 @@ export function isChartLightBlockingOverlayEnabled() {
         chartDebugSettings.showLightBlockingOverlay = !!coreIsLightBlockingOverlayEnabled();
     }
     return !!chartDebugSettings.showLightBlockingOverlay;
+}
+
+export function setChartInkLoadOverlayEnabled(enabled = true) {
+    const next = coreSetInkLoadOverlayEnabled(enabled);
+    chartDebugSettings.showInkLoadOverlay = !!next;
+    const toggle = elements.inkLoadOverlayToggle;
+    if (toggle) {
+        toggle.checked = chartDebugSettings.showInkLoadOverlay;
+        toggle.setAttribute('aria-checked', String(chartDebugSettings.showInkLoadOverlay));
+    }
+    if (!chartDebugSettings.showInkLoadOverlay) {
+        chartDebugSettings.lastInkLoadOverlay = null;
+        if (isBrowser && globalScope.__quadDebug?.chartDebug) {
+            globalScope.__quadDebug.chartDebug.lastInkLoadOverlay = null;
+        }
+    }
+    if (typeof updateInkChart === 'function') {
+        try {
+            updateInkChart();
+        } catch (err) {
+            console.warn('[InkLoad] Failed to refresh chart after toggle:', err);
+        }
+    }
+    return chartDebugSettings.showInkLoadOverlay;
+}
+
+export function isChartInkLoadOverlayEnabled() {
+    if (!chartDebugSettings.showInkLoadOverlay) {
+        chartDebugSettings.showInkLoadOverlay = !!coreIsInkLoadOverlayEnabled();
+    }
+    return !!chartDebugSettings.showInkLoadOverlay;
 }
 
 function hasLabMeasurementCorrections() {
@@ -418,6 +479,7 @@ if (isBrowser) {
         getLastSelectionProbe: () => chartDebugSettings.lastSelectionProbe,
         setCorrectionGainPercent: (percent, options = {}) => applyCorrectionGainPercent(percent, options),
         getCorrectionGainPercent: () => Math.round(getCorrectionGain() * 100),
+        getCurveSamplesForChannel: (channelName, row) => getCurveSamplesForChannel(channelName, row),
         simulateSmartPointSelection: (channel, ordinal, options = {}) => selectSmartPointOrdinal(channel, ordinal, {
             description: options?.description || `Debug select ${channel} point ${ordinal}`,
             silent: options?.silent !== undefined ? options.silent : true,
@@ -435,7 +497,8 @@ if (isBrowser) {
             'setLightBlockingOverlayEnabled',
             'isLightBlockingOverlayEnabled',
             'setCorrectionGainPercent',
-            'getCorrectionGainPercent'
+            'getCorrectionGainPercent',
+            'getCurveSamplesForChannel'
         ]
     });
     if (debugHelpers) {
@@ -1385,6 +1448,36 @@ export function updateInkChart() {
         chartDebugSettings.lastLightBlockingCurve = null;
         if (isBrowser && globalScope.__quadDebug?.chartDebug) {
             globalScope.__quadDebug.chartDebug.lastLightBlockingCurve = null;
+        }
+    }
+
+    if (chartDebugSettings.showInkLoadOverlay) {
+        try {
+            const overlay = computeInkLoadCurve({ resolution: 256 });
+            if (overlay && Array.isArray(overlay.curve) && overlay.curve.length > 1) {
+                drawInkLoadOverlay(ctx, geom, overlay);
+                chartDebugSettings.lastInkLoadOverlay = {
+                    curve: overlay.curve.slice(),
+                    maxValue: overlay.maxValue,
+                    threshold: overlay.threshold,
+                    enabledChannels: Array.isArray(overlay.enabledChannels) ? overlay.enabledChannels.slice() : []
+                };
+                if (isBrowser && globalScope.__quadDebug?.chartDebug) {
+                    globalScope.__quadDebug.chartDebug.lastInkLoadOverlay = chartDebugSettings.lastInkLoadOverlay;
+                }
+            } else if (chartDebugSettings.lastInkLoadOverlay) {
+                chartDebugSettings.lastInkLoadOverlay = null;
+                if (isBrowser && globalScope.__quadDebug?.chartDebug) {
+                    globalScope.__quadDebug.chartDebug.lastInkLoadOverlay = null;
+                }
+            }
+        } catch (error) {
+            console.warn('[InkLoad] Failed to compute overlay curve:', error);
+        }
+    } else if (chartDebugSettings.lastInkLoadOverlay) {
+        chartDebugSettings.lastInkLoadOverlay = null;
+        if (isBrowser && globalScope.__quadDebug?.chartDebug) {
+            globalScope.__quadDebug.chartDebug.lastInkLoadOverlay = null;
         }
     }
 
@@ -2542,43 +2635,224 @@ function drawLightBlockingOverlay(ctx, geom, overlay) {
     ctx.stroke();
     ctx.restore();
 
-    // TODO(light-blocking-reference-quad): Restore the dashed reference curve once the app can load a comparison
-    // `.quad` similar to the legacy jan build. Until then we suppress the dashed purple guide to avoid confusion.
-    // drawLightBlockingReference(ctx, geom);
+    // Draw the reference light blocking curve if a reference .quad is loaded
+    drawLightBlockingReference(ctx, geom);
     drawLightBlockingLabel(ctx, geom, overlay);
+}
+
+function drawInkLoadOverlay(ctx, geom, overlay) {
+    const curve = Array.isArray(overlay?.curve) ? overlay.curve : null;
+    if (!Array.isArray(curve) || curve.length < 2) {
+        return;
+    }
+
+    const threshold = Number.isFinite(overlay?.threshold) ? overlay.threshold : getInkLoadThreshold();
+    const displayMax = normalizeDisplayMax(geom);
+    const dashPattern = [6, 6];
+    const lastIndex = curve.length - 1;
+
+    const mapInkValueToY = (value) => {
+        const clamped = Math.max(0, Math.min(displayMax, Number(value) || 0));
+        return mapPercentToY(clamped, geom);
+    };
+
+    ctx.save();
+    ctx.lineWidth = Math.max(2, Math.min(4, geom.chartHeight * 0.005));
+    ctx.globalAlpha = 0.8;
+
+    let currentColor = curve[0] > threshold ? INK_LOAD_OVER_COLOR : INK_LOAD_SAFE_COLOR;
+    let isDashed = curve[0] <= threshold;
+
+    ctx.strokeStyle = currentColor;
+    ctx.setLineDash(isDashed ? dashPattern : []);
+    ctx.beginPath();
+
+    for (let i = 0; i < curve.length; i += 1) {
+        const inputPercent = lastIndex === 0 ? 0 : (i / lastIndex) * 100;
+        const value = Number(curve[i]) || 0;
+        const x = mapPercentToX(inputPercent, geom);
+        const y = mapInkValueToY(value);
+
+        if (i === 0) {
+            ctx.moveTo(x, y);
+            continue;
+        }
+
+        const nextColor = value > threshold ? INK_LOAD_OVER_COLOR : INK_LOAD_SAFE_COLOR;
+        const nextDashed = value <= threshold;
+        if (nextColor !== currentColor || nextDashed !== isDashed) {
+            ctx.lineTo(x, y);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            currentColor = nextColor;
+            isDashed = nextDashed;
+            ctx.strokeStyle = currentColor;
+            ctx.setLineDash(isDashed ? dashPattern : []);
+        } else {
+            ctx.lineTo(x, y);
+        }
+    }
+
+    ctx.stroke();
+    ctx.restore();
+
+    drawInkLoadLabel(ctx, geom, overlay);
+}
+
+function drawInkLoadLabel(ctx, geom, overlay) {
+    const maxValue = Number.isFinite(overlay?.maxValue) ? overlay.maxValue : 0;
+    const threshold = Number.isFinite(overlay?.threshold) ? overlay.threshold : getInkLoadThreshold();
+    const exceeded = maxValue > threshold;
+
+    const styles = typeof window !== 'undefined'
+        ? getComputedStyle(document.documentElement)
+        : { getPropertyValue: () => '' };
+    const labelBG = (styles.getPropertyValue?.('--bg-elevated') || '#ffffff').trim();
+    const labelTextColor = (styles.getPropertyValue?.('--text') || INK_LOAD_LABEL_COLOR).trim();
+    const borderColor = exceeded ? INK_LOAD_OVER_COLOR : INK_LOAD_SAFE_COLOR;
+
+    const dpr = geom?.dpr || 1;
+    const fontSize = Math.max(11, Math.round(11 * dpr));
+    const paddingX = 6 * dpr;
+    const paddingY = 4 * dpr;
+
+    const labelText = `Max Ink Load ${Math.round(maxValue * 10) / 10}%`;
+
+    ctx.save();
+    ctx.font = `bold ${fontSize}px system-ui`;
+    ctx.textAlign = 'left';
+    const baseX = geom.leftPadding + 10 * dpr;
+    const baseY = geom.padding + 20 * dpr;
+    const metrics = ctx.measureText(labelText);
+    const bgW = Math.ceil(metrics.width) + paddingX * 2;
+    const bgH = fontSize + paddingY * 2;
+    const bgX = baseX;
+    const bgY = baseY - fontSize - paddingY;
+
+    ctx.fillStyle = labelBG;
+    ctx.fillRect(bgX, bgY, bgW, bgH);
+    ctx.strokeStyle = borderColor;
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bgX + 0.5, bgY + 0.5, bgW - 1, bgH - 1);
+
+    ctx.fillStyle = exceeded ? INK_LOAD_OVER_COLOR : labelTextColor;
+    ctx.fillText(labelText, bgX + paddingX, baseY - 2 * dpr);
+    ctx.restore();
 }
 
 const LIGHT_BLOCKING_REFERENCE_K = 4.2;
 const LIGHT_BLOCKING_REFERENCE_RESOLUTION = 256;
 
+/**
+ * Compute light blocking curve from reference .quad data
+ * Similar to computeLightBlockingCurve but uses reference curves instead of current curves
+ * @returns {Array<number>|null} 256-point curve (0-100 range) or null if no reference loaded
+ */
+function computeReferenceLightBlockingCurve() {
+    const referenceData = getReferenceQuadData();
+    if (!referenceData || !referenceData.curves) {
+        return null;
+    }
+
+    const resolution = 256;
+    const curve = Array.from({ length: resolution }, () => 0);
+    let hasAnyContribution = false;
+
+    // Get current printer channels to match reference curves with weights
+    const currentPrinter = getCurrentPrinter();
+    const printerChannels = Array.isArray(currentPrinter?.channels) ? currentPrinter.channels : [];
+
+    // For each channel in the reference data
+    for (const channelName of printerChannels) {
+        const refCurve = referenceData.curves[channelName];
+        if (!Array.isArray(refCurve) || refCurve.length === 0) {
+            continue;
+        }
+
+        // Get density weight for this channel
+        const weightEntry = getResolvedChannelDensity(channelName);
+        const weight = Number.isFinite(weightEntry?.value) ? Math.max(0, weightEntry.value) : 0;
+
+        if (weight <= 0) {
+            continue;
+        }
+
+        // Normalize reference curve from 0-65535 to 0-1
+        const normalizedSamples = refCurve.map(value => {
+            const num = Number(value);
+            if (!Number.isFinite(num)) return 0;
+            return Math.max(0, Math.min(1, num / TOTAL));
+        });
+
+        // Add weighted contribution to the combined curve
+        for (let i = 0; i < resolution; i++) {
+            const normalized = normalizedSamples[i] ?? 0;
+            if (normalized > 0) {
+                hasAnyContribution = true;
+            }
+            const weightedPercent = normalized * 100 * weight;
+            curve[i] += Number.isFinite(weightedPercent) ? weightedPercent : 0;
+        }
+    }
+
+    if (!hasAnyContribution) {
+        return null;
+    }
+
+    // Clamp values to 0-100 range and find max
+    let maxValue = 0;
+    for (let i = 0; i < curve.length; i++) {
+        curve[i] = Math.max(0, Math.min(100, curve[i]));
+        if (curve[i] > maxValue) {
+            maxValue = curve[i];
+        }
+    }
+
+    // Normalize to 0-100% range (scale so max becomes 100)
+    // This matches the normalization applied to the main light blocking overlay
+    if (maxValue > 0) {
+        for (let i = 0; i < curve.length; i++) {
+            curve[i] = Math.max(0, Math.min(100, (curve[i] / maxValue) * 100));
+        }
+    }
+
+    return curve;
+}
+
 function drawLightBlockingReference(ctx, geom) {
-    const displayMax = Number.isFinite(geom?.displayMax) && geom.displayMax > 0 ? geom.displayMax : 100;
-    // Saturation occurs when -ln(1 - x) == LIGHT_BLOCKING_REFERENCE_K
-    // We remap input so the reference reaches (100, 100) instead of flattening early.
-    const saturationPoint = 1 - Math.exp(-LIGHT_BLOCKING_REFERENCE_K);
+    // Check if reference data is loaded
+    if (!isReferenceQuadLoaded()) {
+        return; // No reference to draw
+    }
+
+    // Compute reference light blocking curve from loaded .quad data
+    const referenceCurve = computeReferenceLightBlockingCurve();
+    if (!referenceCurve || referenceCurve.length === 0) {
+        return; // No valid reference curve
+    }
+
+    // Draw the reference curve as a dashed line
     ctx.save();
     ctx.strokeStyle = LIGHT_BLOCKING_REFERENCE_COLOR;
     ctx.lineWidth = 1.5;
-    ctx.setLineDash([6, 4]);
+    ctx.setLineDash([6, 4]); // Dashed line pattern
     ctx.beginPath();
-    for (let i = 0; i < LIGHT_BLOCKING_REFERENCE_RESOLUTION; i += 1) {
-        const inputFraction = i / (LIGHT_BLOCKING_REFERENCE_RESOLUTION - 1);
-        const remappedFraction = Math.max(0, Math.min(saturationPoint, inputFraction * saturationPoint));
-        const safeDelta = Math.max(Number.EPSILON, 1 - remappedFraction);
-        let normalizedCorrection = 0;
-        if (remappedFraction > 0) {
-            normalizedCorrection = Math.max(0, Math.min(1, -Math.log(safeDelta) / LIGHT_BLOCKING_REFERENCE_K));
-        }
-        const scaledOutput = normalizedCorrection * displayMax;
-        const x = mapPercentToX(inputFraction * 100, geom);
-        const y = mapPercentToY(scaledOutput, geom);
+
+    const lastIndex = referenceCurve.length - 1;
+    for (let i = 0; i < referenceCurve.length; i++) {
+        const inputPercent = (i / lastIndex) * 100;
+        const outputPercent = referenceCurve[i];
+        const x = mapPercentToX(inputPercent, geom);
+        const y = mapPercentToY(outputPercent, geom);
+
         if (i === 0) {
             ctx.moveTo(x, y);
         } else {
             ctx.lineTo(x, y);
         }
     }
-    ctx.lineTo(mapPercentToX(100, geom), mapPercentToY(displayMax, geom));
+
     ctx.stroke();
     ctx.restore();
 }
@@ -2812,6 +3086,14 @@ export function setupChartCursorTooltip(geom) {
                         tooltipLabel += ` (raw ${rawValue.toFixed(1)}%)`;
                     }
                     tooltipLines.push(tooltipLabel);
+                }
+            }
+            if (chartDebugSettings.showInkLoadOverlay && chartDebugSettings.lastInkLoadOverlay) {
+                const inkLoadValue = sampleInkLoadAtPercent(xPct);
+                if (Number.isFinite(inkLoadValue)) {
+                    const threshold = Number(chartDebugSettings.lastInkLoadOverlay.threshold) || 0;
+                    const warn = threshold > 0 && inkLoadValue > threshold ? ' ⚠️' : '';
+                    tooltipLines.push(`Ink Load: ${inkLoadValue.toFixed(1)}%${warn}`);
                 }
             }
             if (!labMarkerInfo && canInsert) {

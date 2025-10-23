@@ -1,11 +1,12 @@
 // quadGEN UI Event Handlers
 // Centralized event handler management for UI interactions
 
-import { elements, getCurrentPrinter, setLoadedQuadData, getLoadedQuadData, ensureLoadedQuadData, getAppState, updateAppState, TOTAL, getPlotSmoothingPercent, setPlotSmoothingPercent, getCorrectionGain } from '../core/state.js';
+import { elements, getCurrentPrinter, setLoadedQuadData, getLoadedQuadData, ensureLoadedQuadData, getAppState, updateAppState, TOTAL, getPlotSmoothingPercent, setPlotSmoothingPercent, getCorrectionGain, getReferenceQuadData, setReferenceQuadData, clearReferenceQuadData, isReferenceQuadLoaded } from '../core/state.js';
 import { getStateManager } from '../core/state-manager.js';
 import { ensureChannelLock, setChannelLock, isChannelLocked, updateChannelLockBounds, subscribeToChannelLock, clampAbsoluteToChannelLock, getChannelLockInfo, getLockedChannels, getGlobalScaleLockMessage } from '../core/channel-locks.js';
 import { sanitizeFilename, debounce, formatScalePercent } from './ui-utils.js';
 import { generateFilename, downloadFile, readFileAsText } from '../files/file-operations.js';
+import { loadReferenceQuadFile } from '../files/reference-quad-loader.js';
 import { InputValidator } from '../core/validation.js';
 import { parseQuadFile, parseLinearizationFile } from '../parsers/file-parsers.js';
 import {
@@ -18,8 +19,11 @@ import {
     syncLabSpotMarkerToggleAvailability,
     setChartLightBlockingOverlayEnabled,
     isChartLightBlockingOverlayEnabled,
+    setChartInkLoadOverlayEnabled,
+    isChartInkLoadOverlayEnabled,
     applyCorrectionGainPercent
 } from './chart-manager.js';
+import { setInkLoadThreshold, getInkLoadThreshold } from '../core/ink-load.js';
 import { getCurrentScale, reapplyCurrentGlobalScale, updateScaleBaselineForChannel as updateScaleBaselineForChannelCore, validateScalingStateSync } from '../core/scaling-utils.js';
 import { SCALING_STATE_FLAG_EVENT } from '../core/scaling-constants.js';
 import scalingCoordinator from '../core/scaling-coordinator.js';
@@ -1977,6 +1981,98 @@ function initializeLightBlockingOverlayOption() {
     });
 }
 
+function syncInkLoadOverlayToggle() {
+    if (!elements.inkLoadOverlayToggle) {
+        return;
+    }
+    const enabled = isChartInkLoadOverlayEnabled();
+    elements.inkLoadOverlayToggle.checked = enabled;
+    elements.inkLoadOverlayToggle.setAttribute('aria-checked', String(enabled));
+}
+
+function initializeInkLoadOverlayOption() {
+    syncInkLoadOverlayToggle();
+    if (!elements.inkLoadOverlayToggle) {
+        return;
+    }
+    elements.inkLoadOverlayToggle.addEventListener('change', (event) => {
+        const enabled = !!event.target.checked;
+        setChartInkLoadOverlayEnabled(enabled);
+        syncInkLoadOverlayToggle();
+        showStatus(enabled ? 'Ink load overlay enabled.' : 'Ink load overlay disabled.');
+    });
+}
+
+function initializeInkLoadThresholdOption() {
+    const input = elements.inkLoadThresholdInput;
+    if (!input) {
+        return;
+    }
+
+    const syncValue = () => {
+        const threshold = getInkLoadThreshold();
+        input.value = String(threshold);
+    };
+
+    const commit = (value, { announce = true } = {}) => {
+        const applied = setInkLoadThreshold(value);
+        input.value = String(applied);
+        if (announce) {
+            showStatus(`Ink load warning threshold set to ${applied}%.`);
+        }
+        try {
+            updateInkChart();
+        } catch (err) {
+            console.warn('Failed to refresh chart after ink load threshold update:', err);
+        }
+    };
+
+    syncValue();
+
+    input.addEventListener('focus', () => {
+        try {
+            input.select();
+        } catch (err) {
+            console.warn('Ink load threshold select failed:', err);
+        }
+    });
+
+    input.addEventListener('blur', (event) => {
+        commit(event.target.value);
+    });
+
+    input.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter') {
+            event.preventDefault();
+            input.blur();
+        } else if (event.key === 'Escape') {
+            event.preventDefault();
+            syncValue();
+            input.blur();
+        } else if (event.key === 'ArrowUp' || event.key === 'ArrowDown' || event.key === 'PageUp' || event.key === 'PageDown') {
+            setTimeout(() => commit(input.value, { announce: false }), 0);
+        }
+    });
+
+    input.addEventListener('input', (event) => {
+        const nativeEvent = (typeof InputEvent !== 'undefined' && event instanceof InputEvent) ? event : null;
+        if (nativeEvent && typeof nativeEvent.inputType === 'string') {
+            const skipTypes = new Set([
+                'insertText',
+                'deleteContentBackward',
+                'deleteContentForward',
+                'deleteByCut',
+                'deleteByDrag',
+                'insertFromDrop'
+            ]);
+            if (skipTypes.has(nativeEvent.inputType)) {
+                return;
+            }
+        }
+        commit(event.target.value, { announce: false });
+    });
+}
+
 function syncCompositeDebugToggle() {
     if (!elements.compositeDebugToggle) {
         return;
@@ -2235,6 +2331,8 @@ export function initializeEventHandlers() {
     initializeCorrectionOverlayOption();
     initializeLabSpotMarkersOption();
     initializeLightBlockingOverlayOption();
+    initializeInkLoadOverlayOption();
+    initializeInkLoadThresholdOption();
     initializeCompositeWeightingOption();
     initializeRedistributionSmoothingOption();
     initializeAutoRaiseInkOption();
@@ -4435,6 +4533,36 @@ export function initializeAutoLimitHandlers() {
 }
 
 /**
+ * Update reference .quad button appearance based on loaded state
+ */
+function updateReferenceQuadButton() {
+    const btn = elements.loadReferenceQuadBtn;
+    if (!btn) return;
+
+    const defaultLabel = btn.dataset.defaultLabel || '→ Load Reference';
+    const referenceLoaded = isReferenceQuadLoaded();
+    const referenceData = getReferenceQuadData();
+
+    if (referenceLoaded && referenceData?.filename) {
+        const filename = referenceData.filename;
+        const truncated = filename.length > 28 ? `${filename.slice(0, 25)}…` : filename;
+        btn.textContent = `Ref ✓ ${truncated}`;
+        const loadedLabel = `Loaded reference: ${filename}. Click to clear the reference overlay.`;
+        btn.title = loadedLabel;
+        btn.setAttribute('aria-label', loadedLabel);
+        btn.setAttribute('aria-pressed', 'true');
+        btn.classList.add('ring-2', 'ring-violet-200');
+    } else {
+        btn.textContent = defaultLabel;
+        const loadLabel = 'Load a reference .quad file (non-editable overlay).';
+        btn.title = loadLabel;
+        btn.setAttribute('aria-label', loadLabel);
+        btn.setAttribute('aria-pressed', 'false');
+        btn.classList.remove('ring-2', 'ring-violet-200');
+    }
+}
+
+/**
  * Initialize file loading handlers
  * Handles .quad file loading and processing
  */
@@ -4558,6 +4686,102 @@ function initializeFileHandlers() {
             });
         } else {
             console.warn('quadFile element not found');
+        }
+
+        // Reference .quad loader button click handler
+        if (elements.loadReferenceQuadBtn) {
+            elements.loadReferenceQuadBtn.addEventListener('click', () => {
+                console.log('📁 Load Reference .quad button clicked');
+
+                // If reference is already loaded, clear it
+                if (isReferenceQuadLoaded()) {
+                    const clearedFilename = clearReferenceQuadData();
+                    if (elements.referenceQuadFile) {
+                        elements.referenceQuadFile.value = '';
+                    }
+                    updateReferenceQuadButton();
+                    updateInkChart();
+                    if (clearedFilename) {
+                        showStatus(`Cleared reference overlay (${clearedFilename})`);
+                    } else {
+                        showStatus('Cleared reference overlay');
+                    }
+                    return;
+                }
+
+                // Otherwise, trigger file picker
+                if (elements.referenceQuadFile) {
+                    elements.referenceQuadFile.value = '';
+                    elements.referenceQuadFile.click();
+                } else {
+                    console.warn('referenceQuadFile element not found');
+                }
+            });
+        } else {
+            console.warn('loadReferenceQuadBtn element not found');
+        }
+
+        // Reference .quad file change handler
+        if (elements.referenceQuadFile) {
+            elements.referenceQuadFile.addEventListener('change', async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+
+                try {
+                    console.log('📁 Processing reference .quad file:', file.name);
+
+                    // Load and validate reference file
+                    const result = await loadReferenceQuadFile(file);
+
+                    if (!result.success) {
+                        console.error('Reference load error:', result.error);
+                        showStatus(result.error);
+                        if (result.warning) {
+                            // Clear reference but don't show as error
+                            clearReferenceQuadData();
+                            updateReferenceQuadButton();
+                        }
+                        return;
+                    }
+
+                    // Store reference data
+                    setReferenceQuadData(result.data);
+                    console.log('📁 Reference .quad loaded:', result.filename);
+
+                    // Auto-enable light blocking overlay
+                    const lightBlockingToggle = document.getElementById('lightBlockingOverlayToggle');
+                    if (lightBlockingToggle && !lightBlockingToggle.checked) {
+                        lightBlockingToggle.checked = true;
+                        setChartLightBlockingOverlayEnabled(true);
+                        updateAppState({ showLightBlockingOverlay: true });
+                    }
+
+                    // Update button appearance
+                    updateReferenceQuadButton();
+
+                    // Refresh chart to show reference overlay
+                    updateInkChart();
+
+                    // Show status message
+                    const statusParts = [
+                        `Loaded reference ${result.filename}`,
+                        `${result.matchedCount}/${result.totalCount} channels matched`
+                    ];
+                    if (result.unmatchedCount > 0) {
+                        statusParts.push(`${result.unmatchedCount} unmatched`);
+                    }
+                    showStatus(statusParts.join(' · '));
+
+                } catch (error) {
+                    console.error('Error loading reference .quad file:', error);
+                    showStatus(`Failed to load reference: ${error.message}`);
+                }
+
+                // Clear the file input for next use
+                e.target.value = '';
+            });
+        } else {
+            console.warn('referenceQuadFile element not found');
         }
 
         // Global linearization button click handler

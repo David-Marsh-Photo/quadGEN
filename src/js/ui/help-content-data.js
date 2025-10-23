@@ -16,6 +16,31 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '4.2.1': {
+    date: '2025-10-20',
+    title: 'Ink-load overlay & docs refresh',
+    sections: {
+      ADDED: [
+        'Cumulative ink-load overlay lives under ⚙️ Options, sums every enabled channel, and flips from dashed gray to solid red once totals clear the configurable warning threshold; tooltips now report the per-input total with an overshoot warning.'
+      ],
+      CHANGED: [],
+      FIXED: [],
+      REMOVED: [],
+      DOCS: [
+        'Help → ReadMe and Glossary call out the new ink-load overlay toggle, threshold control, and tooltip behaviour.'
+      ]
+    },
+    aboutDialog: [
+      {
+        label: 'Ink-load overlay',
+        desc: 'Toggle the cumulative ink trace in ⚙️ Options to monitor total coverage; dashed gray segments sit under your warning threshold while solid red highlights overshoot.'
+      },
+      {
+        label: 'Help updates',
+        desc: 'ReadMe and Glossary now spell out the ink-load overlay controls and what the threshold warning cues look like.'
+      }
+    ]
+  },
   '4.2.0': {
     date: '2025-10-19',
     title: 'Reference overlay & Edit Mode polish',
@@ -1338,7 +1363,7 @@ Scope: This license applies to this HTML file (quadgen.html) only.</div>
         <li>Inputs: <code>.quad</code>, LAB <code>.txt</code>, LUT <code>.cube</code>, <code>.acv</code>, Manual L*.</li>
         <li>Apply intent remaps directly to a loaded <code>.quad</code> via “Apply to Loaded Curve”.</li>
         <li>⚙️ Options panel centralizes app-wide preferences (e.g., log-density normalization) without cluttering workflow panels.</li>
-        <li>Correction overlay toggle draws a dashed red global target plus the purple linear baseline for identity checks. The light-blocking overlay shows a solid purple curve; load a reference <code>.quad</code> file to display a dashed comparison curve.</li>
+        <li>Correction overlay toggle draws a dashed red global target plus the purple linear baseline for identity checks. The light-blocking overlay shows a solid purple curve (with dashed reference when a comparison <code>.quad</code> is loaded), and the cumulative ink-load overlay sums every enabled channel with dashed/solid segments that flip to red once totals clear your warning threshold.</li>
         <li>Measurement spot markers (⚙️ Options) line badges along a 70 % rail anchored to the unzoomed chart, showing green checks for LAB readings within ±1 % and colored arrows (red up for darken, blue down for lighten) with faint dots at the measured Y position—even after zooming. Hover any badge to see the exact delta.</li>
                 <li>Correction gain slider (🌐 Global Correction) blends the identity curve with the measured correction (0–100 %); scrubbing pauses for ~150 ms to stay smooth, then the chart, spot markers, previews, and exported curves all refresh with the selected mix.</li>
         <li>Evenly spaced or irregular targets supported.</li>
@@ -1471,11 +1496,17 @@ export function getHelpGlossaryHTML(){
         <dt>Correction overlay</dt>
         <dd>Dashed global reference plotted on the chart, sampled from the active correction dataset, with a purple dashed linear baseline for identity comparison. Loading a secondary reference <code>.quad</code> remains on the roadmap; until that lands, the light-blocking overlay is the only one missing its reference trace. Enable the overlay from the Options panel toggle—no debug helpers required.</dd>
 
+        <dt>Ink load overlay</dt>
+        <dd>Summed ink-percentage trace across every enabled channel. Enable it from ⚙️ Options → “Show cumulative ink load overlay” to plot totals over the full chart height; dashed gray segments sit below the warning threshold, solid red segments flag overshoot, and tooltips report the live total with a ⚠️ marker whenever the threshold is exceeded.</dd>
+
         <dt>Measurement spot markers</dt>
         <dd>Optional overlay that plots each LAB measurement on the chart. Patches within ±1 % tolerance show a green check badge; out-of-tolerance points show an arrow (up = darken, down = lighten) labelled with the percent delta. Hover a badge to see the input %, measured L*, and recommended action.</dd>
 
         <dt>Light-blocking overlay</dt>
         <dd>Solid purple curve that estimates cumulative optical density across the active channels. Load a reference <code>.quad</code> file to display a dashed comparison curve alongside the current light-blocking overlay. Toggle it from ⚙️ Options → "Show light blocking overlay."</dd>
+
+        <dt>Ink load overlay</dt>
+        <dd>Plots the summed output percentage across all enabled channels so you can spot inputs where total coverage breaches your warning threshold. Toggle it via ⚙️ Options → "Show cumulative ink load overlay" and adjust the threshold field beneath the toggle; dashed gray segments sit under the limit while solid red segments highlight overshoots.</dd>
 
         <dt>Density</dt>
         <dd>Measure of how much light a material absorbs or blocks. In quadGEN we treat each density value as the normalized L* coverage ceiling an ink can provide; once a channel’s cumulative darkening reaches that ceiling (with a 0.5% buffer for measurement noise), the solver hands the remaining correction to higher-density inks. Enable the log-density toggle when you want corrections based on optical density (digital negatives, contact printing); leave it off to stay in L* for perceptual printer linearization. The channel table’s Density column lets you lock these ceilings (e.g., K/MK = 1.00, C = 0.21, LK = 0.054); leaving a field blank or zero prompts the solver to regenerate the value automatically. A coverage badge now sits beneath the Density input to show “used / limit” and lights amber with a tooltip listing any clamped samples when the ceiling is hit.</dd>
