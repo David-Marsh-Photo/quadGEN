@@ -1237,6 +1237,247 @@ export class QuadGenActions {
         }
     }
 
+    /**
+     * Set measurement spot marker overlay visibility
+     * @param {boolean} enabled - true to show, false to hide
+     * @returns {Object} Success/failure result
+     */
+    setLabSpotMarkers(enabled) {
+        try {
+            if (typeof enabled !== 'boolean') {
+                return { success: false, message: 'enabled parameter must be a boolean' };
+            }
+
+            if (typeof globalScope.setLabSpotMarkerOverlayEnabled === 'function') {
+                const result = globalScope.setLabSpotMarkerOverlayEnabled(enabled);
+                return {
+                    success: true,
+                    message: `Measurement spot markers ${enabled ? 'enabled' : 'disabled'}`,
+                    enabled: result
+                };
+            } else {
+                return { success: false, message: 'setLabSpotMarkerOverlayEnabled function not available' };
+            }
+        } catch (error) {
+            console.error('Failed to set lab spot markers:', error);
+            return { success: false, message: `Error: ${error.message}` };
+        }
+    }
+
+    /**
+     * Set auto-raise ink limits on import
+     * @param {boolean} enabled - true to enable, false to disable
+     * @returns {Object} Success/failure result
+     */
+    setAutoRaiseInkLimits(enabled) {
+        try {
+            if (typeof enabled !== 'boolean') {
+                return { success: false, message: 'enabled parameter must be a boolean' };
+            }
+
+            if (typeof globalScope.enableAutoRaiseInkLimitsOnImport === 'function') {
+                const result = globalScope.enableAutoRaiseInkLimitsOnImport(enabled);
+                return {
+                    success: true,
+                    message: `Auto-raise ink limits ${enabled ? 'enabled' : 'disabled'}`,
+                    enabled: result
+                };
+            } else {
+                return { success: false, message: 'enableAutoRaiseInkLimitsOnImport function not available' };
+            }
+        } catch (error) {
+            console.error('Failed to set auto-raise ink limits:', error);
+            return { success: false, message: `Error: ${error.message}` };
+        }
+    }
+
+    /**
+     * Set light-blocking overlay visibility
+     * @param {boolean} enabled - true to show, false to hide
+     * @returns {Object} Success/failure result
+     */
+    setLightBlockingOverlay(enabled) {
+        try {
+            if (typeof enabled !== 'boolean') {
+                return { success: false, message: 'enabled parameter must be a boolean' };
+            }
+
+            if (typeof globalScope.setLightBlockingOverlayEnabled === 'function') {
+                const result = globalScope.setLightBlockingOverlayEnabled(enabled);
+                return {
+                    success: true,
+                    message: `Light-blocking overlay ${enabled ? 'enabled' : 'disabled'}`,
+                    enabled: result
+                };
+            } else {
+                return { success: false, message: 'setLightBlockingOverlayEnabled function not available' };
+            }
+        } catch (error) {
+            console.error('Failed to set light-blocking overlay:', error);
+            return { success: false, message: `Error: ${error.message}` };
+        }
+    }
+
+    /**
+     * Set correction method (simple or density_solver)
+     * @param {string} method - "simple" or "density_solver"
+     * @returns {Object} Success/failure result
+     */
+    setCorrectionMethod(method) {
+        try {
+            if (method !== 'simple' && method !== 'density_solver') {
+                return { success: false, message: 'method must be "simple" or "density_solver"' };
+            }
+
+            if (typeof globalScope.enableSimpleScalingCorrection === 'function') {
+                const enableSimple = method === 'simple';
+                const result = globalScope.enableSimpleScalingCorrection(enableSimple);
+                return {
+                    success: true,
+                    message: `Correction method set to ${method === 'simple' ? 'Simple Scaling' : 'Density Solver'}`,
+                    method: method,
+                    enabled: result
+                };
+            } else {
+                return { success: false, message: 'enableSimpleScalingCorrection function not available' };
+            }
+        } catch (error) {
+            console.error('Failed to set correction method:', error);
+            return { success: false, message: `Error: ${error.message}` };
+        }
+    }
+
+    /**
+     * Set correction gain blend percentage
+     * @param {number} percent - Gain percentage (0-100)
+     * @returns {Object} Success/failure result
+     */
+    setCorrectionGain(percent) {
+        try {
+            if (typeof percent !== 'number' || percent < 0 || percent > 100) {
+                return { success: false, message: 'percent must be a number between 0 and 100' };
+            }
+
+            if (typeof globalScope.setCorrectionGainPercent === 'function') {
+                globalScope.setCorrectionGainPercent(percent, { updateUI: true });
+
+                const currentPercent = typeof globalScope.getCorrectionGainPercent === 'function'
+                    ? globalScope.getCorrectionGainPercent()
+                    : percent;
+
+                return {
+                    success: true,
+                    message: `Correction gain set to ${percent}%`,
+                    percent: currentPercent
+                };
+            } else {
+                return { success: false, message: 'setCorrectionGainPercent function not available' };
+            }
+        } catch (error) {
+            console.error('Failed to set correction gain:', error);
+            return { success: false, message: `Error: ${error.message}` };
+        }
+    }
+
+    /**
+     * Get current correction gain percentage
+     * @returns {Object} Result with gain percentage
+     */
+    getCorrectionGain() {
+        try {
+            if (typeof globalScope.getCorrectionGainPercent === 'function') {
+                const percent = globalScope.getCorrectionGainPercent();
+                return {
+                    success: true,
+                    percent: percent
+                };
+            } else if (typeof globalScope.getCorrectionGain === 'function') {
+                const normalized = globalScope.getCorrectionGain();
+                const percent = Math.round(normalized * 100);
+                return {
+                    success: true,
+                    percent: percent
+                };
+            } else {
+                return { success: false, message: 'getCorrectionGain function not available' };
+            }
+        } catch (error) {
+            console.error('Failed to get correction gain:', error);
+            return { success: false, message: `Error: ${error.message}` };
+        }
+    }
+
+    /**
+     * Lock or unlock a channel
+     * @param {string} channelName - Channel name
+     * @param {boolean} locked - true to lock, false to unlock
+     * @returns {Object} Success/failure result
+     */
+    lockChannel(channelName, locked) {
+        try {
+            if (typeof locked !== 'boolean') {
+                return { success: false, message: 'locked parameter must be a boolean' };
+            }
+
+            if (typeof globalScope.setChannelLock === 'function') {
+                globalScope.setChannelLock(channelName, locked);
+                return {
+                    success: true,
+                    message: `Channel ${channelName} ${locked ? 'locked' : 'unlocked'}`,
+                    channelName: channelName,
+                    locked: locked
+                };
+            } else {
+                return { success: false, message: 'setChannelLock function not available' };
+            }
+        } catch (error) {
+            console.error('Failed to lock/unlock channel:', error);
+            return { success: false, message: `Error: ${error.message}` };
+        }
+    }
+
+    /**
+     * Get channel lock status for one channel or all channels
+     * @param {string|null} channelName - Optional specific channel
+     * @returns {Object} Result with lock status
+     */
+    getChannelLockStatus(channelName = null) {
+        try {
+            if (typeof globalScope.isChannelLocked === 'function') {
+                if (channelName) {
+                    // Get status for specific channel
+                    const locked = globalScope.isChannelLocked(channelName);
+                    return {
+                        success: true,
+                        channelName: channelName,
+                        locked: locked
+                    };
+                } else {
+                    // Get status for all channels
+                    const printer = getCurrentPrinter();
+                    if (!printer || !printer.channels) {
+                        return { success: false, message: 'No printer configured' };
+                    }
+
+                    const status = {};
+                    for (const ch of printer.channels) {
+                        status[ch] = globalScope.isChannelLocked(ch);
+                    }
+
+                    return {
+                        success: true,
+                        locks: status
+                    };
+                }
+            } else {
+                return { success: false, message: 'isChannelLocked function not available' };
+            }
+        } catch (error) {
+            console.error('Failed to get channel lock status:', error);
+            return { success: false, message: `Error: ${error.message}` };
+        }
+    }
+
     // The original class has many more methods including:
     // - File loading operations
     // - LAB data operations

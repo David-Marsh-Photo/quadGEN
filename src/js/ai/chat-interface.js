@@ -512,6 +512,22 @@ Only engage with requests about: app functionality, printing, photography, histo
                     return this.quadGenActions.revertGlobalToMeasurement();
                 case 'revert_channel_to_measurement':
                     return this.quadGenActions.revertChannelToMeasurement(parameters?.channelName);
+                case 'set_lab_spot_markers':
+                    return this.quadGenActions.setLabSpotMarkers(parameters.enabled);
+                case 'set_auto_raise_ink_limits':
+                    return this.quadGenActions.setAutoRaiseInkLimits(parameters.enabled);
+                case 'set_light_blocking_overlay':
+                    return this.quadGenActions.setLightBlockingOverlay(parameters.enabled);
+                case 'set_correction_method':
+                    return this.quadGenActions.setCorrectionMethod(parameters.method);
+                case 'set_correction_gain':
+                    return this.quadGenActions.setCorrectionGain(parameters.percent);
+                case 'get_correction_gain':
+                    return this.quadGenActions.getCorrectionGain();
+                case 'lock_channel':
+                    return this.quadGenActions.lockChannel(parameters.channelName, parameters.locked);
+                case 'get_channel_lock_status':
+                    return this.quadGenActions.getChannelLockStatus(parameters?.channelName);
                 default:
                     console.warn(`Unknown function call: ${name}`);
                     return {

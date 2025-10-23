@@ -394,10 +394,14 @@ function toAbsoluteOutput(channelName, relativeOutput) {
 function toRelativeOutput(channelName, absoluteOutput) {
     const channelPercent = getChannelPercent(channelName);
     if (!Number.isFinite(channelPercent) || channelPercent <= 0) {
-        return ControlPolicy.clampY(absoluteOutput);
+        // When channel percent is invalid, treat input as already relative
+        return Math.max(0, absoluteOutput);
     }
+    // Convert absolute (0-100%) to relative (scaled by channel ink limit)
+    // Relative values can exceed 100% when channel ink limit < 100%
+    // Example: 60% absolute with 38% limit = (60/38)*100 = 157.89% relative
     const relative = channelPercent === 0 ? 0 : (absoluteOutput / channelPercent) * 100;
-    return ControlPolicy.clampY(relative);
+    return Math.max(0, relative); // Only clamp to non-negative, no upper limit
 }
 
 /**
@@ -427,9 +431,12 @@ export const ControlPoints = {
     normalize(points) {
         if (!Array.isArray(points)) return [];
 
+        // Note: output values are RELATIVE percentages (scaled by channel ink limit)
+        // They can legitimately exceed 100% when channel limit < 100%
+        // Example: 60% absolute with 38% limit = 157.89% relative
         const clamped = points.map(p => ({
             input: ControlPolicy.clampX(Number(p.input)),
-            output: ControlPolicy.clampY(Number(p.output))
+            output: Math.max(0, Number(p.output))  // Only prevent negative, no upper limit
         }));
 
         clamped.sort((a, b) => a.input - b.input);
@@ -1056,10 +1063,12 @@ export function adjustSmartKeyPointByIndex(channelName, ordinal, params = {}) {
         : newAbsoluteOutput;
     const rescaleFactor = Number.isFinite(limitAdjust?.rescaleFactor) ? limitAdjust.rescaleFactor : 1;
 
+    // When ink limit increases, rescale other points to maintain absolute positions
+    // Note: rescaled relative values can exceed 100% legitimately
     if (rescaleFactor !== 1) {
         for (let j = 0; j < points.length; j += 1) {
             if (j === idx) continue;
-            points[j].output = ControlPolicy.clampY(points[j].output * rescaleFactor);
+            points[j].output = Math.max(0, points[j].output * rescaleFactor);  // No upper limit
         }
     }
 
@@ -1085,7 +1094,8 @@ export function adjustSmartKeyPointByIndex(channelName, ordinal, params = {}) {
             const clamp = clampAbsoluteToChannelLock(channelName, absolute);
             if (clamp.clamped) {
                 const adjusted = toRelativeOutput(channelName, clamp.value);
-                return { input: point.input, output: ControlPolicy.clampY(adjusted) };
+                // adjusted is relative% (can exceed 100% legitimately)
+                return { input: point.input, output: Math.max(0, adjusted) };
             }
             return point;
         });
@@ -1110,8 +1120,10 @@ export function adjustSmartKeyPointByIndex(channelName, ordinal, params = {}) {
     for (let i = 0; i < CURVE_RESOLUTION; i++) {
         const xi = (i / DENOM) * 100;
         const percent = ControlPoints.sampleY(normalizedPoints, interpType, xi);
-        const clamped = Math.max(0, Math.min(100, percent));
-        const rawAbsolute = (clamped / 100) * channelPercent;
+        // percent is in relative space (can exceed 100% legitimately)
+        // Convert to absolute: (relative% / 100) * channel%
+        const relativePercent = Math.max(0, percent);  // Only prevent negative
+        const rawAbsolute = (relativePercent / 100) * channelPercent;
         const lockClamp = clampAbsoluteToChannelLock(channelName, rawAbsolute);
         samples[i] = Math.round((lockClamp.value / 100) * TOTAL);
     }
@@ -1210,9 +1222,11 @@ export function insertSmartKeyPointAt(channelName, inputPercent, outputPercent =
         const limitAdjust = ensureInkLimitForAbsoluteTarget(channelName, lockClamp.value);
         absoluteOutput = Number.isFinite(limitAdjust?.absolute) ? limitAdjust.absolute : lockClamp.value;
         rescaleFactor = Number.isFinite(limitAdjust?.rescaleFactor) ? limitAdjust.rescaleFactor : 1;
+        // When ink limit increases, rescale points to maintain absolute positions
+        // Note: rescaled relative values can exceed 100% legitimately
         if (rescaleFactor !== 1) {
             for (let i = 0; i < points.length; i += 1) {
-                points[i].output = ControlPolicy.clampY(points[i].output * rescaleFactor);
+                points[i].output = Math.max(0, points[i].output * rescaleFactor);  // No upper limit
             }
         }
     }
@@ -1223,7 +1237,7 @@ export function insertSmartKeyPointAt(channelName, inputPercent, outputPercent =
     }
 
     const relativeOutput = toRelativeOutput(channelName, absoluteOutput);
-    const y = ControlPolicy.clampY(relativeOutput);
+    const y = Math.max(0, relativeOutput);  // Relative% can exceed 100%, only prevent negative
 
     // Find insertion position
     let insertIndex = 0;
@@ -1589,7 +1603,8 @@ function applySmartKeyPointsInternal(channelName, keyPoints, interpolationType =
             const clamp = clampAbsoluteToChannelLock(channelName, absolute);
             if (clamp.clamped) {
                 const adjusted = toRelativeOutput(channelName, clamp.value);
-                return { input: point.input, output: ControlPolicy.clampY(adjusted) };
+                // adjusted is relative% (can exceed 100% legitimately)
+                return { input: point.input, output: Math.max(0, adjusted) };
             }
             return point;
         });
@@ -1683,8 +1698,10 @@ function applySmartKeyPointsInternal(channelName, keyPoints, interpolationType =
     for (let i = 0; i < CURVE_RESOLUTION; i++) {
         const x = (i / DENOM) * 100;
         const percent = ControlPoints.sampleY(normalized, interp, x);
-        const clamped = Math.max(0, Math.min(100, percent));
-        const rawAbsolute = (clamped / 100) * channelPercent;
+        // percent is in relative space (can exceed 100% legitimately)
+        // Convert to absolute: (relative% / 100) * channel%
+        const relativePercent = Math.max(0, percent);  // Only prevent negative
+        const rawAbsolute = (relativePercent / 100) * channelPercent;
         const lockClamp = clampAbsoluteToChannelLock(channelName, rawAbsolute);
         const absolutePercent = lockClamp.value;
         samples[i] = Math.round((absolutePercent / 100) * TOTAL);

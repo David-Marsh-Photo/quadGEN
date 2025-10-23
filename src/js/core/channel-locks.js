@@ -229,3 +229,22 @@ export function getGlobalScaleLockMessage(lockedChannels = []) {
     }
     return `${lockedChannels.length} channels are locked. Unlock them to adjust global scale.`;
 }
+
+// Expose channel lock functions on window for AI integration
+if (typeof window !== 'undefined') {
+    if (typeof window.setChannelLock !== 'function') {
+        window.setChannelLock = (channelName, locked, options) => setChannelLock(channelName, locked, options);
+    }
+
+    if (typeof window.isChannelLocked !== 'function') {
+        window.isChannelLocked = (channelName) => isChannelLocked(channelName);
+    }
+
+    if (typeof window.getChannelLockInfo !== 'function') {
+        window.getChannelLockInfo = (channelName) => getChannelLockInfo(channelName);
+    }
+
+    if (typeof window.getLockedChannels !== 'function') {
+        window.getLockedChannels = (channelNames) => getLockedChannels(channelNames);
+    }
+}

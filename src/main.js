@@ -75,6 +75,8 @@ import { initializeManualLstar } from './js/ui/manual-lstar.js';
 import { initializeOptionsModal } from './js/ui/options-modal.js';
 import { initializeTooltipSystem } from './js/ui/tooltips.js';
 import { initializeCompositeDebugPanel } from './js/ui/composite-debug-panel.js';
+import { initializeTabs } from './js/ui/tab-manager.js';
+import { initChartDivider } from './js/ui/chart-divider.js';
 
 import {
     initializeTheme
@@ -848,6 +850,8 @@ function initializeApplication() {
     }
 
     initializeElements();
+    initializeTabs();
+    initChartDivider();
     initializeEventHandlers();
     initializeAutoLimitHandlers();
     initializeManualLstar();

@@ -5506,8 +5506,9 @@ export function buildBaseCurve(endValue, channelName, smartCurveDetected = false
             for (let i = 0; i < CURVE_RESOLUTION; i++) {
                 const x = (i / DENOM) * 100;
                 const percent = ControlPoints.sampleY(normalized, interp, x);
-                const clamped = Math.max(0, Math.min(100, percent));
-                values[i] = Math.round((clamped / 100) * endValue);
+                // percent is in relative space (can exceed 100% legitimately)
+                const relativePercent = Math.max(0, percent);  // Only prevent negative
+                values[i] = Math.round((relativePercent / 100) * endValue);
             }
 
             return {

@@ -28,3 +28,23 @@ jan/
 
 # Local agent logs
 logs/
+
+# Local scratch artifacts
+.venv/
+analysis/
+LINEAR.md
+MULTICHANNEL_CORRECTION.md
+SMART_POINT_RESIZE_TEST.md
+lastthoughts.md
+processing-pipeline-backup.js
+smoothing_regression.md
+test-debug.cjs
+test-drag-alignment.cjs
+test-file-load.cjs
+test-resize-alignment.cjs
+test-trace.cjs
+test-ui-state.cjs
+scripts/__pycache__/
+scripts/playwright-head-smoothing-check.js
+test-screenshots/
+scratch/

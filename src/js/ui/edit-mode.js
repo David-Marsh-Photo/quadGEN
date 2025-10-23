@@ -393,10 +393,6 @@ history.recordChannelAction(channelName, 'curve', originalCurve, newCurve, extra
     triggerInkChartUpdate();
     triggerPreviewUpdate();
 
-    if (inkBaseline) {
-        restoreInkLimitBaseline(channelName, inkBaseline);
-    }
-
     resetDragContext();
 
     return { success: true, channel: channelName, ordinal };

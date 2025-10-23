@@ -7,7 +7,7 @@ Define a repeatable method to turn **measured L*** values from a printed step‑
 ## Workflow (concise)
 1. **Print** a step‑wedge with known nominal inputs (e.g., 0, 5, …, 100%).
 2. **Measure** each patch’s **L*** with a device (e.g., Color Muse, i1Pro2).
-3. **Choose normalization**: by default quadGEN normalizes directly in L*, preserving perceptual midpoints. Enable “Use log-density for LAB / Manual measurements” from the ⚙️ Options panel (or within the Manual L* modal) when you need optical density (\(D = -\log_{10}(Y)\), normalized so 0 ↔ paper white, 1 ↔ densest patch) for through-light workflows.
+3. **Choose normalization**: by default quadGEN normalizes directly in L*, preserving perceptual midpoints. Enable “Use log-density for LAB / Manual measurements” from the Global Correction panel (or within the Manual L* modal) when you need optical density (\(D = -\log_{10}(Y)\), normalized so 0 ↔ paper white, 1 ↔ densest patch) for through-light workflows.
 4. **Compute target**: whichever space you selected, aim for a straight line (0→1 across 0→100% input), optionally shaped by contrast intent presets.
 5. **Build correction** by **inverting** the measured curve in that space to map nominal input to the adjusted input that hits the linear target.
 6. **Apply** the correction as a 1D LUT (e.g., 256 samples) during printing.
@@ -26,7 +26,7 @@ Define a repeatable method to turn **measured L*** values from a printed step‑
 
 ### Normalization modes
 - **Perceptual L\*** (default): quadGEN normalizes L* directly so midtones stay perceptually even. Set `actual = (L^*_{\max} - L^*)/(L^*_{\max} - L^*_{\min})` and target `expected = GRAY% / 100`.
-- **Log-density** (opt-in): toggle “Use log-density for LAB / Manual measurements” in the ⚙️ Options panel (mirrored in the Manual L* modal) to convert L* into CIE luminance \(Y\), optical density \(D = -\log_{10}(Y)\), then normalize relative density. Density mode emphasizes deep shadows and mirrors QuadToneRIP’s digital-negative workflow.
+- **Log-density** (opt-in): toggle “Use log-density for LAB / Manual measurements” in the Global Correction panel (mirrored in the Manual L* modal) to convert L* into CIE luminance \(Y\), optical density \(D = -\log_{10}(Y)\), then normalize relative density. Density mode emphasizes deep shadows and mirrors QuadToneRIP’s digital-negative workflow.
 - Both modes pin endpoints at paper white (0 % ink) and solid black (100 % ink).
 
 ### Target mapping math
@@ -82,8 +82,8 @@ and samples it at 256 evenly spaced inputs. PCHIP interpolation keeps both the f
 
 ## Correction pipelines at a glance
 - **Simple Scaling (default)** — Builds a gain envelope directly in printer space, multiplies each channel’s plotted curve by that envelope, clamps per-channel lifts to ±15 %, keeps K/MK fixed, and redistributes overflow into darker reserves. This path mirrors the industry-standard “fit to correction” workflow while respecting quadGEN’s ink-limit safeguards.
-- **Density Solver (advanced)** — Reuses the composite redistribution engine (density ladder, coverage ceilings, snapshot analysis) documented in `docs/features/channel-density-solver.md`. Enable it from ⚙️ Options → **Correction method** when you need full density accounting.
-- Switching pipelines immediately reprocesses the loaded LAB / Manual dataset, updates chart overlays, and records an undo entry so you can A/B the results.
+- **Density Solver** — Automatically integrated when multi-ink redistribution is required. Reuses the composite redistribution engine (density ladder, coverage ceilings, snapshot analysis) documented in `docs/features/channel-density-solver.md` for full density accounting.
+- The correction overlay shows a dashed red trace of the active correction plus the dashed purple linear baseline for identity comparison.
 
 ## Simple Scaling pipeline (default)
 1. **Gain envelope**  
@@ -122,8 +122,8 @@ and samples it at 256 evenly spaced inputs. PCHIP interpolation keeps both the f
   - Enforces monotonic output with `enforceMonotonic()` after remapping to avoid banding or reversals.
 - When the flag is **off**, quadGEN retains the legacy fixed-domain behavior (same correction applied at every 0–100% input). Enable the flag when validating active-range parity against DNPRO/POPS data; leave it off during legacy comparisons.
 
-## Density solver pipeline (composite redistribution, opt-in)
-Multi-ink `.quad` files frequently stagger ink usage—highlight grays, cyan midtones, and shadow blacks each dominate different thirds of the ramp. When the **Density Solver** correction method is selected, quadGEN converts the residual into density space and applies **composite redistribution**:
+## Density solver pipeline (composite redistribution)
+Multi-ink `.quad` files frequently stagger ink usage—highlight grays, cyan midtones, and shadow blacks each dominate different thirds of the ramp. The **Density Solver** automatically engages when multi-ink redistribution is required, converting the residual into density space and applying **composite redistribution**:
 
 1. **Gather measured density** – Sample the imported LAB ramp (perceptual or log-density) into incremental deltas (`ΔDensity`) between successive inputs.
 2. **Read channel shares** – For each LUT sample, compute how much of the total draw each channel supplied (`draw_channel / Σ draw_all`). Zero-output spans stay untouched.
@@ -139,13 +139,9 @@ Multi-ink `.quad` files frequently stagger ink usage—highlight grays, cyan mid
 - **Shadows:** K dominates past 70 %; the solver assigns the remaining ~0.77 to black so the redistribution knows K can legitimately supply nearly all of the shadow density.
 - **Runtime inspection:** With both files loaded, run `window.getCompositeDensityProfile(95)` in DevTools. The result reports the per-channel density constants, cumulative usage, and the weighted shares applied at 95 % input—expect K to carry ~90 % of the correction, C the remainder, and LK almost none.
 
-When you switch the correction method to **Density Solver**, composite redistribution runs with the behaviours above; toggle it off for diagnostics via `window.enableCompositeLabRedistribution(false)` if you need to compare against the legacy per-channel application. Additional implementation notes and troubleshooting tips live in `MULTICHANNEL_CORRECTION.md`, while the solver math is broken down in `docs/features/channel-density-solver.md`.
+When composite redistribution is active, it runs with the behaviours above. You can toggle it off for diagnostics via `window.enableCompositeLabRedistribution(false)` if you need to compare against the legacy per-channel application. Additional implementation notes and troubleshooting tips live in `MULTICHANNEL_CORRECTION.md`, while the solver math is broken down in `docs/features/channel-density-solver.md`.
 
-You can now choose how the solver splits multi-ink deltas (⚙️ Options → *Composite weighting*):
-
-- **Normalized weighting (default when the density solver is active)** mirrors the ink mix from the loaded `.quad`, blending corrections so the updated curve stays proportional to the baseline composition unless a channel runs out of headroom.
-- **Equal weighting** ignores the baseline mix and distributes the correction evenly across whichever channels are currently active, handy for sanity checks against the legacy even-share output.
-- **Isolated weighting** keeps the current behaviour—each channel absorbs as much of the correction as its headroom allows before we move on to the next ink.
+The solver uses **normalized weighting** by default, mirroring the ink mix from the loaded `.quad` and blending corrections so the updated curve stays proportional to the baseline composition unless a channel runs out of headroom.
 - **Momentum weighting** biases redistribution toward channels whose curves are already climbing or dropping fastest, using a Gaussian momentum window.
 
 ## Python example

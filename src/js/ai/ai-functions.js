@@ -446,6 +446,122 @@ export const CLAUDE_FUNCTIONS = [
     }
   },
   {
+    name: "set_lab_spot_markers",
+    description: "Show or hide the measurement spot marker overlay with tolerance badges and delta arrows on the chart.",
+    parameters: {
+      type: "object",
+      properties: {
+        enabled: {
+          type: "boolean",
+          description: "true to show measurement spot markers; false to hide them"
+        }
+      },
+      required: ["enabled"]
+    }
+  },
+  {
+    name: "set_auto_raise_ink_limits",
+    description: "Enable or disable automatic ink limit increases when importing corrections (LAB/CGATS) that exceed current channel limits.",
+    parameters: {
+      type: "object",
+      properties: {
+        enabled: {
+          type: "boolean",
+          description: "true to enable auto-raise on import; false to disable"
+        }
+      },
+      required: ["enabled"]
+    }
+  },
+  {
+    name: "set_light_blocking_overlay",
+    description: "Toggle the composite light-blocking curve visualization overlay on the chart.",
+    parameters: {
+      type: "object",
+      properties: {
+        enabled: {
+          type: "boolean",
+          description: "true to show light-blocking overlay; false to hide it"
+        }
+      },
+      required: ["enabled"]
+    }
+  },
+  {
+    name: "set_correction_method",
+    description: "Switch between Simple Scaling (default, proportional adjustment) and Density Solver (coverage-aware composite solver with ladder logic) correction methods.",
+    parameters: {
+      type: "object",
+      properties: {
+        method: {
+          type: "string",
+          description: "Correction method to use",
+          enum: ["simple", "density_solver"]
+        }
+      },
+      required: ["method"]
+    }
+  },
+  {
+    name: "set_correction_gain",
+    description: "Set the correction gain blend percentage between identity ramp (0%) and full correction (100%). Affects charts, previews, spot markers, and exports.",
+    parameters: {
+      type: "object",
+      properties: {
+        percent: {
+          type: "number",
+          description: "Gain percentage (0-100): 0% = no correction (identity), 100% = full correction",
+          minimum: 0,
+          maximum: 100
+        }
+      },
+      required: ["percent"]
+    }
+  },
+  {
+    name: "get_correction_gain",
+    description: "Get the current correction gain blend percentage.",
+    parameters: {
+      type: "object",
+      properties: {},
+      required: []
+    }
+  },
+  {
+    name: "lock_channel",
+    description: "Lock or unlock a specific channel to prevent edits during corrections or global operations.",
+    parameters: {
+      type: "object",
+      properties: {
+        channelName: {
+          type: "string",
+          description: "Channel name to lock/unlock",
+          enum: ["K", "C", "M", "Y", "LC", "LM", "LK", "LLK", "V", "MK"]
+        },
+        locked: {
+          type: "boolean",
+          description: "true to lock the channel; false to unlock it"
+        }
+      },
+      required: ["channelName", "locked"]
+    }
+  },
+  {
+    name: "get_channel_lock_status",
+    description: "Get the lock status for a specific channel or all channels.",
+    parameters: {
+      type: "object",
+      properties: {
+        channelName: {
+          type: "string",
+          description: "Optional: specific channel name. If omitted, returns status for all channels.",
+          enum: ["K", "C", "M", "Y", "LC", "LM", "LK", "LLK", "V", "MK"]
+        }
+      },
+      required: []
+    }
+  },
+  {
     name: "set_per_channel_linearization",
     description: "Enable or disable linearization for a specific channel (requires linearization file to be loaded for that channel)",
     parameters: {

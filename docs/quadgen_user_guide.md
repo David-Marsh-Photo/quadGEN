@@ -23,7 +23,7 @@ This loop keeps calibrations predictable when you’re setting up a new printer/
 ### Quick Checklist
 - Confirm printer layout, channel enables, ink limits, and any known density constants before exporting.
 - Save a “v0” identity `.quad` for comparison.
-- After each measurement import, verify the active correction method (Simple Scaling vs Density Solver) and capture a chart screenshot if behaviour changes unexpectedly.
+- After each measurement import, review the correction results and capture a chart screenshot for comparison with subsequent iterations.
 - Run `npm run test:smoke` after code or documentation updates to confirm the bundle still loads without console errors.
 
 ### Step 1 — Choose Printer Layout and Baseline Limits
@@ -39,13 +39,13 @@ Print a 0–100 % wedge (or 21/25-step target) through QTR/Print-Tool using th
 Measure each patch’s L* and export a tab-delimited `.txt` with header `GRAY	LAB_L	LAB_A	LAB_B`. Confirm GRAY% values ascend 0→100 and L* stays within range. Store the measurement in `data/` with a versioned name (`Printer_Paper_V1.txt`) before loading it into quadGEN.
 
 ### Step 5 — Load Measurements in quadGEN
-Use Global Corrections → `Load Data File` to import the LAB set. Confirm the normalization mode (perceptual L* is default; enable “Use log-density…” for through-light workflows) and ensure the Print Intent matches the measurement’s intent. Stick with **Simple Scaling** unless you intentionally need the ladder-based Density Solver pipeline.
+Use Global Corrections → `Load Data File` to import the LAB set. Confirm the normalization mode (perceptual L* is default; enable "Use log-density…" from Global Correction panel for through-light workflows) and ensure the Print Intent matches the measurement's intent. Simple Scaling correction automatically integrates the density solver when multi-ink redistribution is required.
 
 ### Step 6 — Review the Global Correction
 Inspect the chart (output ink vs input ink). Dips below the diagonal indicate dark prints; humps above the diagonal show light patches. Adjust the LAB smoothing slider only when data are noisy. If Auto White/Black limit toggles are active, remember that recompute will bake `bakedAutoWhite`/`bakedAutoBlack` metadata for traceability.
 
 ### Step 7 — Optional Advanced Adjustments
-Switch to Density Solver when composite redistribution telemetry is required, making sure density constants are populated or computed. Apply contrast intents (Linear, Soft, Hard, Filmic, Gamma, Custom) or manual L* targets as needed; intents stack on top of the measurement correction.
+Review density constants in the channel table (K/MK 1.00, C 0.21, LK 0.054 by default); the solver uses these for composite redistribution when needed. Apply contrast intents (Linear, Soft, Hard, Filmic, Gamma, Custom) or manual L* targets as needed; intents stack on top of the measurement correction.
 
 ### Step 8 — Edit Mode Touch-Up
 Toggle Edit Mode to expose Smart Key Points, then Recompute to seed them from the plotted curve. Adjust via XY inputs or drag (if enabled). When a change demands more ink than the current End, quadGEN either auto-raises (with a status toast) or blocks the edit if the channel is locked.
@@ -85,7 +85,7 @@ quadGEN’s UI is organized around a few panels:
 - **Edit Curves Panel (Edit Mode)**: Toggle Edit Mode to expose Smart Key Points for fine tuning. Recompute regenerates Smart Key Points from the currently plotted curve using the adaptive simplifier.
 - **Chart Area**: Displays Y = output ink % vs X = input %. The diagonal Y = X is the “no correction” reference. Zoom controls sit at the lower left. Cursor readouts follow the selected channel.
 - **Help Drawer**: ReadMe, Glossary, and Version History live here. This guide is a supplemental document and does not replace in-app help.
-- **Options Panel**: Open the ⚙️ Options button beside Help to manage global preferences (e.g., the log-density normalization toggle).
+- **Options Panel**: Open the ⚙️ Options button beside Help to manage application-wide preferences such as overlay visibility and UI settings.
 
 Keep the manual regression checklist handy (`docs/manual_tests.md`) when verifying undo toggles, Edit Mode states, and other UX details after changes.
 
@@ -98,12 +98,12 @@ quadGEN plots how much ink the printer will output (Y) for each input percentage
 `.quad` files are 256-entry lookup tables consumed by QuadToneRIP. Channels map to ink positions (e.g., `K`, `C`, `M`, `Y`, or custom alt-process pigments). Summary of the format: see `docs/File_Specs/QTR_QUAD_SPEC_SUMMARY.md`.
 
 ### LAB Measurements
-LAB `.txt` measurement files list `GRAY%` and `L*` per patch. quadGEN can normalize directly in L* (default) for perceptual printer linearization, or convert to optical density when the log-density toggle is enabled in the ⚙️ Options panel (also mirrored inside the Manual L* modal). In either mode it compares the measured curve against the ideal ramp and produces a smooth correction using the PCHIP interpolator; the LAB smoothing slider now opens at 0 % (baseline widen ×1.0) and lets you dial in additional smoothing between 0–300 % (e.g., 50 % ≈ ×1.27) when you need noise reduction. Manual L* entry shares the same pipeline and now remembers the last Patch % layout you saved or generated, so recurring manual workflows reopen with familiar spacing. Details: `docs/print_linearization_guide.md`.
+LAB `.txt` measurement files list `GRAY%` and `L*` per patch. quadGEN can normalize directly in L* (default) for perceptual printer linearization, or convert to optical density when the log-density toggle is enabled in the Global Correction panel (also mirrored inside the Manual L* modal). In either mode it compares the measured curve against the ideal ramp and produces a smooth correction using the PCHIP interpolator; the LAB smoothing slider (in Global Correction) now opens at 0 % (baseline widen ×1.0) and lets you dial in additional smoothing between 0–300 % (e.g., 50 % ≈ ×1.27) when you need noise reduction. Manual L* entry shares the same pipeline and now remembers the last Patch % layout you saved or generated, so recurring manual workflows reopen with familiar spacing. Details: `docs/print_linearization_guide.md`.
 
-### Correction Pipelines
-- **Simple Scaling (default)** multiplies the loaded channel curves by a smoothed gain envelope derived from the measured error. The envelope is capped to ±15 % per channel, keeps K/MK locked to avoid unplanned black expansion, and redistributes overflow into darker reserves so lighter inks do not double when they hit capacity. Fresh sessions, cleared storage, and new operators all start here. Toggle it from ⚙️ Options → **Correction method**.
-- **Density Solver (advanced)** preserves the legacy composite redistribution engine documented in `docs/features/channel-density-solver.md`. Switch to it when you need density-ladder promotions, coverage ceilings, and the composite debug tooling for multi-ink balancing.
-- Changing methods immediately reprocesses the active LAB or Manual dataset, updates overlays, and leaves an undo entry so you can compare outputs quickly. The correction overlay always shows a dashed **red** trace of the active correction plus the dashed **purple** linear baseline for identity comparison. The light-blocking overlay remains a solid **purple** curve only; its dashed comparison guide will return once a secondary `.quad` loader ships.
+### Correction Pipeline
+- **Simple Scaling (default)** multiplies the loaded channel curves by a smoothed gain envelope derived from the measured error. The envelope is capped to ±15 % per channel, keeps K/MK locked to avoid unplanned black expansion, and redistributes overflow into darker reserves so lighter inks do not double when they hit capacity. Fresh sessions, cleared storage, and new operators all start here.
+- **Density Solver** integration is automatic when multi-ink redistribution is required, using the composite redistribution engine documented in `docs/features/channel-density-solver.md` for density-ladder promotions and coverage ceilings.
+- The correction overlay shows a dashed **red** trace of the active correction plus the dashed **purple** linear baseline for identity comparison. The light-blocking overlay displays a solid **purple** curve; load a reference `.quad` file (via Options panel) to display a dashed comparison curve.
 
 ### Smart Key Points & Edit Mode
 Smart Key Points are editable control points derived from the plotted curve. Edit Mode exposes these Key Points, supports insertion/deletion, and records every action for undo/redo. Recompute pulls fresh Key Points from the current curve while tagging baked metadata (`bakedGlobal`, `bakedAutoWhite`, `bakedAutoBlack`) when auto rolloff is active.
@@ -149,7 +149,7 @@ Once the baseline wedge is printed and measured, use LAB data to refine tone.
 3. **Review the Curve**
    - The chart updates immediately. Look for dips (printing too dark) and humps (too light). Hover to inspect specific inputs.
    - Toggle Auto limit rolloff if highlights/shadows plateau before 0% or 100%.
-   - Use ⚙️ Options → **Correction gain** if you want to audition a partial mix of the correction before committing. 100 % applies the full measured correction, 0 % reverts to the identity ramp, and intermediate values blend the curve and spot-marker deltas after a brief (<0.2 s) pause while you scrub—the moment you stop moving the slider the chart catches up, and exports always reflect the visible mix.
+   - Use 🌐 Global Correction → **Correction gain** if you want to audition a partial mix of the correction before committing. 100 % applies the full measured correction, 0 % reverts to the identity ramp, and intermediate values blend the curve and spot-marker deltas after a brief (<0.2 s) pause while you scrub—the moment you stop moving the slider the chart catches up, and exports always reflect the visible mix.
 
 4. **Optionally Enter Edit Mode**
    - If you need to fine-tune, enter Edit Mode.
