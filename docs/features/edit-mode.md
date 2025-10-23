@@ -34,6 +34,7 @@
 4. **Integration with Ink Limits**
    - Absolute Y edits that exceed the current End automatically raise the channel End and rescale other points to keep their absolute outputs unchanged; UI shows status (e.g., “MK ink limit changed to 60%”).
    - Per-channel ink limit edits outside Edit Mode rescale relative outputs so plotted points remain consistent.
+   - When a drag raises the ink limit, the updated percent/End values remain the new baseline after the drag completes, so subsequent edits retain the additional headroom without needing a second adjustment.
 
 5. **Undo/Redo & History**
    - Every insert, adjust, delete, recompute, or seed records history; global undo restores curves, key points, and metadata.

@@ -16,6 +16,39 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '4.2.0': {
+    date: '2025-10-19',
+    title: 'Reference overlay & Edit Mode polish',
+    sections: {
+      ADDED: [
+        'Light-blocking overlay can now load a reference `.quad`, letting you compare live curves against a saved baseline without leaving quadGEN.'
+      ],
+      CHANGED: [
+        'Edit UI is reorganized so Smart-curve controls live together and overlay toggles sit near the chart for faster access.'
+      ],
+      FIXED: [
+        'Dragging a Smart point now keeps neighboring markers aligned and preserves any ink-limit increase once you release the point.'
+      ],
+      REMOVED: [],
+      DOCS: [
+        'Edit Mode spec documents that drag-based ink-limit raises persist after the move completes.'
+      ]
+    },
+    aboutDialog: [
+      {
+        label: 'Reference overlay',
+        desc: 'Load a reference `.quad` into the light-blocking overlay to spot deviations between your current curve and a saved baseline.'
+      },
+      {
+        label: 'Streamlined Edit Mode',
+        desc: 'Curve-edit controls, overlay toggles, and Smart tools now sit together so you can tweak points and overlays without tab hopping.'
+      },
+      {
+        label: 'Ink-limit drag persistence',
+        desc: 'Dragging a Smart point past the ink cap bumps the channel limit and keeps that headroom once you let go.'
+      }
+    ]
+  },
   '4.1.0': {
     date: '2025-10-17',
     title: 'Spot markers & correction gain blend',
@@ -23,11 +56,11 @@ export const VERSION_HISTORY = {
       ADDED: [
         'Manual L* modal remembers your last Patch % layout after Save/Generate so recurring manual workflows reopen with familiar spacing.',
         'Measurement spot marker overlay (⚙️ Options → Show measurement spot markers) lines badges along a 70 % rail with green checks for ±1 % tolerance and directional arrows showing how much to lighten or darken each patch.',
-        'Correction gain slider (⚙️ Options) blends the identity ramp with the measured correction so you can audition partial mixes while charts, spot markers, previews, and exports stay in sync.'
+        'Correction gain slider (🌐 Global Correction) blends the identity ramp with the measured correction so you can audition partial mixes while charts, spot markers, previews, and exports stay in sync.'
       ],
       CHANGED: [
         'Auto-raise ink limits now starts disabled; enable it per session when a correction needs extra headroom.',
-        'Correction overlay once again draws the dashed linear baseline for instant identity comparisons, while the light-blocking overlay keeps its reference hidden until comparison `.quad` support returns.',
+        'Correction overlay once again draws the dashed linear baseline for instant identity comparisons; light-blocking overlay now supports reference `.quad` file loading for visual comparison.',
         'Measurement spot markers stay pinned to the unzoomed 70 % rail and scale with the correction gain slider—0 % shows all green checks, higher percentages expand the arrows and labels.'
       ],
       FIXED: [
@@ -62,11 +95,11 @@ export const VERSION_HISTORY = {
     sections: {
       ADDED: [
         'Options panel now includes light blocking and correction target overlays, plus default-on curve dragging and snapshot flags for faster Edit Mode work.',
-        'Channel ink locks, import-time auto-raise, and the composite debug overlay keep corrections aligned with ink ceilings.',
+        'Channel ink locks and import-time auto-raise keep corrections aligned with ink ceilings.',
         'Channel Density column ships with studio presets and a Compute button so manual versus solver constants stay traceable in the UI.'
       ],
       CHANGED: [
-        'Simple Scaling is the default correction method (swap back to the density solver from ⚙️ Options whenever needed).',
+        'Simple Scaling is the primary correction method with automatic density solver integration when needed.',
         'Light mode loads by default, LAB smoothing starts at 0 %, and overlays scale to the active ink ceiling for clearer comparisons.',
         'Composite solver reuses normalized coverage ceilings, momentum weighting, and ladder tapers to hand off corrections smoothly while retaining guardrails.'
       ],
@@ -1288,8 +1321,8 @@ Scope: This license applies to this HTML file (quadgen.html) only.</div>
         <li><strong>Export a baseline linear ramp</strong> and stash it as your “v0” reference in QuadToneRIP’s <code>quad</code> folder.</li>
         <li><strong>Print a step wedge</strong> through QTR/Print-Tool with that baseline curve—disable color management entirely.</li>
         <li><strong>Measure the wedge</strong>, save the LAB <code>.txt</code> (0–100% GRAY, L* in range), and archive it under <code>data/</code>.</li>
-        <li><strong>Load the measurement in quadGEN</strong>, confirm the normalization mode (perceptual L* by default; enable log-density for through-light workflows), and keep the correction method on Simple Scaling unless you need the density solver.</li>
-        <li><strong>Review the global correction</strong> (chart, smoothing slider, auto-raise toasts). Switch to Density Solver or contrast intents only when required.</li>
+        <li><strong>Load the measurement in quadGEN</strong>, confirm the normalization mode (perceptual L* by default; enable log-density for through-light workflows).</li>
+        <li><strong>Review the global correction</strong> (chart, smoothing slider, auto-raise toasts, correction gain). Apply contrast intents only when required.</li>
         <li><strong>Optional Edit Mode touch-up</strong>: Recompute Smart key points from the plotted curve and adjust as needed; quadGEN auto-raises Ends when allowed.</li>
         <li><strong>Export the corrected <code>.quad</code></strong>, install it in QTR, reprint, remeasure, and iterate until tone stays linear.</li>
       </ol>
@@ -1305,9 +1338,9 @@ Scope: This license applies to this HTML file (quadgen.html) only.</div>
         <li>Inputs: <code>.quad</code>, LAB <code>.txt</code>, LUT <code>.cube</code>, <code>.acv</code>, Manual L*.</li>
         <li>Apply intent remaps directly to a loaded <code>.quad</code> via “Apply to Loaded Curve”.</li>
         <li>⚙️ Options panel centralizes app-wide preferences (e.g., log-density normalization) without cluttering workflow panels.</li>
-        <li>Correction overlay toggle draws a dashed red global target plus the purple linear baseline for identity checks. The light-blocking overlay remains a solid purple curve without its dashed reference until the comparison <code>.quad</code> workflow returns.</li>
+        <li>Correction overlay toggle draws a dashed red global target plus the purple linear baseline for identity checks. The light-blocking overlay shows a solid purple curve; load a reference <code>.quad</code> file to display a dashed comparison curve.</li>
         <li>Measurement spot markers (⚙️ Options) line badges along a 70 % rail anchored to the unzoomed chart, showing green checks for LAB readings within ±1 % and colored arrows (red up for darken, blue down for lighten) with faint dots at the measured Y position—even after zooming. Hover any badge to see the exact delta.</li>
-                <li>Correction gain slider (⚙️ Options) blends the identity curve with the measured correction (0–100 %); scrubbing pauses for ~150 ms to stay smooth, then the chart, spot markers, previews, and exported curves all refresh with the selected mix.</li>
+                <li>Correction gain slider (🌐 Global Correction) blends the identity curve with the measured correction (0–100 %); scrubbing pauses for ~150 ms to stay smooth, then the chart, spot markers, previews, and exported curves all refresh with the selected mix.</li>
         <li>Evenly spaced or irregular targets supported.</li>
         <li>Edit Mode: point-based edits at any time.</li>
         <li>Undo/Redo: full history of edits, LAB/LUT loads, global scaling, and per-channel slider changes.</li>
@@ -1426,12 +1459,6 @@ export function getHelpGlossaryHTML(){
         <dt>Channel</dt>
         <dd>A printer ink channel (e.g., K, C, M, Y, LC, LM, LK, LLK, OR, GR, MK, V). Channels can be enabled/disabled and have independent End (ink limits).</dd>
 
-        <dt>Composite debug overlay</dt>
-        <dd>Options-panel toggle that pins a diagnostic card to the chart showing channel maxima, density weights, and per-snapshot redistribution data. Selecting a snapshot draws a green vertical marker on the chart so composite LAB audits line up with the plotted curve.</dd>
-
-        <dt>Composite weighting</dt>
-        <dd>Preference in the ⚙️ Options panel that decides how LAB corrections are redistributed across multi-ink ramps. Isolated maximizes each channel’s capacity, Normalized blends the correction according to the loaded `.quad` ink shares, and Momentum biases the delta toward channels with the highest slope “momentum” using a Gaussian window.</dd>
-
                     <dt>Colorimeter</dt>
         <dd>Handheld device that measures color using filtered RGB sensors to approximate human vision. Fast and affordable for step wedges and general calibration. Example: <a href="https://amzn.to/45R8rof" target="_blank" rel="noopener">Color Muse 2</a>.</dd>
 
@@ -1448,13 +1475,13 @@ export function getHelpGlossaryHTML(){
         <dd>Optional overlay that plots each LAB measurement on the chart. Patches within ±1 % tolerance show a green check badge; out-of-tolerance points show an arrow (up = darken, down = lighten) labelled with the percent delta. Hover a badge to see the input %, measured L*, and recommended action.</dd>
 
         <dt>Light-blocking overlay</dt>
-        <dd>Solid purple curve that estimates cumulative optical density across the active channels. The dashed reference guide from the legacy build is temporarily disabled until quadGEN can load a comparison <code>.quad</code>; today the overlay only shows the measured light-block curve. Toggle it from ⚙️ Options → “Show light blocking overlay.”</dd>
+        <dd>Solid purple curve that estimates cumulative optical density across the active channels. Load a reference <code>.quad</code> file to display a dashed comparison curve alongside the current light-blocking overlay. Toggle it from ⚙️ Options → "Show light blocking overlay."</dd>
 
         <dt>Density</dt>
         <dd>Measure of how much light a material absorbs or blocks. In quadGEN we treat each density value as the normalized L* coverage ceiling an ink can provide; once a channel’s cumulative darkening reaches that ceiling (with a 0.5% buffer for measurement noise), the solver hands the remaining correction to higher-density inks. Enable the log-density toggle when you want corrections based on optical density (digital negatives, contact printing); leave it off to stay in L* for perceptual printer linearization. The channel table’s Density column lets you lock these ceilings (e.g., K/MK = 1.00, C = 0.21, LK = 0.054); leaving a field blank or zero prompts the solver to regenerate the value automatically. A coverage badge now sits beneath the Density input to show “used / limit” and lights amber with a tooltip listing any clamped samples when the ceiling is hit.</dd>
 
         <dt>Density ladder</dt>
-        <dd>Composite redistribution order (light inks → dark inks) used by Normalized weighting. LK carries the highlight correction until it hits its buffered ceiling (≈1% headroom tolerance), then the solver hands the remaining delta to C, and only after C tops out does K contribute. The ladder order appears in composite debug snapshots along with ladder selection and “blocked by” details for audits.</dd>
+        <dd>Composite redistribution order (light inks → dark inks) used by Normalized weighting. LK carries the highlight correction until it hits its buffered ceiling (≈1% headroom tolerance), then the solver hands the remaining delta to C, and only after C tops out does K contribute.</dd>
 
         <dt>Digital Negative</dt>
         <dd>A digitally created film negative used for alternative photographic processes like platinum/palladium printing, cyanotype, and silver gelatin contact printing. Created by inverting a positive digital image and printing it on transparent film with precise density control.</dd>
@@ -1562,7 +1589,7 @@ export function getHelpGlossaryHTML(){
         <dd>Undo entry created from a “Before:”/“After:” capture. quadGEN automatically rewinds to the matching “Before:” snapshot, then stores both states together so redo replays the pair in the correct order.</dd>
 
         <dt>Simple Scaling correction</dt>
-        <dd>Legacy-style correction path (now the default) that scales channel curves from the measured vs target ratios, redistributing overflow based on density reserves. Each pass clamps auto-lifts to +15 % per channel, keeps K/MK from auto-raising, and backfills any excess into darker reserves so highlights don’t double in one shot. Toggle it from ⚙️ Options whenever you need the density solver instead.</dd>
+        <dd>Primary correction path that scales channel curves from the measured vs target ratios, redistributing overflow based on density reserves. Each pass clamps auto-lifts to +15 % per channel, keeps K/MK from auto-raising, and backfills any excess into darker reserves so highlights don’t double in one shot. The density solver is automatically integrated when multi-ink redistribution is required.</dd>
 
         <dt>Smart curve</dt>
         <dd>Adaptive curve model in quadGEN defined by editable key points and monotonic interpolation. Smart curves allow precise local edits while preserving smoothness and avoiding overshoot, enabling efficient linearization and correction workflows.</dd>

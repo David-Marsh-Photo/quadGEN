@@ -1,14 +1,23 @@
 import type { Page } from '@playwright/test';
-import { resolve } from 'path';
+import { basename, resolve } from 'path';
 import { pathToFileURL } from 'url';
 
 const indexUrl = pathToFileURL(resolve('index.html')).href;
 const manualLabPath = resolve('testdata/Manual-LAB-Data.txt');
+const starterQuadPath = resolve('data/Starter_P9000_QCDN_BTNS_copy.quad');
 const CHART_ZOOM_LEVELS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100] as const;
 
 export async function gotoApp(page: Page) {
   await page.goto(indexUrl);
-  await page.waitForSelector('#globalLinearizationBtn');
+  await page.waitForSelector('#globalLinearizationBtn', { state: 'attached', timeout: 15000 });
+  await page.waitForFunction(
+    () => {
+      const rows = (window as any).elements?.rows?.children;
+      return !!rows && rows.length > 0;
+    },
+    undefined,
+    { timeout: 15000 }
+  );
 }
 
 export async function loadManualLab(page: Page) {
@@ -20,9 +29,83 @@ export async function loadManualLab(page: Page) {
   );
 }
 
+export async function loadQuadFixture(page: Page, filePath: string = starterQuadPath) {
+  const expected = basename(filePath);
+  await page.setInputFiles('input#quadFile', filePath);
+  await page.waitForFunction(
+    (filename) => {
+      const getter = (window as any).getLoadedQuadData;
+      const direct = typeof getter === 'function' ? getter() : (window as any).loadedQuadData;
+      if (!direct || typeof direct !== 'object') return false;
+      if (typeof direct.filename === 'string' && direct.filename.includes(filename)) return true;
+      const curves = direct.curves || {};
+      const channels = Object.keys(curves);
+      return channels.some((channel) => Array.isArray(curves[channel]) && curves[channel].length === 256);
+    },
+    expected,
+    { timeout: 15000 }
+  );
+}
+
 export async function enableEditMode(page: Page) {
-  await page.locator('#editModeToggleBtn').click();
+  const editTabButton = page.locator('button[data-tab="edit"]');
+  const isActive = await page.evaluate(() => {
+    const panel = document.querySelector('[data-tab-content="edit"]');
+    return !!panel && panel.classList.contains('active') && !panel.hasAttribute('hidden');
+  });
+  if (!isActive) {
+    await editTabButton.waitFor({ state: 'attached', timeout: 10000 });
+    await editTabButton.click();
+    await page.waitForFunction(
+      () => {
+        const panel = document.querySelector('[data-tab-content="edit"]');
+        return !!panel && panel.classList.contains('active') && !panel.hasAttribute('hidden');
+      },
+      undefined,
+      { timeout: 10000 }
+    );
+  }
+
+  const toggle = page.locator('#editModeToggleBtn');
+  await toggle.waitFor({ state: 'visible', timeout: 10000 });
+  await page.waitForFunction(
+    () => {
+      const btn = document.getElementById('editModeToggleBtn');
+      return !!btn && btn.offsetWidth > 0 && btn.offsetHeight > 0;
+    },
+    undefined,
+    { timeout: 5000 }
+  );
+  await toggle.click();
   await page.waitForFunction(() => window.isEditModeEnabled?.(), undefined, { timeout: 10000 });
+}
+
+export async function selectEditChannel(page: Page, channel: string) {
+  await page.waitForSelector(`#editChannelSelect option[value="${channel}"]`, { state: 'attached', timeout: 10000 });
+  await page.selectOption('#editChannelSelect', channel);
+  await page.waitForFunction(
+    (target) => (window as any).EDIT?.selectedChannel === target,
+    channel,
+    { timeout: 5000 }
+  );
+}
+
+export async function getChannelPercentInfo(page: Page, channel: string) {
+  return page.evaluate((targetChannel) => {
+    const row = document.querySelector(`tr[data-channel="${targetChannel}"]`);
+    const percentInput = row?.querySelector('.percent-input') as HTMLInputElement | null;
+    const endInput = row?.querySelector('.end-input') as HTMLInputElement | null;
+    const value = percentInput ? Number(percentInput.value ?? NaN) : NaN;
+    const base = percentInput ? Number(percentInput.getAttribute('data-base-percent') ?? NaN) : NaN;
+    const endValue = endInput ? Number(endInput.value ?? NaN) : NaN;
+    const endBase = endInput ? Number(endInput.getAttribute('data-base-end') ?? NaN) : NaN;
+    return {
+      value,
+      base,
+      endValue,
+      endBase
+    };
+  }, channel);
 }
 
 export async function enableSmartPointDragFlag(page: Page) {
@@ -202,4 +285,3 @@ export async function getChartZoomState(page: Page) {
     return { index: zoomIndex, percent };
   }, { levels: CHART_ZOOM_LEVELS });
 }
-

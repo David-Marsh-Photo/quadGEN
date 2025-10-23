@@ -17,6 +17,20 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Docs
 - _Nothing yet._
 
+## [4.2.0] — 2025-10-19
+### Added
+- Light-blocking overlay can now load a reference `.quad` so you can compare live curves against a saved baseline without leaving the app.
+
+### Changed
+- Reorganized the Edit/Options layout to keep curve-edit controls grouped together and surface overlay tools where they’re needed most.
+
+### Fixed
+- Smart key point markers (white squares) now stay aligned with the curve when dragging points in Edit Mode, instead of shifting off the line after mouse release.
+- Raising a channel’s ink limit by dragging a Smart point now persists the new headroom after you let go, so follow-up edits don’t snap the limit back.
+
+### Docs
+- Clarified in the Edit Mode spec that drag-based ink-limit raises remain in effect after the move completes.
+
 ## [4.1.0] — 2025-10-17
 ### Added
 - Manual L* modal now remembers the last Patch % layout and row count after you save or generate a correction, so repeat manual entries reopen with the same spacing.

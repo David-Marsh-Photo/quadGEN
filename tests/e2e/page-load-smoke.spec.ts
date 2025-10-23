@@ -18,7 +18,15 @@ test.describe('Page load smoke check', () => {
     });
 
     await page.goto(indexUrl);
-    await page.waitForSelector('#globalLinearizationBtn', { timeout: 15000 });
+    await page.waitForSelector('#globalLinearizationBtn', { state: 'attached', timeout: 15000 });
+    await page.waitForFunction(
+      () => {
+        const rows = (window as any).elements?.rows?.children;
+        return !!rows && rows.length > 0;
+      },
+      undefined,
+      { timeout: 15000 }
+    );
 
     expect(consoleErrors).toEqual([]);
   });
