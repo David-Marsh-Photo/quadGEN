@@ -17,6 +17,19 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Docs
 - _Nothing yet._
 
+## [4.2.2] — 2025-10-23
+### Added
+- _Nothing yet._
+
+### Changed
+- _Nothing yet._
+
+### Fixed
+- Right panel (Edit Curve / Global Correction vertical tabs) now correctly spans full page height with bottom tabs (Channels / Lab Tech / Preview) constrained to the left main content area, fixing HTML structure where panels were incorrectly nested inside tab content wrappers.
+
+### Docs
+- Updated `docs/ui/panel-system.md` with implementation notes confirming correct app-layout structure (3 direct children: main-content-area, panelDivider, rightPanel).
+
 ## [4.2.1] — 2025-10-20
 ### Added
 - Cumulative ink-load overlay lives under ⚙️ Options, sums every enabled channel, and flips from dashed gray to solid red once totals clear the configurable warning threshold; tooltips now report the per-input total with an overshoot warning.

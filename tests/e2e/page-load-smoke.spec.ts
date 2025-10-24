@@ -18,7 +18,7 @@ test.describe('Page load smoke check', () => {
     });
 
     await page.goto(indexUrl);
-    await page.waitForSelector('#globalLinearizationBtn', { state: 'attached', timeout: 15000 });
+    await page.waitForSelector('label[for="linearizationFile"]', { state: 'attached', timeout: 15000 });
     await page.waitForFunction(
       () => {
         const rows = (window as any).elements?.rows?.children;

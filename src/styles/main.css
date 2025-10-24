@@ -1159,6 +1159,175 @@
       opacity: 0.7;
     }
 
+    /* ===================================================================
+       APP LAYOUT (Main Content + Right Panel)
+       Main content area contains chart + bottom tabs (stacked vertically)
+       Right panel spans full height alongside main content
+       ================================================================ */
+
+    .app-layout {
+      display: flex;
+      gap: 0;
+      min-height: 600px;
+      position: relative;
+    }
+
+    .main-content-area {
+      flex: 1 1 auto;
+      min-width: 450px;
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem; /* Space between chart and bottom tabs */
+    }
+
+    .chart-panel {
+      flex: 0 0 auto; /* Don't grow, size determined by chart content */
+      display: flex;
+      flex-direction: column;
+    }
+
+    .right-panel {
+      flex: 0 0 256px;
+      min-width: 256px;
+      max-width: 50%;
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-elevated);
+      border-left: 1px solid var(--border);
+    }
+
+    /* Vertical Panel Divider (for left/right resize) */
+    .panel-divider {
+      width: 10px;
+      background: linear-gradient(to right, var(--border), var(--bg));
+      border-left: 1px solid var(--border);
+      border-right: 1px solid var(--border);
+      cursor: col-resize;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background-color 0.15s ease;
+      position: relative;
+      z-index: 10;
+      flex-shrink: 0;
+    }
+
+    .panel-divider:hover {
+      background: linear-gradient(to right,
+        color-mix(in srgb, var(--accent) 15%, var(--border)),
+        color-mix(in srgb, var(--accent) 8%, var(--bg))
+      );
+    }
+
+    .panel-divider:active,
+    .panel-divider.dragging {
+      background: linear-gradient(to right,
+        color-mix(in srgb, var(--accent) 25%, var(--border)),
+        color-mix(in srgb, var(--accent) 15%, var(--bg))
+      );
+    }
+
+    .panel-divider-grip {
+      height: 40px;
+      width: 3px;
+      background: var(--muted);
+      border-radius: 2px;
+      opacity: 0.4;
+      transition: opacity 0.15s ease;
+    }
+
+    .panel-divider:hover .panel-divider-grip {
+      opacity: 0.7;
+    }
+
+    /* Vertical Tab Navigation (Right Panel) */
+    .vertical-tab-nav {
+      display: flex;
+      flex-direction: column;
+      gap: 0;
+      background: color-mix(in srgb, var(--bg-elevated) 95%, var(--text));
+      border-bottom: 2px solid var(--border);
+      padding: 0.5rem 0;
+      flex-shrink: 0;
+    }
+
+    .tab-btn-vertical {
+      padding: 0.75rem 1rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--muted);
+      background: transparent;
+      border: none;
+      border-left: 3px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      text-align: left;
+    }
+
+    .tab-btn-vertical .tab-icon {
+      font-size: 1rem;
+      flex-shrink: 0;
+    }
+
+    .tab-btn-vertical .tab-label {
+      flex: 1;
+    }
+
+    .tab-btn-vertical:hover {
+      color: var(--text);
+      background: color-mix(in srgb, var(--bg-elevated) 85%, var(--text));
+    }
+
+    .tab-btn-vertical.active {
+      color: var(--accent);
+      background: var(--bg-elevated);
+      border-left-color: var(--accent);
+    }
+
+    .tab-btn-vertical:focus-visible {
+      outline: 2px solid var(--focus-ring, #2563eb);
+      outline-offset: -2px;
+    }
+
+    .tab-content-wrapper-vertical {
+      flex: 1;
+      overflow-y: auto;
+      overflow-x: hidden;
+      padding: 0;
+    }
+
+    /* Responsive: Stack vertically below 830px */
+    @media (max-width: 830px) {
+      .app-layout {
+        flex-direction: column;
+      }
+
+      .main-content-area {
+        min-width: 100%;
+        width: 100%;
+      }
+
+      .chart-panel {
+        min-width: 100%;
+        width: 100%;
+      }
+
+      .right-panel {
+        min-width: 100%;
+        width: 100%;
+        max-width: 100%;
+        border-left: none;
+        border-top: 1px solid var(--border);
+      }
+
+      .panel-divider {
+        display: none;
+      }
+    }
+
     /* Tab container */
     .tool-tabs-container {
       display: flex;
@@ -1290,6 +1459,41 @@
 
     [data-theme="dark"] .chart-divider:hover .chart-divider-grip {
       opacity: 0.5;
+    }
+
+    /* Panel divider dark mode */
+    [data-theme="dark"] .panel-divider {
+      background: linear-gradient(to right, var(--border-emphasis), var(--bg-subtle));
+    }
+
+    [data-theme="dark"] .panel-divider:hover {
+      background: linear-gradient(to right,
+        color-mix(in srgb, var(--accent) 20%, var(--border-emphasis)),
+        color-mix(in srgb, var(--accent) 12%, var(--bg-subtle))
+      );
+    }
+
+    [data-theme="dark"] .panel-divider-grip {
+      background: var(--text);
+      opacity: 0.3;
+    }
+
+    [data-theme="dark"] .panel-divider:hover .panel-divider-grip {
+      opacity: 0.5;
+    }
+
+    /* Vertical tab navigation dark mode */
+    [data-theme="dark"] .vertical-tab-nav {
+      background: var(--bg-subtle);
+      border-bottom-color: var(--border-emphasis);
+    }
+
+    [data-theme="dark"] .tab-btn-vertical:hover {
+      background: var(--bg-elevated-hover);
+    }
+
+    [data-theme="dark"] .tab-btn-vertical.active {
+      background: var(--bg-elevated);
     }
 
     [data-theme="dark"] .tab-nav {

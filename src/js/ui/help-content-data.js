@@ -16,6 +16,31 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '4.2.2': {
+    date: '2025-10-23',
+    title: 'Right-panel layout restoration',
+    sections: {
+      ADDED: [],
+      CHANGED: [],
+      FIXED: [
+        'Right panel (Edit Curve / Global Correction vertical tabs) now spans the full page height while Channels / Lab Tech / Preview stay anchored under the main chart column, resolving the collapsed side-panel layout.'
+      ],
+      REMOVED: [],
+      DOCS: [
+        'Updated `docs/ui/panel-system.md` to document the three-child app-layout contract (main-content-area, panelDivider, rightPanel) so future HTML edits preserve the side panel.'
+      ]
+    },
+    aboutDialog: [
+      {
+        label: 'Side panel restored',
+        desc: 'Edit Curve and Global Correction tabs render beside the chart again instead of collapsing into the bottom tab stack.'
+      },
+      {
+        label: 'Panel structure doc',
+        desc: 'Panel-system reference now calls out the required app-layout children, making it easier to keep the side panel wired correctly.'
+      }
+    ]
+  },
   '4.2.1': {
     date: '2025-10-20',
     title: 'Ink-load overlay & docs refresh',
