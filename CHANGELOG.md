@@ -17,6 +17,19 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Docs
 - _Nothing yet._
 
+## [4.2.3] — 2025-10-24
+### Added
+- _Nothing yet._
+
+### Changed
+- Session status (top-left) and status notifications (top-right) now live on the chart again and expand to match the plotted width, so they stay aligned while you resize the panel or adjust zoom.
+
+### Fixed
+- Restored the legacy `window.elements` helper so automated smoke checks and external scripts can locate channel rows without custom wiring.
+
+### Docs
+- _Nothing yet._
+
 ## [4.2.2] — 2025-10-23
 ### Added
 - _Nothing yet._

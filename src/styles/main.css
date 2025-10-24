@@ -177,7 +177,7 @@
 
     .chart-zoom-controls {
       position: absolute;
-      bottom: -9px;
+      bottom: 0.3rem;
       left: -9px;
       display: inline-flex;
       align-items: center;
@@ -384,6 +384,7 @@
       width: 100%;
       position: relative;
       display: block;
+      padding-bottom: 0.75rem; /* Reserve space for axis labels beneath canvas */
     }
     .chart-canvas-wrapper[data-chart-responsive="true"] {
       height: var(--chart-dynamic-height, 515px);
@@ -512,7 +513,17 @@
       -moz-appearance: number-input;
     }
 
-    /* Slider toggle styles */
+    /* Main toolbar actions: slightly shallower buttons */
+    .main-actions-bar .toolbar-button {
+      padding-top: 0.35rem;
+      padding-bottom: 0.35rem;
+    }
+
+    .main-actions-bar #filenameInput {
+      padding-top: 0.35rem;
+      padding-bottom: 0.35rem;
+    }
+/* Slider toggle styles */
     .slider-toggle {
       position: relative;
       display: inline-block;
@@ -842,7 +853,7 @@
       background-color: var(--bg-elevated);
       border: 1px solid var(--border);
       border-radius: 8px;
-      padding: 8px 12px;
+      padding: 4px 6px;
       margin: 8px 0;
       display: none; /* Hidden by default */
     }
@@ -1177,7 +1188,7 @@
       min-width: 450px;
       display: flex;
       flex-direction: column;
-      gap: 0.75rem; /* Space between chart and bottom tabs */
+      gap: 0; /* Keep chart divider flush with bottom tabs */
     }
 
     .chart-panel {
@@ -1247,12 +1258,52 @@
       gap: 0;
       background: color-mix(in srgb, var(--bg-elevated) 95%, var(--text));
       border-bottom: 2px solid var(--border);
-      padding: 0.5rem 0;
+      padding: 0;
       flex-shrink: 0;
     }
 
+    .tab-btn-vertical-row {
+      display: flex;
+      align-items: stretch;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .tab-btn-vertical-row:last-child {
+      border-bottom: none;
+    }
+
+    .tab-btn-vertical-row .tab-btn-vertical {
+      flex: 1;
+      border-radius: 0;
+      border-right: 1px solid var(--border);
+    }
+
+    .tab-btn-vertical-help {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0.5rem 0.75rem;
+      font-size: 0.875rem;
+      font-weight: 600;
+      color: var(--muted);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .tab-btn-vertical-help:hover {
+      color: var(--text);
+      background: color-mix(in srgb, var(--bg-elevated) 85%, var(--text));
+    }
+
+    .tab-btn-vertical-help:focus-visible {
+      outline: 2px solid var(--focus-ring, #2563eb);
+      outline-offset: -2px;
+    }
+
     .tab-btn-vertical {
-      padding: 0.75rem 1rem;
+      padding: 0.5rem 1rem;
       font-size: 0.875rem;
       font-weight: 600;
       color: var(--muted);
@@ -1296,6 +1347,10 @@
       flex: 1;
       overflow-y: auto;
       overflow-x: hidden;
+      padding: 0;
+    }
+
+    .tab-content-wrapper-vertical .tab-content {
       padding: 0;
     }
 
@@ -1351,7 +1406,7 @@
     /* Individual tab buttons */
     .tab-btn {
       flex: 1;
-      padding: 0.5rem 0.75rem;
+      padding: 0.35rem 0.75rem;
       font-size: 0.875rem;
       font-weight: 600;
       color: var(--muted);
@@ -1402,7 +1457,7 @@
     /* Individual tab content panels */
     .tab-content {
       display: none;
-      padding: 1rem;
+      padding: 0.3rem 1rem 1rem;
       animation: tabFadeIn 0.2s ease-in;
     }
 
@@ -1488,12 +1543,33 @@
       border-bottom-color: var(--border-emphasis);
     }
 
+    [data-theme="dark"] .tab-btn-vertical-row {
+      border-bottom-color: var(--border-emphasis);
+    }
+
+    [data-theme="dark"] .tab-btn-vertical-row:last-child {
+      border-bottom: none;
+    }
+
+    [data-theme="dark"] .tab-btn-vertical-row .tab-btn-vertical {
+      border-right-color: var(--border-emphasis);
+    }
+
     [data-theme="dark"] .tab-btn-vertical:hover {
       background: var(--bg-elevated-hover);
     }
 
     [data-theme="dark"] .tab-btn-vertical.active {
       background: var(--bg-elevated);
+    }
+
+    [data-theme="dark"] .tab-btn-vertical-help {
+      color: var(--muted);
+    }
+
+    [data-theme="dark"] .tab-btn-vertical-help:hover {
+      color: var(--text);
+      background: var(--bg-elevated-hover);
     }
 
     [data-theme="dark"] .tab-nav {

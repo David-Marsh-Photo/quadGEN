@@ -496,6 +496,10 @@ export function initializeElements() {
     elements.notesContent = document.getElementById('notesContent');
     elements.userNotes = document.getElementById('userNotes');
 
+    if (typeof window !== 'undefined') {
+        window.elements = elements;
+    }
+
     console.log('✅ DOM elements initialized');
 }
 

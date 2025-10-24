@@ -16,6 +16,31 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '4.2.3': {
+    date: '2025-10-24',
+    title: 'Status banners back on-chart',
+    sections: {
+      ADDED: [],
+      CHANGED: [
+        'Session status and status alerts sit on the chart edges again and stretch with the plotted width, so they stay aligned as you resize the panel.'
+      ],
+      FIXED: [
+        'Restored the legacy `window.elements` helper so automation and smoke tests can reach the channel table without custom wiring.'
+      ],
+      REMOVED: [],
+      DOCS: []
+    },
+    aboutDialog: [
+      {
+        label: 'Chart-edge banners',
+        desc: 'Session status (top-left) and status alerts (top-right) now float over the chart again and resize with it.'
+      },
+      {
+        label: 'Automation helper',
+        desc: '`window.elements` is back, keeping smoke tests and scripts working without extra bootstrapping.'
+      }
+    ]
+  },
   '4.2.2': {
     date: '2025-10-23',
     title: 'Right-panel layout restoration',

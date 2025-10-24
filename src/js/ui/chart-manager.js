@@ -1276,6 +1276,11 @@ export function setChartStatusMessage(message, duration = 2000) {
     statusElement.textContent = message;
     statusElement.style.opacity = '1';
 
+    const statusContainer = statusElement.closest('[data-status-container]');
+    if (statusContainer) {
+        statusContainer.style.display = 'block';
+    }
+
     console.log('✅ Status message displayed:', message);
 
     // Clear any existing timer
@@ -1292,6 +1297,10 @@ export function setChartStatusMessage(message, duration = 2000) {
             setTimeout(() => {
                 if (statusElement) {
                     statusElement.textContent = '\u00A0'; // Non-breaking space
+                }
+                const container = statusElement?.closest('[data-status-container]');
+                if (container) {
+                    container.style.display = 'none';
                 }
             }, 500); // Match the CSS transition duration
         }

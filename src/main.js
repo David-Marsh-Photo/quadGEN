@@ -850,6 +850,9 @@ function initializeApplication() {
     }
 
     initializeElements();
+    if (DEBUG_LOGS) {
+        console.log('✅ initializeElements() executed');
+    }
     initializeTabs();
     initChartDivider();
     initPanelDivider();

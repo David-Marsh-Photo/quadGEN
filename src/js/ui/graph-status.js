@@ -66,6 +66,7 @@ export class GraphStatus {
 
         // Show initial status
         this.updateSessionStatus();
+
     }
 
     /**
@@ -205,6 +206,7 @@ export class GraphStatus {
             // Update display
             const line = parts.join(' • ');
             this.sessionStatusElement.textContent = line || '\u00A0'; // Non-breaking space when empty
+
 
             console.log('📊 Session status updated:', {
                 line: line || '(empty)',

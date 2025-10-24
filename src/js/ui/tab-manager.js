@@ -234,6 +234,9 @@ function switchVerticalTab(tabName, saveState = true) {
     targetContent.classList.add('active');
     targetContent.removeAttribute('hidden');
 
+    // Reorder the vertical tab buttons so the active tab sits nearest the content
+    repositionActiveVerticalTab(targetButton);
+
     // Update active tab state
     activeVerticalTab = tabName;
 
@@ -243,6 +246,27 @@ function switchVerticalTab(tabName, saveState = true) {
     }
 
     console.log(`[TabManager] Switched to vertical tab: ${tabName}`);
+}
+
+/**
+ * Move the active vertical tab row so it sits directly above the content area.
+ * @param {HTMLElement} activeButton
+ */
+function repositionActiveVerticalTab(activeButton) {
+    if (!activeButton) return;
+
+    const navContainer = activeButton.closest('.vertical-tab-nav');
+    if (!navContainer) return;
+
+    const activeRow = activeButton.closest('.tab-btn-vertical-row');
+    if (!activeRow) return;
+
+    // If it's already the last element (closest to content), nothing to do
+    if (navContainer.lastElementChild === activeRow) {
+        return;
+    }
+
+    navContainer.appendChild(activeRow);
 }
 
 /**
