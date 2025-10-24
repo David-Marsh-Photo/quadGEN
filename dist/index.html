@@ -1313,6 +1313,80 @@ ${S.join(`
 <span class="sr-only" id="autoRaiseInkHelp">When enabled, quadGEN lifts channel ink limits automatically if a loaded correction exceeds the current ceiling and notes any locked channels that prevent the raise.</span>
 </div>
 </div>
+
+<div id="lstarModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+  <div class="bg-white rounded-lg max-w-3xl w-full mx-4 max-h-[90vh] flex flex-col">
+    <div class="p-6 pb-4 flex-shrink-0">
+      <div class="flex justify-between items-center mb-2">
+        <h3 class="text-lg font-semibold">Manual Luminosity (L*) Entry</h3>
+        <button id="closeLstarModal" class="text-gray-500 hover:text-gray-700 text-xl">&times;</button>
+      </div>
+      <div class="hidden text-xs italic text-gray-700 mb-3 p-2 px-3 bg-gray-50 border border-gray-200 rounded">The L* component of the Lab color system represents perceived lightness, ranging from 0 (black) to 100 (white). Equal steps in L* correspond approximately to equal perceptual differences in light–dark appearance.</div>
+      <div class="hidden mb-4 text-sm text-gray-600">
+        <ul class="list-disc list-inside space-y-1">
+          <li>Measure and enter L* values for each patch (e.g., using a device like the <a href="https://amzn.to/45R8rof" target="_blank" rel="noopener">Color Muse 2</a> or <a href="https://amzn.to/4msSLOv" target="_blank" rel="noopener">Nix Spectro L</a>).</li>
+          <li>If your chart uses even steps (0, 5, 10 … 100%), leave <span class="font-medium">Patch %</span> as-is.</li>
+          <li>Edit <span class="font-medium">Patch %</span> for irregular spacing (more steps in the highlights / shadows).</li>
+          <li>Target result is linear (L* 100 → 0) and linked to Patch %.</li>
+          <li>Inspired by & compatible with data from the <a href="https://clayharmonblog.com/wedgie.html" target="_blank" rel="noopener noreferrer" class="text-green-700 underline">Wedgie tool</a> by Clay Harmon.</li>
+          <li>A good resource for target images is <a href="https://clayharmonblog.com/downloads" target="_blank" rel="noopener noreferrer" class="text-green-700 underline">clayharmonblog.com/downloads</a>.</li>
+        </ul>
+      </div>
+      <div class="hidden flex items-center justify-center gap-6 mb-4 p-3 bg-gray-50 rounded border">
+        <div class="flex gap-2">
+          <button id="addLstarInputHeader" class="px-3 py-1 text-sm bg-green-100 hover:bg-green-200 text-green-700 rounded font-bold">+ Add</button>
+          <button id="removeLstarInputHeader" class="px-3 py-1 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded font-bold">- Remove</button>
+        </div>
+        <div class="flex items-center gap-2">
+          <label class="text-sm text-gray-600">Patches:</label>
+          <input type="number" id="lstarCountInputHeader" min="5" max="50" value="5" class="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500">
+        </div>
+      </div>
+    </div>
+    <div class="flex-1 overflow-y-auto overflow-x-auto px-6">
+      <div class="text-xs italic text-gray-700 mb-3 p-2 px-3 bg-gray-50 border border-gray-200 rounded">The L* component of the Lab color system represents perceived lightness, ranging from 0 (black) to 100 (white). Equal steps in L* correspond approximately to equal perceptual differences in light–dark appearance.</div>
+      <div class="mb-4 text-sm text-gray-600">
+        <ul class="list-disc list-inside space-y-1">
+          <li>Measure and enter L* values for each patch (e.g., using a device like the <a href="https://amzn.to/45R8rof" target="_blank" rel="noopener">Color Muse 2</a> or <a href="https://amzn.to/4msSLOv" target="_blank" rel="noopener">Nix Spectro L</a>).</li>
+          <li>If your chart uses even steps (0, 5, 10 … 100%), leave <span class="font-medium">Patch %</span> as-is.</li>
+          <li>Edit <span class="font-medium">Patch %</span> for irregular spacing (more steps in the highlights / shadows).</li>
+          <li>Target result is linear (L* 100 → 0) and linked to Patch %.</li>
+          <li>Inspired by & compatible with data from the <a href="https://clayharmonblog.com/wedgie.html" target="_blank" rel="noopener noreferrer" class="text-green-700 underline">Wedgie tool</a> by Clay Harmon.</li>
+          <li>A good resource for target images is <a href="https://clayharmonblog.com/downloads" target="_blank" rel="noopener noreferrer" class="text-green-700 underline">clayharmonblog.com/downloads</a>.</li>
+        </ul>
+      </div>
+      <div class="flex items-center justify-center gap-6 mb-4 p-3 bg-gray-50 rounded border">
+        <div class="flex gap-2">
+          <button id="addLstarInput" class="px-3 py-1 text-sm bg-green-100 hover:bg-green-200 text-green-700 rounded font-bold">+ Add</button>
+          <button id="removeLstarInput" class="px-3 py-1 text-sm bg-red-100 hover:bg-red-200 text-red-700 rounded font-bold">- Remove</button>
+        </div>
+        <div class="flex items-center gap-2">
+          <label class="text-sm text-gray-600">Patches:</label>
+          <input type="number" id="lstarCountInput" min="5" max="50" value="5" class="w-16 px-2 py-1 text-sm border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-green-500 focus:border-green-500">
+        </div>
+      </div>
+      <table class="w-auto mx-auto text-sm border border-gray-200 rounded overflow-hidden">
+        <thead class="bg-gray-50 sticky top-0 z-10">
+          <tr>
+            <th class="px-2 py-2 w-8 text-center">#</th>
+            <th class="px-2 py-2 w-24 text-center">Patch %</th>
+            <th class="px-2 py-2 w-24 text-center">Target / Measured</th>
+            <th class="px-2 py-2 w-24 text-center">L* (0–100)</th>
+          </tr>
+        </thead>
+        <tbody id="lstarInputs" class="align-middle"></tbody>
+      </table>
+      <div id="lstarValidation" class="text-sm text-red-600 mt-3 hidden"></div>
+    </div>
+    <div class="p-6 pt-4 flex-shrink-0 border-t border-gray-200">
+      <div class="flex justify-end gap-3">
+        <button id="saveLstarTxt" class="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded" title="Download entered Patch % and L* as a .txt file">Save as .txt</button>
+        <button id="cancelLstar" class="px-4 py-2 text-gray-600 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded font-bold">Cancel</button>
+        <button id="generateFromLstar" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded">Generate Correction</button>
+      </div>
+    </div>
+  </div>
+</div>
 </div>
 </div>
 </div>

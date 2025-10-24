@@ -26,6 +26,7 @@ This changelog follows a concise, user-facing format. Engineering details live i
 
 ### Fixed
 - Restored the legacy `window.elements` helper so automated smoke checks and external scripts can locate channel rows without custom wiring.
+- “Enter L* Values” now opens the manual Luminosity modal again (the modal markup was inadvertently dropped and has been re-added).
 
 ### Docs
 - _Nothing yet._
