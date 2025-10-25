@@ -440,7 +440,7 @@ function applyManualLinearization(validation) {
     console.warn('[Manual L*] Failed to capture baseline snapshot:', snapshotErr);
   }
 
-  LinearizationState.setGlobalData(normalized, true);
+  LinearizationState.setGlobalData(normalized, true, { source: 'manual' });
   if (typeof window !== 'undefined' && typeof window.__quadSetGlobalBakedState === 'function') {
     window.__quadSetGlobalBakedState(null, { skipHistory: true });
   }

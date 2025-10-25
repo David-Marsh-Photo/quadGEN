@@ -254,7 +254,7 @@ export class QuadGenActions {
             const pointSummary = pointLabel || getBasePointCountLabel(normalized);
             const message = statusMessage || `Applied global correction (${pointSummary})`;
 
-            LinearizationState.setGlobalData(normalized, true);
+            LinearizationState.setGlobalData(normalized, true, { source: 'ai' });
             if (typeof window !== 'undefined' && typeof window.__quadSetGlobalBakedState === 'function') {
                 window.__quadSetGlobalBakedState(null, { skipHistory: true });
             }
@@ -917,7 +917,7 @@ export class QuadGenActions {
 
             if (globalData) {
                 globalData.edited = false;
-                LinearizationState.setGlobalData(globalData, true);
+                LinearizationState.setGlobalData(globalData, true, { source: 'measurement' });
                 if (typeof window !== 'undefined' && typeof window.__quadSetGlobalBakedState === 'function') {
                     window.__quadSetGlobalBakedState(null, { skipHistory: true });
                 }

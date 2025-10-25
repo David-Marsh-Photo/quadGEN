@@ -45,10 +45,17 @@ vi.mock('../src/js/ui/status-service.js', () => ({
 }));
 
 vi.mock('../src/js/ui/ui-hooks.js', () => ({
+  registerRevertButtonsHandler: vi.fn(),
+  registerSessionStatusHandler: vi.fn(),
+  registerInkChartHandler: vi.fn(),
+  registerProcessingDetailAllHandler: vi.fn(),
+  registerProcessingDetailHandler: vi.fn(),
+  registerPreviewHandler: vi.fn(),
   triggerRevertButtonsUpdate: vi.fn(),
   triggerSessionStatusUpdate: vi.fn(),
   triggerInkChartUpdate: vi.fn(),
   triggerProcessingDetailAll: vi.fn(),
+  triggerProcessingDetail: vi.fn(),
   triggerPreviewUpdate: vi.fn(),
 }));
 

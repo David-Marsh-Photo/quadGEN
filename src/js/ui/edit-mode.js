@@ -500,6 +500,24 @@ export function setGlobalBakedState(meta, options = {}) {
         }
     }
 
+    if (!hasBaked) {
+        try {
+            const loadedData = getLoadedQuadData?.();
+            if (loadedData?.keyPointsMeta && typeof loadedData.keyPointsMeta === 'object') {
+                Object.keys(loadedData.keyPointsMeta).forEach((channelName) => {
+                    const metaForChannel = loadedData.keyPointsMeta[channelName];
+                    if (metaForChannel && typeof metaForChannel === 'object' && metaForChannel.bakedGlobal) {
+                        delete metaForChannel.bakedGlobal;
+                    }
+                });
+            }
+        } catch (metaErr) {
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.warn('[EDIT MODE] Failed to clear bakedGlobal metadata while resetting state:', metaErr);
+            }
+        }
+    }
+
     if (hasBaked && (!previousMeta || previousMeta.filename !== filename)) {
         showStatus(`Global correction baked into Smart curves (${filename || 'correction'}). Use undo or revert to edit.`);
     }

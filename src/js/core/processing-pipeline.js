@@ -5685,6 +5685,17 @@ export function applyGlobalLinearizationStep(values, options = {}) {
         bakedGlobal = false;
     }
 
+    if (applyLinearization) {
+        bakedGlobal = false;
+    } else {
+        const globalDataSource = typeof LinearizationState?.getGlobalDataSource === 'function'
+            ? LinearizationState.getGlobalDataSource()
+            : null;
+        if (globalDataSource && globalDataSource !== 'baked') {
+            bakedGlobal = false;
+        }
+    }
+
     const shouldSkipGlobal = bakedGlobal || smartApplied;
 
     if (shouldSkipGlobal) {

@@ -1459,7 +1459,10 @@ function refreshLinearizationDataForNormalization() {
             ? LinearizationState.getGlobalBakedMeta()
             : null;
         const updatedEntry = rebuildLabEntryForNormalization(globalData);
-        LinearizationState.setGlobalData(updatedEntry, LinearizationState.globalApplied);
+        const previousSource = typeof LinearizationState.getGlobalDataSource === 'function'
+            ? LinearizationState.getGlobalDataSource()
+            : null;
+        LinearizationState.setGlobalData(updatedEntry, LinearizationState.globalApplied, { source: previousSource });
         if (previousBakedMeta && typeof LinearizationState.setGlobalBakedMeta === 'function') {
             LinearizationState.setGlobalBakedMeta(previousBakedMeta);
         }
@@ -4969,7 +4972,7 @@ function initializeFileHandlers() {
                         normalized.filename = file.name;
 
                         // Use LinearizationState for modular system
-                        LinearizationState.setGlobalData(normalized, true);
+                        LinearizationState.setGlobalData(normalized, true, { source: 'external' });
                         setGlobalBakedState(null, { skipHistory: true });
                         updateAppState({ linearizationData: normalized, linearizationApplied: true });
                         syncLabSpotMarkersToggle();
@@ -5275,7 +5278,7 @@ function initializeFileHandlers() {
 
                 // Keep linearization state/applied flags in sync for modular + legacy consumers
                 if (globalData) {
-                    LinearizationState.setGlobalData(globalData, true);
+                    LinearizationState.setGlobalData(globalData, true, { source: 'measurement' });
                     updateAppState({ linearizationData: globalData, linearizationApplied: true });
                     if (isBrowser) {
                         globalScope.linearizationData = globalData;

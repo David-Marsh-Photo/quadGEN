@@ -17,6 +17,32 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Docs
 - _Nothing yet._
 
+## [4.2.5] — 2025-10-26
+### Added
+- _Nothing yet._
+
+### Changed
+- _Nothing yet._
+
+### Fixed
+- Loading a new global correction (LAB/CGATS/manual) now reshapes baked `.quad` files immediately; stale `bakedGlobal` metadata can no longer keep the chart linear until you drop correction gain below 100%.
+
+### Docs
+- Added a regression checklist entry covering global corrections on baked `.quad` files and documented the `artifacts/linearization_gain_bug.md` investigation.
+
+## [4.2.4] — 2025-10-25
+### Added
+- _Nothing yet._
+
+### Changed
+- _Nothing yet._
+
+### Fixed
+- “Enter L* Values” once again opens the Manual L* modal; the markup was accidentally dropped during recent layout work and has been restored so manual measurements can be entered without editing the source.
+
+### Docs
+- _Nothing yet._
+
 ## [4.2.3] — 2025-10-24
 ### Added
 - _Nothing yet._
@@ -26,7 +52,6 @@ This changelog follows a concise, user-facing format. Engineering details live i
 
 ### Fixed
 - Restored the legacy `window.elements` helper so automated smoke checks and external scripts can locate channel rows without custom wiring.
-- “Enter L* Values” now opens the manual Luminosity modal again (the modal markup was inadvertently dropped and has been re-added).
 
 ### Docs
 - _Nothing yet._

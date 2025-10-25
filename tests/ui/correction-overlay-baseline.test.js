@@ -18,7 +18,9 @@ vi.mock('../../src/js/core/state.js', () => {
     INK_COLORS: {},
     TOTAL: 65535,
     isChannelNormalizedToEnd: vi.fn(() => false),
-    getLoadedQuadData: vi.fn(() => loadedData)
+    getLoadedQuadData: vi.fn(() => loadedData),
+    getCorrectionGain: () => 1,
+    isReferenceQuadLoaded: () => false
   };
 });
 
@@ -71,7 +73,17 @@ vi.mock('../../src/js/curves/smart-curves.js', () => ({
 
 vi.mock('../../src/js/ui/ui-hooks.js', () => ({
   registerInkChartHandler: () => {},
-  triggerPreviewUpdate: () => {}
+  registerSessionStatusHandler: () => {},
+  registerProcessingDetailHandler: () => {},
+  registerProcessingDetailAllHandler: () => {},
+  registerRevertButtonsHandler: () => {},
+  registerPreviewHandler: () => {},
+  triggerPreviewUpdate: () => {},
+  triggerProcessingDetail: () => {},
+  triggerProcessingDetailAll: () => {},
+  triggerRevertButtonsUpdate: () => {},
+  triggerInkChartUpdate: () => {},
+  triggerSessionStatusUpdate: () => {}
 }));
 
 vi.mock('../../src/js/ui/status-service.js', () => ({

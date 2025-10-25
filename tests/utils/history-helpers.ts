@@ -16,7 +16,7 @@ export async function navigateToApp(page: Page, options: { waitUntil?: 'load' | 
 
 export async function waitForAppReady(page: Page, options: { timeout?: number } = {}): Promise<void> {
   const { timeout = 15000 } = options;
-  await page.waitForSelector('#globalLinearizationBtn', { timeout });
+  await page.waitForSelector('#globalLinearizationBtn', { state: 'attached', timeout });
   await waitForUndoRedoReady(page, { timeout });
 }
 

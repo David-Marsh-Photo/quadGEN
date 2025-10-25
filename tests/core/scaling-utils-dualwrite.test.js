@@ -121,9 +121,18 @@ async function loadScalingUtils() {
   }));
 
   vi.doMock('../../src/js/ui/ui-hooks.js', () => ({
+    registerInkChartHandler: vi.fn(),
+    registerPreviewHandler: vi.fn(),
+    registerSessionStatusHandler: vi.fn(),
+    registerProcessingDetailHandler: vi.fn(),
+    registerProcessingDetailAllHandler: vi.fn(),
+    registerRevertButtonsHandler: vi.fn(),
     triggerInkChartUpdate: vi.fn(),
     triggerPreviewUpdate: vi.fn(),
     triggerSessionStatusUpdate: vi.fn(),
+    triggerProcessingDetail: vi.fn(),
+    triggerProcessingDetailAll: vi.fn(),
+    triggerRevertButtonsUpdate: vi.fn(),
   }));
 
   vi.doMock('../../src/js/ui/status-service.js', () => ({

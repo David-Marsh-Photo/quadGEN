@@ -16,6 +16,46 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '4.2.5': {
+    date: '2025-10-26',
+    title: 'Global corrections override baked curves',
+    sections: {
+      ADDED: [],
+      CHANGED: [],
+      FIXED: [
+        'Loading a new LAB/CGATS/manual correction now reshapes baked `.quad` files right away instead of staying linear until you reduce the correction gain.'
+      ],
+      REMOVED: [],
+      DOCS: [
+        'Manual regression checklist now includes a “Global Correction Overrides Baked Metadata” test and the investigation lives in `artifacts/linearization_gain_bug.md`.'
+      ]
+    },
+    aboutDialog: [
+      {
+        label: 'Baked metadata cleared automatically',
+        desc: 'Fresh global corrections now override stale `bakedGlobal` flags so the plotted curve follows the dashed overlay at 100 % gain, even on previously baked `.quad` files.'
+      }
+    ]
+  },
+  '4.2.4': {
+    date: '2025-10-25',
+    title: 'Manual L* modal restored',
+    sections: {
+      ADDED: [],
+      CHANGED: [],
+      FIXED: [
+        '“Enter L* Values” once again opens the Manual L* modal so you can enter measured patches without touching the source.'
+      ],
+      REMOVED: [],
+      DOCS: []
+    },
+    aboutDialog: [
+      {
+        label: 'Manual L* flow',
+        desc: 'The full Manual Luminosity modal is back—click “Enter L* Values” under Global Correction to add measurements.'
+      }
+    ]
+  },
   '4.2.3': {
     date: '2025-10-24',
     title: 'Status banners back on-chart',

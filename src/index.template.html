@@ -401,11 +401,11 @@ Scope: This license applies to this HTML file (quadgen.html) only.
 <span class="slider"></span>
 </label>
 </div>
-<div class="flex flex-col gap-2 items-center">
-<label class="px-3 py-2 text-xs bg-slate-600 hover:bg-slate-700 text-white rounded transition-colors font-bold whitespace-nowrap inline-flex items-center justify-center cursor-pointer" for="linearizationFile" title="Load LUT.cube, LABdata.txt, .ti3, or .acv curve files">Load Data File</label>
-<input accept=".cube,.txt,.cgats,.cgats17,.ti3,.acv" class="hidden" id="linearizationFile" type="file"/>
-<p class="text-[0.625rem] text-gray-500 text-center" id="globalLinearizationHint">LUT (.cube), LAB data (.txt), CGATS (.ti3), or curves (.acv)</p>
-</div>
+        <div class="flex flex-col gap-2 items-center">
+          <button class="px-3 py-2 text-xs bg-slate-600 hover:bg-slate-700 text-white rounded transition-colors font-bold whitespace-nowrap inline-flex items-center justify-center cursor-pointer" id="globalLinearizationBtn" type="button" data-tooltip="Load LUT.cube, LABdata.txt, .ti3, or .acv curve files">Load Data File</button>
+          <input accept=".cube,.txt,.cgats,.cgats17,.ti3,.acv" class="hidden" id="linearizationFile" type="file"/>
+          <p class="text-[0.625rem] text-gray-500 text-center" id="globalLinearizationHint">LUT (.cube), LAB data (.txt), CGATS (.ti3), or curves (.acv)</p>
+        </div>
 <div class="flex flex-col gap-2">
 <div class="flex gap-2">
 <button class="flex-1 px-3 py-2 text-xs bg-slate-600 hover:bg-slate-700 text-white rounded transition-colors font-bold whitespace-nowrap inline-flex items-center justify-center" id="manualLstarBtn">Enter L* Values</button>
@@ -689,7 +689,7 @@ Scope: This license applies to this HTML file (quadgen.html) only.
 </div>
 </div>
 <!-- Global Correction Help Popup -->
-<div class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4" id="globalCorrectionHelpPopup">
+<div id="globalCorrectionHelpPopup" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
 <div class="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] p-6 relative">
 <button aria-label="Close" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors" id="closeGlobalCorrectionHelpBtn">
 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24">

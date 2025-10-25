@@ -6,11 +6,18 @@ vi.mock('../../src/js/core/auto-limit-state.js', () => ({
 }));
 
 vi.mock('../../src/js/ui/ui-hooks.js', () => ({
+  registerInkChartHandler: vi.fn(),
+  registerProcessingDetailAllHandler: vi.fn(),
+  registerProcessingDetailHandler: vi.fn(),
+  registerSessionStatusHandler: vi.fn(),
+  registerPreviewHandler: vi.fn(),
+  registerRevertButtonsHandler: vi.fn(),
   triggerInkChartUpdate: vi.fn(),
   triggerProcessingDetailAll: vi.fn(),
   triggerProcessingDetail: vi.fn(),
   triggerSessionStatusUpdate: vi.fn(),
-  triggerPreviewUpdate: vi.fn()
+  triggerPreviewUpdate: vi.fn(),
+  triggerRevertButtonsUpdate: vi.fn()
 }));
 
 describe('state synchronization without window', () => {

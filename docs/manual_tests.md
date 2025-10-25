@@ -91,6 +91,19 @@ Goal: confirm the correction gain slider blends between the identity ramp and th
 
 Record pass/fail with screenshots for 0%, 50%, and 100%. Note any delays in redraws or mismatches between the label, debug helper, and exported data.
 
+## Global Correction Overrides Baked Metadata
+Goal: confirm that loading a new LAB/CGATS/manual dataset reshapes baked `.quad` files immediately at 100 % correction gain.
+
+### Manual Steps:
+1. Load `data/P800_21K.quad`. The stock curve is almost linear through 0–60 % input even though its metadata marks the K channel as baked.
+2. Apply `data/P800_21K.txt` via **Global Correction → Load Data File** and wait for the toast/status row to reference the file.
+3. Ensure **Correction gain** remains at `100%`; do **not** touch the slider.
+4. Inspect the K channel around 30–50 % input:
+   - Visually, the solid curve should dip below the diagonal to match the dashed overlay in that region.
+   - Optionally sample the values via `window.__quadDebug?.chartDebug?.getCurveSamplesForChannel?.('K', document.querySelector('tr.channel-row[data-channel=\"K\"]'));` – the `percent` at ~40 % input should differ from the baseline by at least 5 %.
+5. Toggle the gain to 99 % and back to 100 % to confirm the curve stays reshaped (no more “only at 99 %” workaround).
+6. Document pass/fail with a screenshot of the chart showing the corrected highlight segment. Include the console sample if the visual difference is subtle.
+
 ## Plot Smoothing Tail
 Goal: confirm aggressive plot smoothing keeps the highlight region smooth.
 

@@ -10,9 +10,23 @@ import { getChannelRow } from './channel-registry.js';
 import { getAutoLimitState } from '../core/auto-limit-state.js';
 import { registerSessionStatusHandler, triggerInkChartUpdate } from './ui-hooks.js';
 
+const hasDocumentObject = typeof document !== 'undefined';
+const canQueryDocument = hasDocumentObject && typeof document.getElementById === 'function';
+const canCreateDomNodes = hasDocumentObject && typeof document.createElement === 'function';
 const globalScope = typeof window !== 'undefined' ? window : globalThis;
-const isBrowser = typeof document !== 'undefined';
+const isBrowser = hasDocumentObject;
 const CHART_ZOOM_LEVELS = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+
+function createVirtualSessionStatusElement() {
+    return {
+        id: 'sessionStatus',
+        className: 'virtual-session-status',
+        style: {},
+        innerHTML: '\u00A0',
+        textContent: '\u00A0',
+        setAttribute: () => {}
+    };
+}
 
 /**
  * Graph Status Manager
@@ -35,6 +49,16 @@ export class GraphStatus {
         if (this.isInitialized) return;
 
         console.log('🎯 Graph Status system initializing...');
+
+        if (!canQueryDocument) {
+            console.log('⚠️ Document APIs unavailable; using virtual session status element for tests/headless runs.');
+            this.sessionStatusElement = createVirtualSessionStatusElement();
+            if (elements && !elements.sessionStatus) {
+                elements.sessionStatus = this.sessionStatusElement;
+            }
+            this.isInitialized = true;
+            return;
+        }
 
         // Find the session status element or create it if needed
         this.sessionStatusElement = document.getElementById('sessionStatus');
@@ -75,6 +99,12 @@ export class GraphStatus {
     createSessionStatusElement() {
         console.log('🔍 Attempting to create session status element...');
 
+        if (!canCreateDomNodes) {
+            console.log('⚠️ document.createElement unavailable; creating virtual session status element');
+            this.sessionStatusElement = createVirtualSessionStatusElement();
+            return;
+        }
+
         // For now, let's create a simple visible status element at the top of the page
         // that we can see working, then worry about perfect positioning later
         const statusContainer = document.createElement('div');
@@ -92,7 +122,9 @@ export class GraphStatus {
         statusContainer.appendChild(this.sessionStatusElement);
 
         // Add it to the body so it's always visible
-        document.body.appendChild(statusContainer);
+        if (document.body && typeof document.body.appendChild === 'function') {
+            document.body.appendChild(statusContainer);
+        }
 
         console.log('📊 Created session status element at top of page (visible fallback)', {
             element: this.sessionStatusElement,
@@ -586,18 +618,17 @@ function buildAutoLimitSegment(channelName) {
 export const graphStatus = new GraphStatus();
 
 // Initialize automatically when module loads
-if (typeof document !== 'undefined') {
-    // Wait for DOM to be ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-            graphStatus.initialize();
-            graphStatus.connectGlobalFunctions();
-        });
-    } else {
-        // DOM is already ready
+if (!hasDocumentObject) {
+    graphStatus.initialize();
+    graphStatus.connectGlobalFunctions();
+} else if (document.readyState === 'loading' && typeof document.addEventListener === 'function') {
+    document.addEventListener('DOMContentLoaded', () => {
         graphStatus.initialize();
         graphStatus.connectGlobalFunctions();
-    }
+    });
+} else {
+    graphStatus.initialize();
+    graphStatus.connectGlobalFunctions();
 }
 
 // Export convenience functions

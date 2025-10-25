@@ -133,4 +133,16 @@ describe('applyGlobalLinearizationStep with correction gain', () => {
 
     expect(zeroGain).toStrictEqual(ramp);
   });
+
+  it('ignores legacy bakedGlobal metadata when a live correction is applied', () => {
+    appState.loadedQuadData = {
+      keyPointsMeta: {
+        K: { bakedGlobal: true }
+      }
+    };
+
+    setCorrectionGain(1, { persist: false });
+    const result = applyGlobalLinearizationStep(BASE_VALUES, OPTIONS);
+    expect(result).not.toStrictEqual(BASE_VALUES);
+  });
 });

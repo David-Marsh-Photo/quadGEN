@@ -75,13 +75,22 @@ test.describe('Global scale with measurement revert interaction', () => {
     const diffFromInitial = compareScalingStates(initialState, finalState);
     expect(diffFromInitial.scaleDelta).toBe(0);
 
-    const revertedRows = new Map(revertedState.rows.map((row) => [row.channel, row]));
+    const measurementRows = new Map(measurementState.rows.map((row) => [row.channel, row]));
+    for (const row of revertedState.rows) {
+      const measurementRow = measurementRows.get(row.channel);
+      if (!measurementRow) continue;
+      const percentDiff = Math.abs((row.percentValue ?? 0) - (measurementRow.percentValue ?? 0));
+      const endDiff = Math.abs((row.endValue ?? 0) - (measurementRow.endValue ?? 0));
+      expect(percentDiff).toBeLessThanOrEqual(5);
+      expect(endDiff).toBeLessThanOrEqual(5000);
+    }
 
+    const initialRows = new Map(initialState.rows.map((row) => [row.channel, row]));
     for (const row of finalState.rows) {
-      const revertedRow = revertedRows.get(row.channel);
-      if (!revertedRow) continue;
-      const percentDiff = Math.abs((row.percentValue ?? 0) - (revertedRow.percentValue ?? 0));
-      const endDiff = Math.abs((row.endValue ?? 0) - (revertedRow.endValue ?? 0));
+      const initialRow = initialRows.get(row.channel);
+      if (!initialRow) continue;
+      const percentDiff = Math.abs((row.percentValue ?? 0) - (initialRow.percentValue ?? 0));
+      const endDiff = Math.abs((row.endValue ?? 0) - (initialRow.endValue ?? 0));
       expect(percentDiff).toBeLessThanOrEqual(5);
       expect(endDiff).toBeLessThanOrEqual(5000);
     }

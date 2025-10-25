@@ -33,10 +33,17 @@ vi.mock('../../src/js/ui/channel-registry.js', () => ({
 }));
 
 vi.mock('../../src/js/ui/ui-hooks.js', () => ({
+  registerInkChartHandler: vi.fn(),
+  registerPreviewHandler: vi.fn(),
+  registerSessionStatusHandler: vi.fn(),
+  registerProcessingDetailHandler: vi.fn(),
+  registerProcessingDetailAllHandler: vi.fn(),
+  registerRevertButtonsHandler: vi.fn(),
   triggerInkChartUpdate: vi.fn(),
   triggerPreviewUpdate: vi.fn(),
   triggerSessionStatusUpdate: vi.fn(),
   triggerProcessingDetail: vi.fn(),
+  triggerProcessingDetailAll: vi.fn(),
   triggerRevertButtonsUpdate: vi.fn(),
 }));
 

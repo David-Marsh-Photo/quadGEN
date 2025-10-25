@@ -46,6 +46,7 @@ vi.mock('../../src/js/core/state.js', () => {
     perChannelLinearization: {},
     perChannelEnabled: {}
   };
+  let correctionGain = 1;
   return {
     elements,
     getCurrentPrinter: () => ({ channels: ['K'] }),
@@ -56,6 +57,11 @@ vi.mock('../../src/js/core/state.js', () => {
     updateAppState: (updates) => Object.assign(appState, updates),
     getPlotSmoothingPercent: () => 0,
     setPlotSmoothingPercent: vi.fn(),
+    getCorrectionGain: () => correctionGain,
+    setCorrectionGain: (value) => {
+      correctionGain = Number(value);
+      return correctionGain;
+    },
     TOTAL: 65535
   };
 });
