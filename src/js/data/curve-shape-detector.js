@@ -73,11 +73,29 @@ function getSlopes(values) {
     return slopes;
 }
 
+function estimateApexSpan(samples, peakIndex) {
+    if (!Array.isArray(samples) || samples.length === 0) return null;
+    if (!Number.isFinite(peakIndex)) return null;
+    const peakValue = samples[peakIndex];
+    if (!Number.isFinite(peakValue) || peakValue <= 0) return null;
+    const threshold = peakValue * 0.2;
+    let left = peakIndex;
+    let right = peakIndex;
+    while (left > 0 && samples[left] > threshold) {
+        left -= 1;
+    }
+    while (right < samples.length - 1 && samples[right] > threshold) {
+        right += 1;
+    }
+    return Math.max(0, right - left);
+}
+
 function buildBaseResult(samples) {
     const sanitized = sanitizeSamples(samples);
     const length = sanitized.length;
     const peakIndex = length > 0 ? sanitized.reduce((idx, value, i, arr) => (value > arr[idx] ? i : idx), 0) : null;
     const peakValue = peakIndex != null ? sanitized[peakIndex] : null;
+    const apexSpan = peakIndex != null ? estimateApexSpan(sanitized, peakIndex) : null;
     const startValue = length > 0 ? sanitized[0] : null;
     const endValue = length > 0 ? sanitized[length - 1] : null;
     return {
@@ -88,6 +106,11 @@ function buildBaseResult(samples) {
         peakIndex,
         peakValue,
         peakInputPercent: peakIndex != null && length > 1 ? (peakIndex / (length - 1)) * 100 : null,
+        apexSampleIndex: peakIndex,
+        apexInputPercent: peakIndex != null && length > 1 ? (peakIndex / (length - 1)) * 100 : null,
+        apexOutputPercent: peakValue != null ? clamp01(peakValue / MAX_VALUE) * 100 : null,
+        apexSpanSamples: apexSpan,
+        apexSpanPercent: apexSpan != null && length > 1 ? (apexSpan / (length - 1)) * 100 : null,
         sampleCount: length,
         normalizedPeak: peakValue != null ? clamp01(peakValue / MAX_VALUE) : null,
         reasons: [],

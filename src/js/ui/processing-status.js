@@ -2,6 +2,7 @@
 // Channel processing detail labels and status display
 
 import { elements, getCurrentPrinter, getLoadedQuadData, getChannelShapeMeta } from '../core/state.js';
+import { updateBellShiftControl } from './bell-shift-controls.js';
 import { ControlPoints } from '../curves/smart-curves.js';
 import { LinearizationState, getEditedDisplayName, getBasePointCountLabel } from '../data/linearization-utils.js';
 import { getAutoLimitState } from '../core/auto-limit-state.js';
@@ -42,6 +43,7 @@ function updateChannelShapeBadge(channelName) {
         badge.classList.add('hidden');
         badge.removeAttribute('data-shape-type');
         badge.removeAttribute('title');
+        updateBellShiftControl(channelName);
         return;
     }
 
@@ -68,6 +70,7 @@ function updateChannelShapeBadge(channelName) {
     badge.setAttribute('role', 'img');
     badge.dataset.shapeType = meta.classification;
     badge.classList.remove('hidden');
+    updateBellShiftControl();
 }
 
 /**

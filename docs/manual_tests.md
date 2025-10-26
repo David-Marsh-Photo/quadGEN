@@ -327,6 +327,22 @@ Goal: confirm the new bell-vs-monotonic detector flags highlight inks correctly 
 ### Optional Automation
 - `npx playwright test tests/e2e/bell-shape.kclk.spec.ts` captures the badge rendering plus a screenshot attachment automatically.
 
+## Bell Apex Shift Control
+Goal: validate the per-channel Bell Apex control only appears for bell-classified inks, shifts the apex X percent via nudges/entry, and records the offset in metadata and screenshots.
+
+### Manual Steps:
+1. Load `index.html`, import `data/KCLK.quad`, enable **Edit Mode**, and select **C** in the Edit Curve panel. The minimalist **Bell Apex Shift** card (label + apex field + ± buttons) should appear; selecting a monotonic channel (e.g., K) should hide the entire card.
+2. In DevTools run `window.getChannelShapeMeta().C.bellShift` to confirm `baselineInputPercent`, `shiftedApexInputPercent`, and `offsetPercent = 0` before editing. The apex label in the panel should mirror the same percent.
+3. Click the “−” button once (Shift-click = ±2 %). The Apex input field should decrement by 0.5 % (or the accelerated step), the chart should redraw, and `window.getChannelShapeMeta().C.bellShift.offsetPercent` should become negative. Undo/redo must restore both the curve and the panel state.
+4. Type a new apex target (e.g., `45.0`) into the Edit panel field, press **Enter**, and verify `window.getChannelShapeMeta().C.bellShift.shiftedApexInputPercent` matches within ±0.2 %.
+5. While still in Edit Mode, verify the Smart point list (and numbered labels on the chart) keeps the same ordinals before and after each shift—only the X positions should slide; no points should be inserted, removed, or renumbered automatically.
+6. Repeat steps 3–5 for LK (use the channel dropdown) to confirm each bell channel maintains its own offset and the card updates as you switch channels.
+6. Load a monotonic file (e.g., `data/P800_K36C26LK25_V6.quad`) and confirm the Bell Apex card hides itself until you load another bell-classified dataset.
+7. Capture a screenshot of the Edit panel before/after shifting plus a console metadata dump; store alongside the automated Playwright artifact.
+
+### Optional Automation
+- `npx playwright test tests/e2e/bell-curve-apex-shift.spec.ts` drives the control on C, verifies metadata updates, and saves `test-screenshots/bell-apex-shift-control.png`.
+
 ## Density Ladder Sequencing (Normalized weighting)
 Goal: confirm Normalized weighting exhausts highlight inks in density order (LK → C → K) and records ladder decisions in composite debug.
 

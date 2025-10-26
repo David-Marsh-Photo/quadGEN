@@ -16,6 +16,29 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '4.2.7': {
+    date: '2025-10-26',
+    title: 'Bell apex refinements',
+    sections: {
+      ADDED: [
+        'Bell-classified channels expose a Bell Apex control in the Edit Curve panel with ± nudges and numeric entry so you can shift the detected apex horizontally without reloading Smart curves.'
+      ],
+      CHANGED: [
+        'Curve-shape metadata now includes apex input/output percents plus bell-shift state, giving automation and the Help overlay direct insight into how far each bell has moved.'
+      ],
+      FIXED: [],
+      REMOVED: [],
+      DOCS: [
+        'Help → ReadMe/Glossary/Version History and `docs/manual_tests.md` now cover the Bell Apex control, metadata fields, automation entry point, and Playwright regression.'
+      ]
+    },
+    aboutDialog: [
+      {
+        label: 'Bell Apex Shift',
+        desc: 'When Edit Mode is on and a channel detects as Bell you’ll see a Bell Apex card in the Edit Curve panel with ± buttons (Shift-click for bigger hops) and a numeric field; Smart ordinals stay put as you shift the apex.'
+      }
+    ]
+  },
   '4.2.6': {
     date: '2025-10-27',
     title: 'Curve-shape detector & icon badges',
@@ -1478,6 +1501,7 @@ Scope: This license applies to this HTML file (quadgen.html) only.</div>
         <li>⚙️ Options panel centralizes app-wide preferences (e.g., log-density normalization) without cluttering workflow panels.</li>
         <li>Correction overlay toggle draws a dashed red global target plus the purple linear baseline for identity checks. The light-blocking overlay shows a solid purple curve (with dashed reference when a comparison <code>.quad</code> is loaded), and the cumulative ink-load overlay sums every enabled channel with dashed/solid segments that flip to red once totals clear your warning threshold.</li>
         <li>Measurement spot markers (⚙️ Options) line badges along a 70 % rail anchored to the unzoomed chart, showing green checks for LAB readings within ±1 % and colored arrows (red up for darken, blue down for lighten) with faint dots at the measured Y position—even after zooming. Hover any badge to see the exact delta.</li>
+        <li>Bell-classified channels display a <strong>Bell Apex Shift</strong> card inside the Edit Curve panel (only when Edit Mode is on) with ± buttons (Shift-click for larger hops) and a numeric field so you can re-center highlight-heavy curves—Smart point ordinals stay put while their X positions drift.</li>
                 <li>Correction gain slider (🌐 Global Correction) blends the identity curve with the measured correction (0–100 %); scrubbing pauses for ~150 ms to stay smooth, then the chart, spot markers, previews, and exported curves all refresh with the selected mix.</li>
         <li>Evenly spaced or irregular targets supported.</li>
         <li>Edit Mode: point-based edits at any time.</li>
@@ -1584,6 +1608,12 @@ export function getHelpGlossaryHTML(){
 
         <dt>Baked</dt>
         <dd>Indicates that a correction (global LUT, LAB table, or Smart curve) has been permanently folded into the current baseline curve. Baked data no longer re-applies on redraw; it updates ink-limit fields, exports, and history so further edits start from the corrected curve.</dd>
+
+        <dt>Bell Apex Shift</dt>
+        <dd>An Edit Curve panel control that appears only when Edit Mode is on and the selected channel classifies as bell. It shows the apex input % plus ± buttons / numeric entry so you can nudge the bell left or right without rebuilding Smart points. Shift-click the buttons for larger hops; undo/redo captures every move, and existing Smart point ordinals stay in place while their X positions slide.</dd>
+
+        <dt>Bell apex</dt>
+        <dd>The peak-input percentage of a bell-shaped channel (start low → mid-curve rise → low). quadGEN detects it per channel, displays it in the Edit Curve Bell Apex card, and exposes it via <code>getChannelShapeMeta()</code>.</dd>
 
         <dt>Bell curve (ink channel)</dt>
         <dd>A channel profile that starts near 0 %, rises to a mid-curve apex, then tapers back toward 0 %. quadGEN highlights these highlight-heavy channels with a 🔔 badge in the channel table and exposes the detection via <code>window.getChannelShapeMeta()</code>.</dd>

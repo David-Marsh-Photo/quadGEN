@@ -3,7 +3,7 @@
 
 // Application version - update in one place
 export const APP_RELEASE_CHANNEL = 'Beta';
-export const APP_VERSION = '4.2.6';
+export const APP_VERSION = '4.2.7';
 export const APP_DISPLAY_VERSION = APP_RELEASE_CHANNEL ? `${APP_RELEASE_CHANNEL} ${APP_VERSION}` : APP_VERSION;
 
 // Dark mode feature flag

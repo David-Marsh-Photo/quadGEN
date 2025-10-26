@@ -20,6 +20,7 @@ import { LinearizationState } from '../data/linearization-utils.js';
 import { getChannelRow } from './channel-registry.js';
 import { getStateManager } from '../core/state-manager.js';
 import { triggerInkChartUpdate, triggerProcessingDetail, triggerProcessingDetailAll, triggerRevertButtonsUpdate, triggerPreviewUpdate } from './ui-hooks.js';
+import { initializeBellShiftControls, updateBellShiftControl } from './bell-shift-controls.js';
 import { updateSessionStatus } from './graph-status.js';
 import { registerDebugNamespace, getDebugRegistry } from '../utils/debug-registry.js';
 import { showStatus } from './status-service.js';
@@ -2173,6 +2174,12 @@ function refreshEditState() {
     const isEnabled = editIsChannelEnabled(ch);
     setControlsEnabled(isEnabled);
 
+    try {
+        updateBellShiftControl(ch);
+    } catch (err) {
+        console.warn('[EDIT MODE] Failed to refresh bell apex control:', err);
+    }
+
     // Update channel state display
     if (elements.editChannelState) {
         if (ch && isEnabled) {
@@ -2330,6 +2337,7 @@ export function initializeEditMode() {
 
     // Initialize edit control handlers
     initializeEditControlHandlers();
+    initializeBellShiftControls();
 
     console.log('✅ Edit mode system initialized');
 }

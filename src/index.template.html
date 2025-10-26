@@ -336,7 +336,10 @@ Scope: This license applies to this HTML file (quadgen.html) only.
 </div>
 <!-- CALCULATE POINTS (3/5 width) -->
 <div class="col-span-3 border border-gray-200 rounded-lg p-2.5">
-<span class="text-xs text-gray-700 font-bold block mb-1.5">Calculate</span>
+<span class="text-xs text-gray-700 font-bold block mb-1.5 flex items-center gap-1.5">
+  <button type="button" class="tooltip-trigger inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border border-gray-200 text-[10px] font-semibold text-gray-400 hover:text-gray-600 hover:border-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" data-tooltip="Sets the simplifier’s target error (%) and maximum Smart key points before generating editable points from the current curve.">?</button>
+  <span>Calculate</span>
+</span>
 <label class="text-xs text-gray-700 flex items-center gap-1 mb-2">
 <span class="whitespace-nowrap">Error %</span>
 <input class="w-full px-2 py-1 text-xs border border-gray-300 rounded" id="editMaxError" max="5" min="0.05" step="0.05" type="number" value="0.15"/>
@@ -379,15 +382,33 @@ Scope: This license applies to this HTML file (quadgen.html) only.
 <div></div>
 <button class="px-3 py-1.5 text-sm rounded font-bold nudge-btn" id="editNudgeYDown" title="Nudge Y down">▽</button>
 <div></div>
-</div>
-</div>
-<div class="text-xs text-gray-500 text-center mt-2 hidden" id="editDisabledHint">Channel is disabled (End=0). Enable in Channels to edit.</div>
-</div>
-</div>
-</div>
-</div>
-</div>
-</div>
+ </div>
+ </div>
+ <div class="text-xs text-gray-500 text-center mt-2 hidden" id="editDisabledHint">Channel is disabled (End=0). Enable in Channels to edit.</div>
+ </div>
+ </div>
+
+ <!-- WORKFLOW ROW 3: Bell Apex Shift -->
+ <div class="border border-gray-200 rounded-lg p-2.5 hidden" id="editBellShiftContainer">
+   <div class="flex items-center justify-between gap-3">
+     <div class="flex items-center gap-1.5">
+       <button type="button" class="tooltip-trigger inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border border-gray-200 text-[10px] font-semibold text-gray-400 hover:text-gray-600 hover:border-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" data-tooltip="Shift bell-shaped channels horizontally without reordering Smart points. Use the ± buttons or type an input percent.">?</button>
+       <span class="text-xs text-gray-700 font-bold uppercase tracking-wide">Bell Apex</span>
+     </div>
+     <div class="flex items-center gap-2">
+       <button type="button" class="px-3 py-1 text-xs font-semibold border border-gray-300 rounded bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed" data-bell-shift-nudge="dec" id="editBellShiftDec" aria-label="Shift bell apex left">−</button>
+       <input type="number" step="0.1" min="0" max="100" value="" class="w-20 rounded border border-gray-300 px-2 py-1 text-right text-xs font-semibold focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed" id="editBellShiftInput" aria-label="Bell apex input percent">
+       <button type="button" class="px-3 py-1 text-xs font-semibold border border-gray-300 rounded bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed" data-bell-shift-nudge="inc" id="editBellShiftInc" aria-label="Shift bell apex right">+</button>
+     </div>
+   </div>
+ </div>
+
+ </div>
+ </div>
+ </div>
+ </div>
+ </div>
+ </div>
 <!-- Global Correction Tab (moved from bottom tabs) -->
 <div class="tab-content" data-tab-content="global" hidden="" role="tabpanel">
 <div class="space-y-4" data-linearization-column="">

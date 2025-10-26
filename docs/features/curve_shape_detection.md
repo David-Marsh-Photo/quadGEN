@@ -62,3 +62,7 @@ Detect whether each loaded channel curve behaves like a bell curve (low → apex
 
 ### Confidence
 Following the steps above — particularly the up-front tests, cached metadata plumbing, and dedicated helper — provides a ≥95 % chance we deliver accurate bell/monotonic detection without regressions.
+
+## Downstream Consumers
+- **Bell Apex Shift** (`docs/features/bell_curve_shift.md`) reads `apexInputPercent`, `apexOutputPercent`, and the stored `bellShift` metadata from `getChannelShapeMeta()` to decide when to show the apex control and how far the curve has been nudged.
+- The channel-table badges, Help overlays, and Playwright regressions rely on the same metadata so detector changes must maintain those fields.

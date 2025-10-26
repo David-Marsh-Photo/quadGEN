@@ -86,7 +86,9 @@ function buildChannelRow(channelName, percent, endValue, densityState) {
             </div>
         </td>
         <td class="px-1 pt-2 pb-1 align-middle text-left">
-            <span class="processing-label italic font-normal text-xs text-gray-600" data-channel="${channelName}">→ Linear ramp</span>
+            <div class="flex flex-col gap-1">
+                <span class="processing-label italic font-normal text-xs text-gray-600" data-channel="${channelName}">→ Linear ramp</span>
+            </div>
         </td>
         <td class="pr-0 pt-2 pb-1 text-right" style="width:120px;">
             <div class="flex items-center justify-end gap-1">

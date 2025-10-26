@@ -5,6 +5,7 @@ import { registerDebugNamespace } from '../utils/debug-registry.js';
 import { getLegacyStateBridge } from '../legacy/state-bridge.js';
 import { getCorrectionMethod } from './correction-method.js';
 import { classifyCurve } from '../data/curve-shape-detector.js';
+import { ensureBellShiftContainer, syncBellShiftFromMeta, clearBellShiftEntry } from './bell-shift-state.js';
 
 const legacyBridge = getLegacyStateBridge();
 
@@ -161,6 +162,10 @@ export const elements = {
     editMaxPoints: null,
     editMaxError: null,
     editDisabledHint: null,
+    editBellShiftContainer: null,
+    editBellShiftInput: null,
+    editBellShiftDec: null,
+    editBellShiftInc: null,
 
     // Chat/AI elements
     chatMessages: null,
@@ -418,6 +423,10 @@ export function initializeElements() {
     elements.editMaxPoints = document.getElementById('editMaxPoints');
     elements.editMaxError = document.getElementById('editMaxError');
     elements.editDisabledHint = document.getElementById('editDisabledHint');
+    elements.editBellShiftContainer = document.getElementById('editBellShiftContainer');
+    elements.editBellShiftInput = document.getElementById('editBellShiftInput');
+    elements.editBellShiftDec = document.getElementById('editBellShiftDec');
+    elements.editBellShiftInc = document.getElementById('editBellShiftInc');
 
     // Help system elements
     elements.helpBtn = document.getElementById('helpBtn');
@@ -607,19 +616,43 @@ function refreshChannelShapeMeta(data, channelName = null) {
     if (!data.channelShapeMeta || typeof data.channelShapeMeta !== 'object') {
         data.channelShapeMeta = {};
     }
+    ensureBellShiftContainer(data);
+
+    const decorateMeta = (channel, result) => {
+        const enriched = syncBellShiftFromMeta(data, channel, result);
+        if (enriched) {
+            const normalized = {
+                ...enriched,
+                shiftedApexInputPercent: Number.isFinite(enriched.latestInputPercent)
+                    ? enriched.latestInputPercent
+                    : enriched.baselineInputPercent,
+                shiftedApexOutputPercent: Number.isFinite(enriched.latestOutputPercent)
+                    ? enriched.latestOutputPercent
+                    : enriched.baselineOutputPercent
+            };
+            result.bellShift = normalized;
+        } else {
+            result.bellShift = null;
+        }
+        return result;
+    };
+
     const curves = data.curves && typeof data.curves === 'object' ? data.curves : {};
     if (channelName) {
         const curve = curves[channelName];
-        data.channelShapeMeta[channelName] = classifyCurve(Array.isArray(curve) ? curve : []);
+        const classified = classifyCurve(Array.isArray(curve) ? curve : []);
+        data.channelShapeMeta[channelName] = decorateMeta(channelName, classified);
         return data.channelShapeMeta[channelName];
     }
     Object.keys(curves).forEach((channel) => {
         const curve = curves[channel];
-        data.channelShapeMeta[channel] = classifyCurve(Array.isArray(curve) ? curve : []);
+        const classified = classifyCurve(Array.isArray(curve) ? curve : []);
+        data.channelShapeMeta[channel] = decorateMeta(channel, classified);
     });
     Object.keys(data.channelShapeMeta).forEach((channel) => {
         if (!Object.prototype.hasOwnProperty.call(curves, channel)) {
             delete data.channelShapeMeta[channel];
+            clearBellShiftEntry(data, channel);
         }
     });
     return data.channelShapeMeta;
@@ -721,6 +754,7 @@ export function setLoadedQuadData(quadData) {
                 });
             }
         }
+        ensureBellShiftContainer(quadData);
         refreshChannelShapeMeta(quadData);
     }
     appState.loadedQuadData = quadData || null;
@@ -770,6 +804,9 @@ export function ensureLoadedQuadData(initialValue = { curves: {}, sources: {}, n
         }
         if (!appState.loadedQuadData.channelShapeMeta || typeof appState.loadedQuadData.channelShapeMeta !== 'object') {
             appState.loadedQuadData.channelShapeMeta = {};
+        }
+        if (!appState.loadedQuadData.bellCurveShift || typeof appState.loadedQuadData.bellCurveShift !== 'object') {
+            appState.loadedQuadData.bellCurveShift = {};
         }
         refreshChannelShapeMeta(appState.loadedQuadData);
         syncWindowLoadedQuadData();

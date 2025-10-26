@@ -17,6 +17,20 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Docs
 - _Nothing yet._
 
+## [4.2.7] — 2025-10-26
+### Added
+- Bell-classified channels now surface a “Bell Apex” control inside the Edit Curve panel (Edit Mode ON) with nudge buttons and numeric entry so you can shift the detected apex horizontally without redrawing Smart points; the shift reweights samples around the peak and records undo/redo history.
+
+### Changed
+- Curve-shape metadata now exposes apex input/output percents plus bell-shift state so scripts and the Help overlay can report the current offset.
+- Bell Apex shifts now slide existing Smart key points horizontally (endpoints pinned, gaps preserved) instead of re-simplifying, so key-point ordinals stay consistent after each adjustment.
+
+### Fixed
+- _Nothing yet._
+
+### Docs
+- Documented the bell-curve apex shift workflow (feature spec, manual tests, Help → ReadMe/Glossary/Version History) and linked the automated Playwright regression that captures the control plus screenshot artifacts.
+
 ## [4.2.6] — 2025-10-27
 ### Added
 - Curve shape detector identifies bell vs monotonic channels, exposes the metadata through `window.getChannelShapeMeta()`, and surfaces badges in the channel table for quick highlight audits.

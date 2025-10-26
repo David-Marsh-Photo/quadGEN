@@ -5749,6 +5749,7 @@ export function setupChannelRow(tr) {
 
     const lockBtn = tr.querySelector('.channel-lock-btn');
 
+
     const LOCK_ICONS = {
         locked: '<svg class="w-3.5 h-3.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="11" width="13" height="9.5" rx="2"></rect><path d="M16 11V8a4 4 0 00-8 0v3"></path><path d="M12 15v2.5"></path></svg>',
         unlocked: '<svg class="w-3.5 h-3.5 pointer-events-none" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="5.5" y="11" width="13" height="9.5" rx="2"></rect><path d="M16 11V8.5a4 4 0 00-7.5-2"></path></svg>'
