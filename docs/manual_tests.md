@@ -314,6 +314,19 @@ Attach console stats and chart screenshots whenever the amplitude drops unexpect
 ### Optional Automation
 - Run `node scripts/analyze_composite_weighting.cjs` to compare legacy (composite off) vs composite totals for TRIFORCE fixtures. The script prints total-ink ratios and warning counts so you can spot amplitude drift without taking manual measurements.
 
+## Curve Shape Detection Badges
+Goal: confirm the new bell-vs-monotonic detector flags highlight inks correctly and renders badges in the channel table.
+
+### Manual Steps:
+1. Load `index.html`, then import `data/KCLK.quad` via **Load .quad**.
+2. In the channel table, verify Cyan (C) and Light Black (LK) rows show the 🔔 badge while K shows 📈. Disabled channels (M/Y/LC/LM/LLK) can show the muted ➡️ badge or remain hidden when they’re unused.
+3. Hover the badge to confirm the tooltip reports the apex input percent (≈62 % for C, ≈29 % for LK) plus the confidence percentage.
+4. In DevTools, run `window.getChannelShapeMeta()` and confirm it returns bell classifications for C/LK and monotonic for K. Capture the console output for the regression log.
+5. Screenshot the channel table to document the badges (store alongside `test-screenshots` artifacts).
+
+### Optional Automation
+- `npx playwright test tests/e2e/bell-shape.kclk.spec.ts` captures the badge rendering plus a screenshot attachment automatically.
+
 ## Density Ladder Sequencing (Normalized weighting)
 Goal: confirm Normalized weighting exhausts highlight inks in density order (LK → C → K) and records ladder decisions in composite debug.
 

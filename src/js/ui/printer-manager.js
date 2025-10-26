@@ -66,11 +66,12 @@ function buildChannelRow(channelName, percent, endValue, densityState) {
     row.innerHTML = `
         <td class="p-0 text-center" style="width:0;"></td>
         <td class="px-1 pt-2 pb-1 font-medium align-middle text-left" style="width: 100px;">
-            <span class="flex items-center gap-2 w-full">
+            <span class="flex items-center gap-1.5 w-full">
                 <button type="button" class="channel-lock-btn px-1.5 py-1 text-xs rounded border border-gray-300 text-gray-600 bg-white hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 flex-shrink-0" data-channel="${channelName}" data-tooltip="Lock to prevent edits" aria-pressed="false" aria-label="Toggle ink limit lock for ${channelName}">${LOCK_ICON_UNLOCKED.trim()}</button>
                 <span class="inline-block w-3.5 h-3.5 rounded-sm border border-black/10 flex-shrink-0" style="background-color: ${INK_COLORS[channelName] || '#000'}"></span>
                 <span class="w-8 channel-name">${channelName}</span>
                 <span class="text-xs text-gray-500 invisible" data-disabled>(disabled)</span>
+                <span class="channel-shape-badge hidden text-base leading-none" aria-hidden="true" data-channel-shape></span>
             </span>
         </td>
         <td class="px-1 pt-2 pb-1 text-center" style="width: 250px;">

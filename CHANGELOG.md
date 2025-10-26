@@ -17,6 +17,19 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Docs
 - _Nothing yet._
 
+## [4.2.6] — 2025-10-27
+### Added
+- Curve shape detector identifies bell vs monotonic channels, exposes the metadata through `window.getChannelShapeMeta()`, and surfaces badges in the channel table for quick highlight audits.
+
+### Changed
+- Channel badges now use glyphs (🔔 bell, 📈 monotonic, ➡️ flat) without colored pills so highlight-heavy curves stand out instantly while tooltips carry the context.
+
+### Fixed
+- _Nothing yet._
+
+### Docs
+- Added a “Curve Shape Detection Badges” regression in `docs/manual_tests.md` plus Glossary/Help updates explaining the new badges, apex readouts, and Playwright coverage.
+
 ## [4.2.5] — 2025-10-26
 ### Added
 - _Nothing yet._

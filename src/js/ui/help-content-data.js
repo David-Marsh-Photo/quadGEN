@@ -16,6 +16,29 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '4.2.6': {
+    date: '2025-10-27',
+    title: 'Curve-shape detector & icon badges',
+    sections: {
+      ADDED: [
+        'Curve-shape detector labels bell vs monotonic channels with 🔔/📈/➡️ icon badges in the channel table and exposes metadata through `window.getChannelShapeMeta()` for automation.'
+      ],
+      CHANGED: [
+        'Badges now render glyphs only—no colored pill—keeping the sidebar tidy while tooltips reveal apex input and confidence.'
+      ],
+      FIXED: [],
+      REMOVED: [],
+      DOCS: [
+        'Help → Glossary plus `docs/manual_tests.md` cover the curve-shape icon badges, apex/confidence tooltips, and Playwright regression.'
+      ]
+    },
+    aboutDialog: [
+      {
+        label: 'Curve-shape badges',
+        desc: 'Channel rows now show 🔔 (Bell), 📈 (Monotonic), or ➡️ (Flat) icons with apex/confidence tooltips, and `window.getChannelShapeMeta()` exposes the same metadata to scripts/tests.'
+      }
+    ]
+  },
   '4.2.5': {
     date: '2025-10-26',
     title: 'Global corrections override baked curves',
@@ -1561,6 +1584,9 @@ export function getHelpGlossaryHTML(){
 
         <dt>Baked</dt>
         <dd>Indicates that a correction (global LUT, LAB table, or Smart curve) has been permanently folded into the current baseline curve. Baked data no longer re-applies on redraw; it updates ink-limit fields, exports, and history so further edits start from the corrected curve.</dd>
+
+        <dt>Bell curve (ink channel)</dt>
+        <dd>A channel profile that starts near 0 %, rises to a mid-curve apex, then tapers back toward 0 %. quadGEN highlights these highlight-heavy channels with a 🔔 badge in the channel table and exposes the detection via <code>window.getChannelShapeMeta()</code>.</dd>
 
         <dt>ACV (Photoshop Curves)</dt>
         <dd>Binary curve format used by Adobe Photoshop (<code>.acv</code>). In quadGEN: can be loaded as a global correction or per-channel adapter; anchors can seed editable Smart curve.</dd>

@@ -1,7 +1,7 @@
 // quadGEN Processing Status System
 // Channel processing detail labels and status display
 
-import { elements, getCurrentPrinter, getLoadedQuadData } from '../core/state.js';
+import { elements, getCurrentPrinter, getLoadedQuadData, getChannelShapeMeta } from '../core/state.js';
 import { ControlPoints } from '../curves/smart-curves.js';
 import { LinearizationState, getEditedDisplayName, getBasePointCountLabel } from '../data/linearization-utils.js';
 import { getAutoLimitState } from '../core/auto-limit-state.js';
@@ -17,6 +17,57 @@ import { registerLegacyHelpers } from '../legacy/legacy-helpers.js';
 function getChannelRow(channelName) {
     if (typeof document === 'undefined') return null;
     return document.querySelector(`tr[data-channel="${channelName}"]`);
+}
+
+function resolveBadgeIcon(classification) {
+    switch (classification) {
+        case 'bell':
+            return { icon: '🔔', label: 'Bell curve' };
+        case 'monotonic':
+            return { icon: '📈', label: 'Monotonic rise' };
+        case 'flat':
+            return { icon: '➡️', label: 'Flat profile' };
+        default:
+            return { icon: '', label: 'Curve profile' };
+    }
+}
+
+function updateChannelShapeBadge(channelName) {
+    if (typeof document === 'undefined') return;
+    const row = getChannelRow(channelName);
+    const badge = row?.querySelector('[data-channel-shape]');
+    if (!badge) return;
+    const meta = getChannelShapeMeta(channelName);
+    if (!meta || !meta.classification || meta.classification === 'unknown') {
+        badge.classList.add('hidden');
+        badge.removeAttribute('data-shape-type');
+        badge.removeAttribute('title');
+        return;
+    }
+
+    const { icon, label } = resolveBadgeIcon(meta.classification);
+    if (!icon) {
+        badge.classList.add('hidden');
+        return;
+    }
+    const apexPercent = typeof meta.peakInputPercent === 'number'
+        ? `${meta.peakInputPercent.toFixed(1)}% input`
+        : '—';
+    const confidencePercent = Number.isFinite(meta.confidence)
+        ? `${(meta.confidence * 100).toFixed(0)}% confidence`
+        : null;
+    const tooltipSegments = [
+        label,
+        `Apex ${apexPercent}`,
+        confidencePercent
+    ].filter(Boolean);
+
+    badge.textContent = icon;
+    badge.setAttribute('title', tooltipSegments.join(' • '));
+    badge.setAttribute('aria-label', tooltipSegments[0] || label);
+    badge.setAttribute('role', 'img');
+    badge.dataset.shapeType = meta.classification;
+    badge.classList.remove('hidden');
 }
 
 /**
@@ -159,6 +210,8 @@ export function updateProcessingDetail(channelName) {
             processingLabel.textContent = displayText;
             processingLabel.setAttribute('title', cleanText);
         }
+
+        updateChannelShapeBadge(channelName);
 
     } catch (error) {
         console.warn(`Error updating processing detail for ${channelName}:`, error);

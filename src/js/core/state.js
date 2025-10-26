@@ -4,6 +4,7 @@
 import { registerDebugNamespace } from '../utils/debug-registry.js';
 import { getLegacyStateBridge } from '../legacy/state-bridge.js';
 import { getCorrectionMethod } from './correction-method.js';
+import { classifyCurve } from '../data/curve-shape-detector.js';
 
 const legacyBridge = getLegacyStateBridge();
 
@@ -599,6 +600,31 @@ export const appState = {
     debugAI: false
 };
 
+function refreshChannelShapeMeta(data, channelName = null) {
+    if (!data || typeof data !== 'object') {
+        return null;
+    }
+    if (!data.channelShapeMeta || typeof data.channelShapeMeta !== 'object') {
+        data.channelShapeMeta = {};
+    }
+    const curves = data.curves && typeof data.curves === 'object' ? data.curves : {};
+    if (channelName) {
+        const curve = curves[channelName];
+        data.channelShapeMeta[channelName] = classifyCurve(Array.isArray(curve) ? curve : []);
+        return data.channelShapeMeta[channelName];
+    }
+    Object.keys(curves).forEach((channel) => {
+        const curve = curves[channel];
+        data.channelShapeMeta[channel] = classifyCurve(Array.isArray(curve) ? curve : []);
+    });
+    Object.keys(data.channelShapeMeta).forEach((channel) => {
+        if (!Object.prototype.hasOwnProperty.call(curves, channel)) {
+            delete data.channelShapeMeta[channel];
+        }
+    });
+    return data.channelShapeMeta;
+}
+
 try {
     if (typeof localStorage !== 'undefined') {
         if (localStorage.getItem('quadgen.showLabSpotMarkers') === '1') {
@@ -695,6 +721,7 @@ export function setLoadedQuadData(quadData) {
                 });
             }
         }
+        refreshChannelShapeMeta(quadData);
     }
     appState.loadedQuadData = quadData || null;
     syncWindowLoadedQuadData();
@@ -706,7 +733,22 @@ export function setLoadedQuadData(quadData) {
  * @returns {Object|null} Loaded quad data or null
  */
 export function getLoadedQuadData() {
+    if (appState.loadedQuadData) {
+        refreshChannelShapeMeta(appState.loadedQuadData);
+    }
     return appState.loadedQuadData;
+}
+
+export function getChannelShapeMeta(channelName = null) {
+    const data = getLoadedQuadData();
+    if (!data) {
+        return channelName ? null : {};
+    }
+    const meta = refreshChannelShapeMeta(data, channelName || undefined);
+    if (channelName) {
+        return meta || null;
+    }
+    return { ...(meta || {}) };
 }
 
 export function ensureLoadedQuadData(initialValue = { curves: {}, sources: {}, normalizeToEndChannels: {} }) {
@@ -726,6 +768,10 @@ export function ensureLoadedQuadData(initialValue = { curves: {}, sources: {}, n
         if (!appState.loadedQuadData.rebasedSources || typeof appState.loadedQuadData.rebasedSources !== 'object') {
             appState.loadedQuadData.rebasedSources = {};
         }
+        if (!appState.loadedQuadData.channelShapeMeta || typeof appState.loadedQuadData.channelShapeMeta !== 'object') {
+            appState.loadedQuadData.channelShapeMeta = {};
+        }
+        refreshChannelShapeMeta(appState.loadedQuadData);
         syncWindowLoadedQuadData();
         notifyLoadedQuadListeners(null, appState.loadedQuadData);
     }
@@ -950,6 +996,7 @@ function deepClone(value) {
 const legacyLoadedQuadData = legacyBridge.getLoadedQuadData();
 if (legacyLoadedQuadData && !appState.loadedQuadData) {
     appState.loadedQuadData = legacyLoadedQuadData;
+    refreshChannelShapeMeta(appState.loadedQuadData);
 }
 
 const legacyEditModeFlag = legacyBridge.getEditModeFlag();
@@ -962,6 +1009,7 @@ registerDebugNamespace('coreState', {
     setLoadedQuadData,
     subscribeLoadedQuadData,
     ensureLoadedQuadData,
+    getChannelShapeMeta,
     getEditModeFlag,
     setEditModeFlag,
     subscribeEditModeFlag,
@@ -976,8 +1024,17 @@ legacyBridge.registerHelpers({
     subscribeLoadedQuadData,
     getEditModeFlag,
     setEditModeFlag,
-    subscribeEditModeFlag
+    subscribeEditModeFlag,
+    getChannelShapeMeta
 });
+
+if (typeof window !== 'undefined') {
+    try {
+        window.getChannelShapeMeta = getChannelShapeMeta;
+    } catch (err) {
+        // ignore global assignment failure
+    }
+}
 
 syncWindowLoadedQuadData();
 syncWindowEditModeFlag();
