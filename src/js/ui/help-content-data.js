@@ -16,6 +16,35 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '4.3.0': {
+    date: '2025-10-28',
+    title: 'Bell width scale',
+    sections: {
+      ADDED: [
+        'Bell-classified channels now show a Bell Width card beneath Bell Apex with linkable left/right percent inputs, ±2 % (Shift=±5 %) nudges, and a Reset button so you can widen or tighten either side of the bell without reseeding Smart points.'
+      ],
+      CHANGED: [
+        'Curve-shape metadata now reports left/right span samples plus bellWidthScale state (factors + link flag), and Smart key points reuse the same distance-weighted pipeline so width edits keep ordinals intact.'
+      ],
+      FIXED: [
+        'Bell Width controls now disable ± buttons while a request runs, apply link toggle changes immediately, and clamp manual percent inputs (40–250%) so reversing direction takes effect on the very next click.',
+        'Bell Width Smart curves now account for the previous width factor, so the first opposite-direction nudge moves Smart key points immediately instead of coasting in the old direction.',
+        'Reset now re-plots the original bell curve (not just Smart key points), so the curve instantly snaps back to the baseline when you set both sides to 100 %.',
+        'Smart-mode Bell Width edits now regenerate the plotted samples so the chart follows the moved Smart key points instead of leaving the handles floating over an unchanged curve.'
+      ],
+      REMOVED: [],
+      DOCS: [
+        'Updated `docs/features/bell_curve_shift.md`, `docs/manual_tests.md`, and Help → Glossary/Version History to cover the Bell Width Scale workflow, metadata fields, and regression plan.',
+        'Documented the Smart bell-width regression alongside a new Playwright test (`tests/e2e/bell-width-scale.spec.ts`) and before/after screenshots so the plotted curve/Smart-handle sync stays traceable.'
+      ]
+    },
+    aboutDialog: [
+      {
+        label: 'Bell Width Scale',
+        desc: 'When Edit Mode is on and a channel detects as Bell you’ll now see a Bell Width card (below Bell Apex) with left/right % inputs, link toggle, ±2 %/±5 % nudges, and Reset so you can widen or tighten either slope without moving the apex.'
+      }
+    ]
+  },
   '4.2.7': {
     date: '2025-10-26',
     title: 'Bell apex refinements',
@@ -1502,6 +1531,7 @@ Scope: This license applies to this HTML file (quadgen.html) only.</div>
         <li>Correction overlay toggle draws a dashed red global target plus the purple linear baseline for identity checks. The light-blocking overlay shows a solid purple curve (with dashed reference when a comparison <code>.quad</code> is loaded), and the cumulative ink-load overlay sums every enabled channel with dashed/solid segments that flip to red once totals clear your warning threshold.</li>
         <li>Measurement spot markers (⚙️ Options) line badges along a 70 % rail anchored to the unzoomed chart, showing green checks for LAB readings within ±1 % and colored arrows (red up for darken, blue down for lighten) with faint dots at the measured Y position—even after zooming. Hover any badge to see the exact delta.</li>
         <li>Bell-classified channels display a <strong>Bell Apex Shift</strong> card inside the Edit Curve panel (only when Edit Mode is on) with ± buttons (Shift-click for larger hops) and a numeric field so you can re-center highlight-heavy curves—Smart point ordinals stay put while their X positions drift.</li>
+        <li>A companion <strong>Bell Width Scale</strong> card sits right beneath Bell Apex with left/right percent inputs, ±2 % nudges (Shift=±5 %), a Reset button, and a ⛓ link toggle so you can widen/tighten either slope without moving the apex or reseeding Smart points; metadata lives in <code>getChannelShapeMeta().bellWidthScale</code>.</li>
                 <li>Correction gain slider (🌐 Global Correction) blends the identity curve with the measured correction (0–100 %); scrubbing pauses for ~150 ms to stay smooth, then the chart, spot markers, previews, and exported curves all refresh with the selected mix.</li>
         <li>Evenly spaced or irregular targets supported.</li>
         <li>Edit Mode: point-based edits at any time.</li>
@@ -1609,14 +1639,17 @@ export function getHelpGlossaryHTML(){
         <dt>Baked</dt>
         <dd>Indicates that a correction (global LUT, LAB table, or Smart curve) has been permanently folded into the current baseline curve. Baked data no longer re-applies on redraw; it updates ink-limit fields, exports, and history so further edits start from the corrected curve.</dd>
 
-        <dt>Bell Apex Shift</dt>
-        <dd>An Edit Curve panel control that appears only when Edit Mode is on and the selected channel classifies as bell. It shows the apex input % plus ± buttons / numeric entry so you can nudge the bell left or right without rebuilding Smart points. Shift-click the buttons for larger hops; undo/redo captures every move, and existing Smart point ordinals stay in place while their X positions slide.</dd>
-
         <dt>Bell apex</dt>
         <dd>The peak-input percentage of a bell-shaped channel (start low → mid-curve rise → low). quadGEN detects it per channel, displays it in the Edit Curve Bell Apex card, and exposes it via <code>getChannelShapeMeta()</code>.</dd>
 
+        <dt>Bell Apex Shift</dt>
+        <dd>An Edit Curve panel control that appears only when Edit Mode is on and the selected channel classifies as bell. It shows the apex input % plus ± buttons / numeric entry so you can nudge the bell left or right without rebuilding Smart points. Shift-click the buttons for larger hops; undo/redo captures every move, and existing Smart point ordinals stay in place while their X positions slide.</dd>
+
         <dt>Bell curve (ink channel)</dt>
         <dd>A channel profile that starts near 0 %, rises to a mid-curve apex, then tapers back toward 0 %. quadGEN highlights these highlight-heavy channels with a 🔔 badge in the channel table and exposes the detection via <code>window.getChannelShapeMeta()</code>.</dd>
+
+        <dt>Bell Width Scale</dt>
+        <dd>The Edit Curve panel card that widens or tightens the left and/or right slopes of a bell-classified channel without moving its apex. It exposes left/right percent inputs, ± nudges (Shift for ±5 %), a Reset button, and a link toggle so you can keep both sides tied together or adjust them independently; metadata lives under <code>getChannelShapeMeta().bellWidthScale</code>.</dd>
 
         <dt>ACV (Photoshop Curves)</dt>
         <dd>Binary curve format used by Adobe Photoshop (<code>.acv</code>). In quadGEN: can be loaded as a global correction or per-channel adapter; anchors can seed editable Smart curve.</dd>

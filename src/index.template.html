@@ -403,6 +403,40 @@ Scope: This license applies to this HTML file (quadgen.html) only.
    </div>
  </div>
 
+  <div class="border border-gray-200 rounded-lg p-2.5 hidden" id="editBellWidthContainer">
+    <div class="flex items-center justify-between gap-3">
+      <div class="flex items-center gap-1.5">
+        <button type="button" class="tooltip-trigger inline-flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-full border border-gray-200 text-[10px] font-semibold text-gray-400 hover:text-gray-600 hover:border-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" data-tooltip="Adjust left/right width to widen or tighten the bell without moving its apex. Values are percents of the original span; linked mode nudges both sides together.">?</button>
+        <span class="text-xs text-gray-700 font-bold uppercase tracking-wide">Bell Width</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <button type="button" class="px-2 py-0.5 text-[11px] font-semibold rounded border border-gray-300 bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500 text-gray-600 flex items-center gap-1 disabled:opacity-40 disabled:cursor-not-allowed" id="bellWidthLinkToggle" aria-pressed="true" data-tooltip="Link or unlink left/right width edits.">
+          <span class="text-base leading-none" aria-hidden="true">⛓</span>
+          <span>Linked</span>
+        </button>
+        <button type="button" class="px-2 py-0.5 text-[11px] font-semibold text-gray-600 border border-gray-300 rounded bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed" id="bellWidthResetBtn">Reset</button>
+      </div>
+    </div>
+    <div class="mt-2 flex flex-col gap-2">
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">Left</span>
+        <div class="flex items-center gap-1.5">
+          <button type="button" class="px-2 py-0.5 text-xs font-semibold border border-gray-300 rounded bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed" data-bell-width-nudge="left-dec" aria-label="Decrease left width" id="bellWidthLeftDec">−</button>
+          <input type="text" inputmode="decimal" autocomplete="off" pattern="[0-9]*" value="100" class="w-20 rounded border border-gray-300 px-2 py-1 text-right text-xs font-semibold focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed" id="bellWidthLeftInput" aria-label="Left bell width percent">
+          <button type="button" class="px-2 py-0.5 text-xs font-semibold border border-gray-300 rounded bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed" data-bell-width-nudge="left-inc" aria-label="Increase left width" id="bellWidthLeftInc">+</button>
+        </div>
+      </div>
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-[11px] font-semibold text-gray-600 uppercase tracking-wide">Right</span>
+        <div class="flex items-center gap-1.5">
+          <button type="button" class="px-2 py-0.5 text-xs font-semibold border border-gray-300 rounded bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed" data-bell-width-nudge="right-dec" aria-label="Decrease right width" id="bellWidthRightDec">−</button>
+          <input type="text" inputmode="decimal" autocomplete="off" pattern="[0-9]*" value="100" class="w-20 rounded border border-gray-300 px-2 py-1 text-right text-xs font-semibold focus:border-blue-500 focus:ring-1 focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed" id="bellWidthRightInput" aria-label="Right bell width percent">
+          <button type="button" class="px-2 py-0.5 text-xs font-semibold border border-gray-300 rounded bg-white hover:bg-gray-50 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-40 disabled:cursor-not-allowed" data-bell-width-nudge="right-inc" aria-label="Increase right width" id="bellWidthRightInc">+</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
  </div>
  </div>
  </div>

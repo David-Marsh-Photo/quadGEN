@@ -17,6 +17,22 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Docs
 - _Nothing yet._
 
+## [4.3.0] — 2025-10-28
+### Added
+- Bell-classified channels now surface a “Bell Width” card directly beneath Bell Apex in the Edit Curve panel (Edit Mode ON) with left/right percent inputs, ±2 % nudges (Shift=±5 %), a Reset button, and a link toggle so you can widen or tighten either side of the bell without reseeding Smart curves.
+
+### Changed
+- Curve-shape metadata now reports left/right span samples plus `bellWidthScale` state (factors + linked flag) and reuses the distance-weighted Smart-point pipeline so scripts/UI can track width edits alongside apex offsets without losing ordinals.
+
+### Fixed
+- Bell Width controls react immediately in either direction: the ± buttons temporarily disable while a curve update runs, the link toggle applies instantly, and manual percent inputs clamp to the 40–250 % range so fresh edits can’t “replay” old spinner changes.
+- Bell Width Smart curves now factor in the prior width scaling, so the very first nudge in the opposite direction repositions Smart key points immediately instead of continuing in the old direction for a few clicks.
+- Bell Width Reset restores the underlying curve samples (not just the Smart points), so the plotted line now snaps back to the baseline bell whenever the card is reset to 100 %.
+- Smart-mode Bell Width edits now regenerate the plotted samples, so the blue curve tracks the moved Smart key points instead of leaving the handles floating over an unchanged line until some other refresh kicks in.
+
+### Docs
+- Documented the Bell Width Scale workflow (feature spec, manual tests, Help → Glossary/Version History) and noted the shared bell-curve helpers + controller tests covering the new control.
+
 ## [4.2.7] — 2025-10-26
 ### Added
 - Bell-classified channels now surface a “Bell Apex” control inside the Edit Curve panel (Edit Mode ON) with nudge buttons and numeric entry so you can shift the detected apex horizontally without redrawing Smart points; the shift reweights samples around the peak and records undo/redo history.
