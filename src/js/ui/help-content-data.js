@@ -16,6 +16,27 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '4.3.1': {
+    date: '2025-10-29',
+    title: 'Global correction layout fix',
+    sections: {
+      ADDED: [],
+      CHANGED: [],
+      FIXED: [
+        'Global Correction tab content now stays inside the right-panel column, eliminating the doubled-width layout when you switch tabs.'
+      ],
+      REMOVED: [],
+      DOCS: [
+        'Panel-system reference and manual regression matrix now cover the Global Correction tab layout guard plus the associated Playwright check.'
+      ]
+    },
+    aboutDialog: [
+      {
+        label: 'Global Correction layout guard',
+        desc: 'The Global Correction pane reattaches to the vertical tab wrapper on load, so selecting the 🌐 tab no longer stretches the right panel.'
+      }
+    ]
+  },
   '4.3.0': {
     date: '2025-10-28',
     title: 'Bell width scale',

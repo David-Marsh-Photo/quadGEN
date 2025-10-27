@@ -1,7 +1,7 @@
 // quadGEN Edit Mode State Management
 // Handles edit mode toggle functionality and UI state
 
-import { elements, getLoadedQuadData, ensureLoadedQuadData, getEditModeFlag, setEditModeFlag } from '../core/state.js';
+import { elements, getLoadedQuadData, ensureLoadedQuadData, getEditModeFlag, setEditModeFlag, TOTAL } from '../core/state.js';
 import { InputValidator } from '../core/validation.js';
 import {
     adjustSmartKeyPointByIndex,
@@ -21,12 +21,14 @@ import { getChannelRow } from './channel-registry.js';
 import { getStateManager } from '../core/state-manager.js';
 import { triggerInkChartUpdate, triggerProcessingDetail, triggerProcessingDetailAll, triggerRevertButtonsUpdate, triggerPreviewUpdate } from './ui-hooks.js';
 import { initializeBellShiftControls, updateBellShiftControl } from './bell-shift-controls.js';
+import { initializeBellWidthControls, updateBellWidthControls } from './bell-width-controls.js';
 import { updateSessionStatus } from './graph-status.js';
 import { registerDebugNamespace, getDebugRegistry } from '../utils/debug-registry.js';
 import { showStatus } from './status-service.js';
 import { getLegacyHelper, invokeLegacyHelper } from '../legacy/legacy-helpers.js';
 import { getHistoryManager } from '../core/history-manager.js';
 import { isChannelLocked, getChannelLockEditMessage } from '../core/channel-locks.js';
+import { make256 as make256Direct } from '../core/processing-pipeline.js';
 
 /**
  * Edit mode global state
@@ -71,6 +73,547 @@ const SmartPointDragContext = {
 function clonePoints(points) {
     if (!Array.isArray(points)) return null;
     return points.map((p) => ({ input: Number(p.input), output: Number(p.output) }));
+}
+
+const CURVE_RESOLUTION = 256;
+const SEED_TOLERANCE_PERCENT = 0.5;
+
+function editModeDebugLog(message, payload = null) {
+    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+        if (payload) {
+            console.warn(`[EDIT MODE] ${message}`, payload);
+        } else {
+            console.warn(`[EDIT MODE] ${message}`);
+        }
+    }
+}
+
+function getFallbackCurveSamples(channelName) {
+    const data = typeof getLoadedQuadData === 'function' ? getLoadedQuadData() : null;
+    if (!data) return null;
+    const sources = [
+        data.originalCurves?.[channelName],
+        data.plotBaseCurves?.[channelName],
+        data.rebasedCurves?.[channelName],
+        data.curves?.[channelName]
+    ];
+    for (let i = 0; i < sources.length; i += 1) {
+        const candidate = sources[i];
+        const isArrayLike = Array.isArray(candidate) || (typeof ArrayBuffer !== 'undefined' && ArrayBuffer.isView && ArrayBuffer.isView(candidate));
+        if (isArrayLike && candidate && candidate.length === CURVE_RESOLUTION) {
+            return Array.from(candidate);
+        }
+    }
+    return null;
+}
+
+function shouldPreferFallbackSamples(primary, fallback, tolerancePercent = SEED_TOLERANCE_PERCENT) {
+    if (!Array.isArray(fallback) || fallback.length !== CURVE_RESOLUTION) {
+        return false;
+    }
+    if (!Array.isArray(primary) || primary.length !== CURVE_RESOLUTION) {
+        return true;
+    }
+    const peak = fallback.reduce((max, value) => (Number.isFinite(value) && value > max ? value : max), 0);
+    const tolerance = Math.max(10, Math.round((peak * tolerancePercent) / 100));
+    for (let i = 0; i < fallback.length; i += 1) {
+        const primaryValue = Number(primary[i]) || 0;
+        const fallbackValue = Number(fallback[i]) || 0;
+        const delta = Math.abs(primaryValue - fallbackValue);
+        if (delta > tolerance) {
+            return true;
+        }
+        if (fallbackValue === 0 && primaryValue > 0) {
+            return true;
+        }
+        if (fallbackValue > 0 && fallbackValue <= tolerance && delta > Math.max(5, fallbackValue * 2)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function isSampleApproximatelyLinear(samples, tolerancePercent = SEED_TOLERANCE_PERCENT) {
+    if (!Array.isArray(samples) || samples.length !== CURVE_RESOLUTION) {
+        return true;
+    }
+    const lastIndex = samples.length - 1;
+    if (lastIndex <= 0) {
+        return true;
+    }
+
+    const start = Number(samples[0]) || 0;
+    const end = Number(samples[lastIndex]) || 0;
+
+    const peak = samples.reduce((max, value) => (Number.isFinite(value) && value > max ? value : max), Math.max(start, end));
+    const tolerance = Math.max(10, Math.round((Math.max(1, peak) * tolerancePercent) / 100));
+
+    for (let i = 1; i < lastIndex; i += 1) {
+        const expected = start + ((end - start) * (i / lastIndex));
+        const delta = Math.abs((Number(samples[i]) || 0) - expected);
+        if (delta > tolerance) {
+            return false;
+        }
+    }
+    return true;
+}
+
+function resolveSeedingSamples(channelName, endValue, applyLinearization, contextLabel = 'default') {
+    editModeDebugLog(`resolveSeedingSamples called for ${channelName}`, { endValue, contextLabel });
+    let samples = sampleLinearizedCurve(channelName, endValue, applyLinearization);
+    const fallback = getFallbackCurveSamples(channelName);
+    const fallbackValid = Array.isArray(fallback) && fallback.length === CURVE_RESOLUTION;
+    const loadedData = typeof getLoadedQuadData === 'function' ? getLoadedQuadData() : null;
+    const ensureSeedContext = typeof contextLabel === 'string' && contextLabel.startsWith('ensure');
+
+    if (typeof globalScope !== 'undefined') {
+        globalScope.__EDIT_LAST_SAMPLES = {
+            channel: channelName,
+            context: contextLabel,
+            hasFallback: fallbackValid,
+            usedFallback: false,
+            preview: fallbackValid ? fallback.slice(0, 6) : []
+        };
+        globalScope.__EDIT_LAST_SAMPLES_LOG = globalScope.__EDIT_LAST_SAMPLES_LOG || {};
+        globalScope.__EDIT_LAST_SAMPLES_LOG[channelName] = {
+            channel: channelName,
+            context: contextLabel,
+            hasFallback: fallbackValid,
+            preview: fallbackValid ? fallback.slice(0, 6) : []
+        };
+    }
+
+    if (ensureSeedContext && fallbackValid) {
+        editModeDebugLog(`Ensure-seed using fallback samples for ${channelName}`, { context: contextLabel });
+        if (loadedData) {
+            loadedData.curves = loadedData.curves || {};
+            loadedData.curves[channelName] = fallback.slice();
+            if (loadedData.sources && loadedData.sources[channelName] === 'smart') {
+                loadedData.sources[channelName] = 'quad';
+            }
+        }
+        if (typeof globalScope !== 'undefined' && globalScope.__EDIT_LAST_SAMPLES) {
+            globalScope.__EDIT_LAST_SAMPLES.usedFallback = true;
+        }
+        if (typeof globalScope !== 'undefined' && globalScope.__EDIT_LAST_SAMPLES_LOG && globalScope.__EDIT_LAST_SAMPLES_LOG[channelName]) {
+            globalScope.__EDIT_LAST_SAMPLES_LOG[channelName].usedFallback = true;
+        }
+        return fallback.slice();
+    }
+
+    if (!Array.isArray(samples) || samples.length !== CURVE_RESOLUTION) {
+        if (fallbackValid) {
+            editModeDebugLog(`Using fallback samples for ${channelName}`, { context: contextLabel, reason: 'primary_missing' });
+            if (loadedData) {
+                loadedData.curves = loadedData.curves || {};
+                loadedData.curves[channelName] = fallback.slice();
+                if (loadedData.sources && loadedData.sources[channelName] === 'smart') {
+                    loadedData.sources[channelName] = 'quad';
+                }
+            }
+            if (typeof globalScope !== 'undefined' && globalScope.__EDIT_LAST_SAMPLES) {
+                globalScope.__EDIT_LAST_SAMPLES.usedFallback = true;
+                if (globalScope.__EDIT_LAST_SAMPLES_LOG && globalScope.__EDIT_LAST_SAMPLES_LOG[channelName]) {
+                    globalScope.__EDIT_LAST_SAMPLES_LOG[channelName].usedFallback = true;
+                }
+            }
+            seedChannelFromSamples(channelName, fallback, `${contextLabel}:fallback-primary-missing`);
+            return fallback;
+        }
+        return null;
+    }
+
+    if (fallbackValid && shouldPreferFallbackSamples(samples, fallback)) {
+        editModeDebugLog(`Fallback samples preferred for ${channelName}`, { context: contextLabel, reason: 'mismatch' });
+        if (loadedData) {
+            loadedData.curves = loadedData.curves || {};
+            loadedData.curves[channelName] = fallback.slice();
+            if (loadedData.sources && loadedData.sources[channelName] === 'smart') {
+                loadedData.sources[channelName] = 'quad';
+            }
+        }
+        if (typeof globalScope !== 'undefined' && globalScope.__EDIT_LAST_SAMPLES) {
+            globalScope.__EDIT_LAST_SAMPLES.usedFallback = true;
+            if (globalScope.__EDIT_LAST_SAMPLES_LOG && globalScope.__EDIT_LAST_SAMPLES_LOG[channelName]) {
+                globalScope.__EDIT_LAST_SAMPLES_LOG[channelName].usedFallback = true;
+            }
+        }
+        seedChannelFromSamples(channelName, fallback, `${contextLabel}:fallback-mismatch`);
+        return fallback;
+    }
+
+    return samples;
+}
+
+function seedChannelFromSamples(channelName, samples, contextLabel = 'default') {
+    editModeDebugLog('seedChannelFromSamples invoked', {
+        channelName,
+        context: contextLabel,
+        sampleCount: Array.isArray(samples) ? samples.length : 0
+    });
+    if (!Array.isArray(samples) || samples.length !== CURVE_RESOLUTION) {
+        return false;
+    }
+    const ensureContext = typeof contextLabel === 'string' && contextLabel.startsWith('ensure');
+    const fallbackSamples = getFallbackCurveSamples(channelName);
+    if (ensureContext && Array.isArray(fallbackSamples) && fallbackSamples.length === CURVE_RESOLUTION) {
+        samples = fallbackSamples.slice();
+        if (typeof globalScope !== 'undefined' && globalScope.__EDIT_LAST_SAMPLES) {
+            globalScope.__EDIT_LAST_SAMPLES.usedFallback = true;
+        }
+        if (typeof globalScope !== 'undefined' && globalScope.__EDIT_LAST_SAMPLES_LOG && globalScope.__EDIT_LAST_SAMPLES_LOG[channelName]) {
+            globalScope.__EDIT_LAST_SAMPLES_LOG[channelName].usedFallback = true;
+        }
+    }
+    const fallbackValid = Array.isArray(fallbackSamples) && fallbackSamples.length === CURVE_RESOLUTION;
+    const verificationTarget = fallbackValid
+        ? fallbackSamples
+        : samples;
+    if (!ensureContext && Array.isArray(fallbackSamples) && fallbackSamples.length === CURVE_RESOLUTION && shouldPreferFallbackSamples(samples, fallbackSamples)) {
+        editModeDebugLog(`Seed samples overridden by fallback for ${channelName}`, { context: contextLabel });
+        samples = fallbackSamples.slice();
+        if (typeof globalScope !== 'undefined' && globalScope.__EDIT_LAST_SAMPLES) {
+            globalScope.__EDIT_LAST_SAMPLES.usedFallback = true;
+        }
+        if (typeof globalScope !== 'undefined' && globalScope.__EDIT_LAST_SAMPLES_LOG && globalScope.__EDIT_LAST_SAMPLES_LOG[channelName]) {
+            globalScope.__EDIT_LAST_SAMPLES_LOG[channelName].usedFallback = true;
+        }
+    }
+    const peak = samples.reduce((max, value) => (Number.isFinite(value) && value > max ? value : max), 0);
+    const row = elements.rows ? Array.from(elements.rows.children).find((tr) => tr.getAttribute('data-channel') === channelName) : null;
+    const percentInput = row?.querySelector('.percent-input');
+    const endInput = row?.querySelector('.end-input');
+    const resolvedEnd = Number.parseInt(endInput?.value || '0', 10);
+    const scaleMax = Math.max(1, Number.isFinite(resolvedEnd) && resolvedEnd > 0 ? resolvedEnd : peak);
+    const linearSource = isSampleApproximatelyLinear(samples);
+
+    let activeSamples = samples;
+    let seedResult = deriveSeedPointsFromSamples(channelName, activeSamples, { scaleMax });
+
+    if ((!seedResult || !Array.isArray(seedResult.points) || seedResult.points.length < 2) && fallbackValid) {
+        const fallbackResult = deriveSeedPointsFromSamples(channelName, fallbackSamples, { scaleMax });
+        if (fallbackResult && Array.isArray(fallbackResult.points) && fallbackResult.points.length > (seedResult?.points?.length || 0)) {
+            seedResult = fallbackResult;
+            activeSamples = fallbackSamples;
+        }
+    }
+    if (!seedResult || !Array.isArray(seedResult.points) || seedResult.points.length < 2) {
+        console.warn('[EDIT MODE] seedChannelFromSamples failed', {
+            channelName,
+            context: contextLabel,
+            samplePreview: activeSamples.slice(0, 8),
+            pointCount: seedResult?.points?.length || 0,
+            scaleMax
+        });
+        return false;
+    }
+
+    if (seedResult.points.length <= 2 && !linearSource) {
+        editModeDebugLog(`Rejected 2-point Smart seed for ${channelName}`, {
+            context: contextLabel,
+            reason: 'non_linear_source',
+            peak,
+            scaleMax
+        });
+        return false;
+    }
+
+    let channelPercent = Number.parseFloat(percentInput?.value || '0');
+    if (!Number.isFinite(channelPercent) || channelPercent <= 0) {
+        channelPercent = InputValidator.computePercentFromEnd(Number.isFinite(resolvedEnd) && resolvedEnd > 0 ? resolvedEnd : TOTAL);
+    }
+
+    const referenceSamples = fallbackValid ? fallbackSamples : activeSamples;
+    const sampleLastIndex = referenceSamples.length - 1;
+    const safeTotal = Number.isFinite(TOTAL) && TOTAL > 0 ? TOTAL : 65535;
+
+    const convertToAbsolutePoints = (points) => points.map((point) => {
+        const normalizedOutput = Math.max(0, Math.min(100, Number(point.output)));
+        const input = Number(point.input);
+        let absolutePercent = null;
+
+        if (sampleLastIndex >= 0) {
+            const sampleIndex = Math.max(0, Math.min(sampleLastIndex, Math.round((input / 100) * sampleLastIndex)));
+            const sampleValue = Number(referenceSamples[sampleIndex]);
+            if (Number.isFinite(sampleValue) && safeTotal > 0) {
+                absolutePercent = (sampleValue / safeTotal) * 100;
+            }
+        }
+
+        if (!Number.isFinite(absolutePercent)) {
+            absolutePercent = Number.isFinite(channelPercent) && channelPercent > 0
+                ? (normalizedOutput / 100) * channelPercent
+                : normalizedOutput;
+        }
+
+        return {
+            input,
+            output: Math.max(0, Math.min(100, absolutePercent))
+        };
+    });
+
+    const absolutePoints = convertToAbsolutePoints(seedResult.points);
+
+    persistSmartPoints(channelName, absolutePoints, 'smooth', {
+        channelPercentOverride: channelPercent,
+        pointsAreRelative: false,
+        smartTouched: false,
+        skipUiRefresh: false,
+        includeBakedFlags: false,
+        sourceSamples: referenceSamples
+    });
+
+    let effectivePoints = absolutePoints;
+
+    const verification = verifySmartCurveMatchesSource(channelName, verificationTarget, 0.05);
+    if (!verification.ok) {
+        editModeDebugLog(`Smart seed mismatch detected for ${channelName}`, {
+            context: contextLabel,
+            ...verification
+        });
+        const tightened = deriveSeedPointsFromSamples(channelName, activeSamples, {
+            scaleMax,
+            maxErrorPercent: Math.max(0.02, (options?.maxErrorPercent || KP_SIMPLIFY.maxErrorPercent) * 0.5),
+            maxPoints: options?.maxPoints || KP_SIMPLIFY.maxPoints
+        });
+        if (tightened && Array.isArray(tightened.points) && tightened.points.length >= 2) {
+            const tightenedAbsolute = convertToAbsolutePoints(tightened.points);
+            persistSmartPoints(channelName, tightenedAbsolute, 'smooth', {
+                channelPercentOverride: channelPercent,
+                pointsAreRelative: false,
+                smartTouched: false,
+                skipUiRefresh: false,
+                includeBakedFlags: false,
+                sourceSamples: referenceSamples
+            });
+            const secondaryCheck = verifySmartCurveMatchesSource(channelName, verificationTarget, 0.05);
+            if (secondaryCheck.ok) {
+                effectivePoints = tightenedAbsolute;
+            } else {
+                editModeDebugLog(`Tightened reseed still mismatched for ${channelName}`, secondaryCheck);
+            }
+        }
+    }
+
+    editModeDebugLog(`Seeded ${effectivePoints.length} Smart key points for ${channelName}`, { context: contextLabel });
+    if (typeof globalScope !== 'undefined') {
+        globalScope.__EDIT_LAST_SEED = {
+            channelName,
+            context: contextLabel,
+            pointCount: effectivePoints.length,
+            linearSource,
+            peak: seedResult?.peak ?? peak,
+            scaleMax,
+            preview: activeSamples.slice(0, 8)
+        };
+        globalScope.__EDIT_SEED_AUDIT = globalScope.__EDIT_SEED_AUDIT || {};
+        globalScope.__EDIT_SEED_AUDIT[channelName] = {
+            context: contextLabel,
+            absolutePreview: absolutePoints.slice(0, 6),
+            samplePreview: activeSamples.slice(0, 6)
+        };
+    }
+    return true;
+}
+
+function seedSmartPointsFromStoredCurve(channelName, contextLabel = 'stored') {
+    const samples = getFallbackCurveSamples(channelName);
+    if (!Array.isArray(samples) || samples.length !== CURVE_RESOLUTION) {
+        console.warn('[EDIT MODE] seedSmartPointsFromStoredCurve missing samples', { channelName, contextLabel });
+        return false;
+    }
+    return seedChannelFromSamples(channelName, samples, contextLabel);
+}
+
+function buildInflectionPointsFromSamples(samples, scaleMax = TOTAL) {
+    if (!Array.isArray(samples) || samples.length !== CURVE_RESOLUTION) {
+        return createDefaultKeyPoints();
+    }
+    const lastIndex = samples.length - 1;
+    const clamp = (value) => {
+        const percent = scaleMax > 0 ? (value / scaleMax) * 100 : 0;
+        return Math.max(0, Math.min(100, percent));
+    };
+    const points = [];
+    let previous = samples[0];
+    points.push({ input: 0, output: clamp(previous) });
+    for (let i = 1; i < lastIndex; i += 1) {
+        const current = samples[i];
+        if (current !== previous) {
+            const input = (i / lastIndex) * 100;
+            const output = clamp(current);
+            if (!points.some((point) => Math.abs(point.input - input) <= 0.05)) {
+                points.push({ input, output });
+            }
+            previous = current;
+        }
+    }
+    const tail = samples[lastIndex];
+    points.push({ input: 100, output: clamp(tail) });
+    return ControlPoints.normalize(points);
+}
+
+function ensurePlateauAnchors(channelName, samples, keyPoints, options = {}) {
+    if (!Array.isArray(samples) || samples.length !== CURVE_RESOLUTION) {
+        return keyPoints;
+    }
+    if (!Array.isArray(keyPoints) || keyPoints.length >= 3) {
+        return keyPoints;
+    }
+
+    const { scaleMax = TOTAL, peak = 0 } = options || {};
+    const lastIndex = samples.length - 1;
+    if (lastIndex < 2) {
+        return keyPoints;
+    }
+
+    const startValue = Number(samples[0]) || 0;
+    const endValue = Number(samples[lastIndex]) || 0;
+    if (!Number.isFinite(endValue) || endValue <= startValue) {
+        return keyPoints;
+    }
+
+    let firstRiseIndex = -1;
+    for (let i = 1; i < lastIndex; i += 1) {
+        const value = Number(samples[i]) || 0;
+        if (value > startValue) {
+            firstRiseIndex = i;
+            break;
+        }
+    }
+
+    if (firstRiseIndex <= 0 || firstRiseIndex >= lastIndex) {
+        return keyPoints;
+    }
+
+    const plateauFraction = firstRiseIndex / lastIndex;
+    // Require at least ~5% of the curve to be flat before we treat it as a plateau.
+    if (!Number.isFinite(plateauFraction) || plateauFraction < 0.05) {
+        return keyPoints;
+    }
+
+    const safeScaleMax = Math.max(1, Number(scaleMax) || TOTAL);
+    const clampPercent = (value) => Math.max(0, Math.min(100, (Number(value) || 0) / safeScaleMax * 100));
+    const plateauInput = (firstRiseIndex / lastIndex) * 100;
+    const plateauOutput = clampPercent(samples[firstRiseIndex]);
+
+    const addedAnchors = [];
+    const maybeAddAnchor = (input, output) => {
+        if (!Number.isFinite(input) || !Number.isFinite(output)) {
+            return;
+        }
+        const alreadyPresent = keyPoints.some((point) => Math.abs(point.input - input) <= 0.05 && Math.abs(point.output - output) <= 0.1)
+            || addedAnchors.some((point) => Math.abs(point.input - input) <= 0.05 && Math.abs(point.output - output) <= 0.1);
+        if (!alreadyPresent) {
+            addedAnchors.push({ input, output });
+        }
+    };
+
+    maybeAddAnchor(plateauInput, plateauOutput);
+
+    // If the plateau covers a large portion of the ramp, also capture a mid-slope point
+    if (plateauFraction > 0.25) {
+        const midIndex = Math.min(lastIndex - 1, Math.round((firstRiseIndex + lastIndex) / 2));
+        if (midIndex > firstRiseIndex) {
+            const midInput = (midIndex / lastIndex) * 100;
+            const midOutput = clampPercent(samples[midIndex]);
+            maybeAddAnchor(midInput, midOutput);
+        }
+    }
+
+    if (addedAnchors.length === 0) {
+        return keyPoints;
+    }
+
+    const merged = ControlPoints.normalize([...keyPoints, ...addedAnchors]);
+    if (merged.length >= 3) {
+        editModeDebugLog(`Plateau anchors injected for ${channelName}`, {
+            plateauFraction: Number(plateauFraction.toFixed(3)),
+            added: merged.length - keyPoints.length,
+            peak
+        });
+    }
+    return merged;
+}
+
+function deriveSeedPointsFromSamples(channelName, samples, options = {}) {
+    if (!Array.isArray(samples) || samples.length !== CURVE_RESOLUTION) {
+        return null;
+    }
+    const peak = samples.reduce((max, value) => (Number.isFinite(value) && value > max ? value : max), 0);
+    if (peak <= 0) {
+        return {
+            points: createDefaultKeyPoints(),
+            samples: samples.slice(),
+            peak
+        };
+    }
+
+    const scaleMax = Math.max(1, Number(options.scaleMax) || TOTAL);
+    const extractionOptions = {
+        maxErrorPercent: options.maxErrorPercent ?? KP_SIMPLIFY.maxErrorPercent,
+        maxPoints: options.maxPoints ?? KP_SIMPLIFY.maxPoints,
+        scaleMax
+    };
+
+    let keyPoints = extractAdaptiveKeyPointsFromValues(samples, extractionOptions);
+
+    if (!Array.isArray(keyPoints) || keyPoints.length <= 2) {
+        const refined = extractAdaptiveKeyPointsFromValues(samples, {
+            maxErrorPercent: Math.max(0.02, extractionOptions.maxErrorPercent * 0.25),
+            maxPoints: Math.max(16, extractionOptions.maxPoints + 10),
+            scaleMax
+        });
+        if (Array.isArray(refined) && refined.length > keyPoints.length) {
+            keyPoints = refined;
+        }
+    }
+
+    if (!Array.isArray(keyPoints) || keyPoints.length <= 2) {
+        editModeDebugLog(`Adaptive extraction fallback for ${channelName}`, {
+            pointCount: keyPoints?.length || 0,
+            peak,
+            scaleMax
+        });
+        keyPoints = buildInflectionPointsFromSamples(samples, scaleMax);
+    }
+
+    if (Array.isArray(keyPoints) && keyPoints.length <= 2) {
+        keyPoints = ensurePlateauAnchors(channelName, samples, keyPoints, { scaleMax, peak });
+    }
+
+    return {
+        points: ControlPoints.normalize(keyPoints),
+        samples: samples.slice(),
+        peak
+    };
+}
+
+function verifySmartCurveMatchesSource(channelName, sourceSamples, tolerancePercent = SEED_TOLERANCE_PERCENT) {
+    if (!Array.isArray(sourceSamples) || sourceSamples.length !== CURVE_RESOLUTION) {
+        return { ok: true, maxDelta: 0, tolerance: 0, worstIndex: 0 };
+    }
+    const data = typeof getLoadedQuadData === 'function' ? getLoadedQuadData() : null;
+    const current = data?.curves?.[channelName];
+    if (!Array.isArray(current) || current.length !== sourceSamples.length) {
+        return { ok: true, maxDelta: 0, tolerance: 0, worstIndex: 0 };
+    }
+    const peak = sourceSamples.reduce((max, value) => (Number.isFinite(value) && value > max ? value : max), 0);
+    const tolerance = Math.max(10, Math.round((peak * tolerancePercent) / 100));
+    let maxDelta = 0;
+    let worstIndex = 0;
+    for (let i = 0; i < sourceSamples.length; i += 1) {
+        const delta = Math.abs(sourceSamples[i] - current[i]);
+        if (delta > maxDelta) {
+            maxDelta = delta;
+            worstIndex = i;
+        }
+    }
+    const ok = maxDelta <= tolerance;
+    if (!ok) {
+        editModeDebugLog(`Smart curve mismatch for ${channelName}`, { maxDelta, tolerance, worstIndex });
+    }
+    return { ok, maxDelta, tolerance, worstIndex };
 }
 
 function formatPercentForBaseline(value) {
@@ -572,6 +1115,14 @@ if (isBrowser) {
     globalScope.__quadSetGlobalBakedState = setGlobalBakedState;
 }
 
+export const __TEST_ONLY__ = {
+    isSampleApproximatelyLinear,
+    ensurePlateauAnchors,
+    deriveSeedPointsFromSamples,
+    buildInflectionPointsFromSamples,
+    seedChannelFromSamples
+};
+
 function persistEditModeFlag(enabled) {
     const manager = getStateManagerSafe();
     if (manager && typeof manager.setEditMode === 'function') {
@@ -844,12 +1395,12 @@ export function persistSmartPoints(channelName, points, interpolation = 'smooth'
         const outputAbsolute = Number(p.output);
         let output;
         if (pointsAreRelative) {
-            output = outputAbsolute;
+            output = Math.max(0, Math.min(100, outputAbsolute));
         } else {
             const percent = Number.isFinite(channelPercent) && channelPercent > 0
                 ? (outputAbsolute / channelPercent) * 100
                 : outputAbsolute;
-            output = Math.max(0, Math.min(100, percent));
+            output = Math.max(0, percent);
         }
         return { input, output };
     });
@@ -964,15 +1515,31 @@ function getMeasurementContext(channelName) {
 
 function sampleLinearizedCurve(channelName, endValue, applyLinearization = true) {
     const make256Helper = resolveMake256Helper();
-    if (typeof make256Helper !== 'function') {
-        return null;
+    const candidates = [];
+    if (typeof make256Helper === 'function') {
+        candidates.push(make256Helper);
     }
-    try {
-        return make256Helper(endValue, channelName, applyLinearization, { forceSmartApplied: false });
-    } catch (err) {
-        console.warn('[EDIT MODE] Failed to sample curve:', err);
-        return null;
+    if (typeof make256Direct === 'function' && make256Direct !== make256Helper) {
+        candidates.push(make256Direct);
     }
+    for (let i = 0; i < candidates.length; i += 1) {
+        const runner = candidates[i];
+        try {
+            const result = runner(endValue, channelName, applyLinearization, { forceSmartApplied: false });
+            if (Array.isArray(result) && result.length === CURVE_RESOLUTION) {
+                const fallback = getFallbackCurveSamples(channelName);
+                if (Array.isArray(fallback) && fallback.length === CURVE_RESOLUTION && shouldPreferFallbackSamples(result, fallback)) {
+                    editModeDebugLog(`Primary make256 samples deviated for ${channelName}`, { stage: 'sampleLinearizedCurve' });
+                    return fallback.slice();
+                }
+                return result;
+            }
+        } catch (err) {
+            editModeDebugLog(`make256 execution failed for ${channelName}`, { error: err?.message });
+        }
+    }
+    editModeDebugLog(`make256 helper unavailable for ${channelName}`);
+    return null;
 }
 
 export function refreshSmartCurvesFromMeasurements() {
@@ -1215,18 +1782,25 @@ function ensureSmartKeyPointsForChannel(channelName) {
     const { points } = ControlPoints.get(channelName);
 
     // If no points exist, create default linear ramp
-    if (!points || points.length === 0) {
-        const defaultPoints = createDefaultKeyPoints(0, 100);
-        const result = setSmartKeyPoints(channelName, defaultPoints, 'smooth', {
-            smartTouched: false,
-            skipHistory: true,
-            skipMarkEdited: true,
-            allowWhenEditModeOff: true
-        });
+    if (!points || points.length === 0 || isDefaultRampPoints(points)) {
+        const row = elements.rows ? Array.from(elements.rows.children).find(tr => tr.getAttribute('data-channel') === channelName) : null;
+        const percentInput = row?.querySelector('.percent-input');
+        const endInput = row?.querySelector('.end-input');
+        const channelPercent = Number.parseFloat(percentInput?.value || '0');
+        const endValue = Number.parseInt(endInput?.value || '0', 10);
 
-        if (result.success) {
-            console.log(`[EDIT MODE] Created default key points for ${channelName}`);
+        const resolvedSamples = resolveSeedingSamples(channelName, endValue, true, 'ensure');
+        if (Array.isArray(resolvedSamples) && resolvedSamples.length === CURVE_RESOLUTION && seedChannelFromSamples(channelName, resolvedSamples, 'ensure')) {
+            return;
         }
+
+        if (seedSmartPointsFromStoredCurve(channelName, 'ensure-stored')) {
+            return;
+        }
+
+        const defaultPoints = createDefaultKeyPoints(0, 100);
+        ControlPoints.persist(channelName, defaultPoints, 'smooth');
+        console.log(`[EDIT MODE] Created default key points for ${channelName}`);
     }
 }
 
@@ -1324,6 +1898,7 @@ export function reinitializeChannelSmartCurves(channelName, options = {}) {
             let keyPoints = null;
             let seedMeta = null;
             let bakedMetaPending = null;
+            let seedSamples = null;
 
         if (hasMeasurementData && LinearizationState.isPerChannelEnabled(channelName)) {
             const perChannelData = LinearizationState.getPerChannelData(channelName);
@@ -1655,6 +2230,12 @@ function initializeEditModeForChannels() {
 
     console.log(`[EDIT MODE] Found ${enabledChannels.length} enabled channels:`, enabledChannels);
     console.log('[EDIT MODE] Enabled channel list for initialization:', enabledChannels);
+    if (typeof globalScope !== 'undefined') {
+        globalScope.__EDIT_INIT_CONTEXT = {
+            hasMeasurementData,
+            enabledChannels: enabledChannels.slice()
+        };
+    }
 
     // Create Smart key points for each enabled channel that doesn't have them
     enabledChannels.forEach(channelName => {
@@ -1674,6 +2255,10 @@ function initializeEditModeForChannels() {
             needsSeed = !measurementSeedOk || hasDefaultRamp;
         }
 
+        if (!needsSeed && hasDefaultRamp) {
+            needsSeed = true;
+        }
+
         console.log(`[EDIT MODE] Channel ${channelName}: existing=${existingPoints?.length || 0}, measurementContext=${measurementContext ? `${measurementContext.scope}:${measurementContext.format}:${measurementContext.count}` : 'none'}, needsSeed=${needsSeed}`);
 
         if (needsSeed) {
@@ -1683,6 +2268,8 @@ function initializeEditModeForChannels() {
                 let seedMeta = null;
                 let bakedMetaPending = null;
                 let keyPointsAreRelative = false;
+                let seedSamples = null;
+                let seededFromCurve = false;
 
                 const channelRow = Array.from(elements.rows.children).find(tr =>
                     tr.getAttribute('data-channel') === channelName
@@ -1692,8 +2279,18 @@ function initializeEditModeForChannels() {
                 const channelPercent = parseFloat(percentInputEl?.value || '0');
                 const endValue = parseInt(endInputEl?.value || '0', 10);
 
+                const resolvedSamples = resolveSeedingSamples(channelName, endValue, hasMeasurementData, 'initialize');
+                if (Array.isArray(resolvedSamples) && resolvedSamples.length === CURVE_RESOLUTION) {
+                    if (seedChannelFromSamples(channelName, resolvedSamples, 'initialize')) {
+                        seededFromCurve = true;
+                        seedSamples = resolvedSamples;
+                        keyPointsAreRelative = true;
+                        keyPoints = ControlPoints.get(channelName)?.points || null;
+                    }
+                }
+
                 // If measurement data exists, create key points at regular measurement-like intervals
-                if (hasMeasurementData && LinearizationState.isPerChannelEnabled(channelName)) {
+                if (!seededFromCurve && hasMeasurementData && LinearizationState.isPerChannelEnabled(channelName)) {
                     const perChannelData = LinearizationState.getPerChannelData(channelName);
                     const perFormat = (perChannelData?.format || '').toUpperCase();
                     console.log(`[EDIT MODE] Creating measurement-like key points for ${channelName}`);
@@ -1761,7 +2358,7 @@ function initializeEditModeForChannels() {
                         console.log(`[EDIT MODE] ✅ Created ${keyPoints.length} adaptive key points for ${channelName} from measurement curve`);
                     }
                 }
-        } else if (hasMeasurementData && LinearizationState.globalApplied) {
+        } else if (!seededFromCurve && hasMeasurementData && LinearizationState.globalApplied) {
             // Check if global linearization has original measurement data for direct seeding
             const DIRECT_SEED_MAX_POINTS = 25; // Legacy quadgen.html constant
 
@@ -1910,27 +2507,26 @@ function initializeEditModeForChannels() {
                     console.log(`[EDIT MODE] ✅ Generated ${keyPoints.length} key points for ${channelName} using normalized measurement fallback`);
                 }
             }
-        } else {
-                    // Fallback: extract key points from curve using algorithm
-                    const channelRow = Array.from(elements.rows.children).find(tr =>
-                        tr.getAttribute('data-channel') === channelName
-                    );
-                    const endInput = channelRow?.querySelector('.end-input');
-                    const endValue = parseInt(endInput?.value || '0', 10);
+        } else if (!seededFromCurve) {
+            // Fallback: extract key points from curve using stored samples when helpers are unavailable
+            const channelRow = Array.from(elements.rows.children).find(tr =>
+                tr.getAttribute('data-channel') === channelName
+            );
+            const endInput = channelRow?.querySelector('.end-input');
+            const endValue = parseInt(endInput?.value || '0', 10);
 
-                    const values = sampleLinearizedCurve(channelName, endValue, hasMeasurementData);
-
-                    if (values && values.length === 256) {
-                        keyPoints = extractAdaptiveKeyPointsFromValues(values, {
-                            maxErrorPercent: KP_SIMPLIFY.maxErrorPercent,
-                            maxPoints: KP_SIMPLIFY.maxPoints
-                        });
-                        console.log(`[EDIT MODE] ✅ Created ${keyPoints.length} algorithm-extracted key points for ${channelName}`);
+                if (!seededFromCurve && Array.isArray(resolvedSamples) && resolvedSamples.length === CURVE_RESOLUTION) {
+                    if (seedChannelFromSamples(channelName, resolvedSamples, 'initialize-fallback')) {
+                        seededFromCurve = true;
+                        seedSamples = resolvedSamples;
+                        keyPointsAreRelative = true;
+                        keyPoints = ControlPoints.get(channelName)?.points || null;
                     }
                 }
+        }
 
                 // Apply the key points if we have them
-                if (keyPoints && keyPoints.length >= 2) {
+                if (keyPoints && keyPoints.length >= 2 && !seededFromCurve) {
                     const channelPercentValid = Number.isFinite(channelPercent) && channelPercent > 0 ? channelPercent : null;
                    const seededFromMeasurement = !!(seedMeta && seedMeta.measurementSeed);
                    const persistOptions = {
@@ -1938,7 +2534,8 @@ function initializeEditModeForChannels() {
                        channelPercentOverride: channelPercentValid,
                        pointsAreRelative: true,
                        skipUiRefresh: false,
-                       includeBakedFlags: true
+                       includeBakedFlags: true,
+                       sourceSamples: seedSamples
                    };
 
                    const basePercent = channelPercentValid && channelPercentValid > 0
@@ -1962,9 +2559,39 @@ function initializeEditModeForChannels() {
                         return {
                             input: Number(point.input),
                             output: Math.max(0, Math.min(100, relativeValue))
-                        };
+                       };
                     });
                    persistSmartPoints(channelName, relativePoints, 'smooth', persistOptions);
+                   if (!seededFromMeasurement && Array.isArray(seedSamples) && seedSamples.length === CURVE_RESOLUTION) {
+                       const verification = verifySmartCurveMatchesSource(channelName, seedSamples);
+                       if (!verification.ok) {
+                           const fallbackAbsolute = buildInflectionPointsFromSamples(seedSamples, TOTAL);
+                           if (Array.isArray(fallbackAbsolute) && fallbackAbsolute.length >= 2) {
+                               const fallbackRelative = fallbackAbsolute.map((point) => {
+                                   const absolute = Number(point.output);
+                                   if (channelPercentValid && channelPercentValid > 0) {
+                                       return {
+                                           input: Number(point.input),
+                                           output: Math.max(0, Math.min(100, (absolute / channelPercentValid) * 100))
+                                       };
+                                   }
+                                   return {
+                                       input: Number(point.input),
+                                       output: Math.max(0, Math.min(100, absolute))
+                                   };
+                               });
+                               editModeDebugLog(`Retrying Smart seed with inflection fallback for ${channelName}`, verification);
+                               persistSmartPoints(channelName, fallbackRelative, 'smooth', {
+                                   channelPercentOverride: channelPercentValid,
+                                   pointsAreRelative: true,
+                                   skipUiRefresh: false,
+                                   includeBakedFlags: true,
+                                   smartTouched: true
+                               });
+                           }
+                       }
+                       seedSamples = null;
+                   }
                     let bakeMeta = null;
                     if (seededFromMeasurement) {
                         if (measurementContext?.scope === 'global') {
@@ -1986,7 +2613,7 @@ function initializeEditModeForChannels() {
                     if (bakeMeta) {
                         setGlobalBakedState(bakeMeta);
                     }
-                } else {
+                } else if (!seededFromCurve) {
                     // Final fallback: create simple linear points
                     const linearPoints = createDefaultKeyPoints();
                     const channelPercentValid = Number.isFinite(channelPercent) && channelPercent > 0 ? channelPercent : null;
@@ -2008,6 +2635,15 @@ function initializeEditModeForChannels() {
                     };
                     persistSmartPoints(channelName, relativeLinear, 'smooth', fallbackOptions);
                     console.log(`[EDIT MODE] ✅ Created default linear points for ${channelName}`);
+                } else {
+                    console.log(`[EDIT MODE] ✅ Preserved existing Smart key points for ${channelName} from fallback samples`);
+                }
+
+                const finalPoints = ControlPoints.get(channelName)?.points || [];
+                if (!Array.isArray(finalPoints) || finalPoints.length <= 2 || isDefaultRampPoints(finalPoints)) {
+                    if (seedSmartPointsFromStoredCurve(channelName, 'initialize-final')) {
+                        console.log(`[EDIT MODE] ✅ Rebuilt Smart key points for ${channelName} from stored curve`);
+                    }
                 }
             } catch (err) {
                 console.warn(`[EDIT MODE] Failed to create Smart key points for ${channelName}:`, err);
@@ -2179,6 +2815,11 @@ function refreshEditState() {
     } catch (err) {
         console.warn('[EDIT MODE] Failed to refresh bell apex control:', err);
     }
+    try {
+        updateBellWidthControls(ch);
+    } catch (err) {
+        console.warn('[EDIT MODE] Failed to refresh bell width controls:', err);
+    }
 
     // Update channel state display
     if (elements.editChannelState) {
@@ -2338,6 +2979,7 @@ export function initializeEditMode() {
     // Initialize edit control handlers
     initializeEditControlHandlers();
     initializeBellShiftControls();
+    initializeBellWidthControls();
 
     console.log('✅ Edit mode system initialized');
 }

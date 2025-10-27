@@ -17,6 +17,19 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Docs
 - _Nothing yet._
 
+## [4.3.1] — 2025-10-29
+### Added
+- _Nothing yet._
+
+### Changed
+- _Nothing yet._
+
+### Fixed
+- Global Correction tab stays within the right-panel column when activated, preventing the side panel from doubling in width or breaking the layout.
+
+### Docs
+- Added a regression checklist item covering the Global Correction tab layout and updated panel-system notes with the new DOM guard.
+
 ## [4.3.0] — 2025-10-28
 ### Added
 - Bell-classified channels now surface a “Bell Width” card directly beneath Bell Apex in the Edit Curve panel (Edit Mode ON) with left/right percent inputs, ±2 % nudges (Shift=±5 %), a Reset button, and a link toggle so you can widen or tighten either side of the bell without reseeding Smart curves.
