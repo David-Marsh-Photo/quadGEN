@@ -24,6 +24,7 @@ import {
     applyCorrectionGainPercent
 } from './chart-manager.js';
 import { setInkLoadThreshold, getInkLoadThreshold } from '../core/ink-load.js';
+import { clearLightBlockingCache } from '../core/light-blocking.js';
 import { getCurrentScale, reapplyCurrentGlobalScale, updateScaleBaselineForChannel as updateScaleBaselineForChannelCore, validateScalingStateSync } from '../core/scaling-utils.js';
 import { SCALING_STATE_FLAG_EVENT } from '../core/scaling-constants.js';
 import scalingCoordinator from '../core/scaling-coordinator.js';
@@ -6384,6 +6385,7 @@ export function setupChannelRow(tr) {
 
     if (densityInput) {
         markEditing(densityInput, () => commitDensityInput());
+        densityInput.addEventListener('input', () => commitDensityInput());
         densityInput.addEventListener('change', () => commitDensityInput());
     }
 
@@ -6574,6 +6576,10 @@ unsubscribeChannelDensityStore = subscribeChannelDensities((channelName, payload
     if (!row) return;
     if (payload && typeof payload === 'object') {
         applyDensityStateToRow(row, payload);
+        clearLightBlockingCache();
+        if (typeof updateInkChart === 'function') {
+            updateInkChart();
+        }
     }
 });
 

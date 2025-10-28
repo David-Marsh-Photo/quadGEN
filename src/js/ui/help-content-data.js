@@ -16,6 +16,30 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '4.3.2': {
+    date: '2025-10-30',
+    title: 'Light blocking overlay fixes',
+    sections: {
+      ADDED: [],
+      CHANGED: [],
+      FIXED: [
+        'Light blocking overlay reference line now remains fully visible at all zoom levels instead of being cut off when zooming past 100%.',
+        'Light blocking overlay now updates immediately when channel density values change instead of requiring focus loss and mouse hover to refresh.'
+      ],
+      REMOVED: [],
+      DOCS: []
+    },
+    aboutDialog: [
+      {
+        label: 'Light blocking overlay zoom fix',
+        desc: 'The reference line now scales correctly with zoom level and stays visible when zoomed in past 100%.'
+      },
+      {
+        label: 'Light blocking real-time updates',
+        desc: 'The overlay refreshes immediately as you type density values instead of waiting for blur and mouseover.'
+      }
+    ]
+  },
   '4.3.1': {
     date: '2025-10-29',
     title: 'Global correction layout fix',

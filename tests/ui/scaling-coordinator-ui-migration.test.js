@@ -53,6 +53,7 @@ vi.mock('../../src/js/core/state.js', () => {
     setLoadedQuadData: vi.fn(),
     getLoadedQuadData: vi.fn(),
     ensureLoadedQuadData: vi.fn(),
+    subscribeLoadedQuadData: vi.fn(() => () => {}),
     getAppState: () => appState,
     updateAppState: (updates) => Object.assign(appState, updates),
     getPlotSmoothingPercent: () => 0,

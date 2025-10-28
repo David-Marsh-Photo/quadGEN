@@ -2841,6 +2841,9 @@ function drawLightBlockingReference(ctx, geom) {
         return; // No valid reference curve
     }
 
+    // Get displayMax for zoom-aware scaling
+    const displayMax = Number.isFinite(geom?.displayMax) && geom.displayMax > 0 ? geom.displayMax : 100;
+
     // Draw the reference curve as a dashed line
     ctx.save();
     ctx.strokeStyle = LIGHT_BLOCKING_REFERENCE_COLOR;
@@ -2851,7 +2854,8 @@ function drawLightBlockingReference(ctx, geom) {
     const lastIndex = referenceCurve.length - 1;
     for (let i = 0; i < referenceCurve.length; i++) {
         const inputPercent = (i / lastIndex) * 100;
-        const outputPercent = referenceCurve[i];
+        const normalizedValue = referenceCurve[i];
+        const outputPercent = Math.max(0, Math.min(displayMax, (normalizedValue / 100) * displayMax));
         const x = mapPercentToX(inputPercent, geom);
         const y = mapPercentToY(outputPercent, geom);
 

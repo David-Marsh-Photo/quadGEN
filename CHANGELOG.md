@@ -17,6 +17,20 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Docs
 - _Nothing yet._
 
+## [4.3.2] — 2025-10-30
+### Added
+- _Nothing yet._
+
+### Changed
+- _Nothing yet._
+
+### Fixed
+- Light blocking overlay reference line now remains fully visible at all zoom levels instead of being cut off when zooming past 100%.
+- Light blocking overlay now updates immediately when channel density values change instead of requiring focus loss and mouse hover to refresh.
+
+### Docs
+- _Nothing yet._
+
 ## [4.3.1] — 2025-10-29
 ### Added
 - _Nothing yet._
