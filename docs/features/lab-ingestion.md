@@ -27,6 +27,11 @@
    - Populate `LinearizationState` (global + per-channel) and mark `hasAnyLinearization`.
    - Update UI labels (filename, channels list, measurement badges) and enable global/per-channel revert buttons.
    - Seed Smart key points when Edit Mode is active using either direct measurement points or adaptive simplifier.
+   - **Simple Scaling correction** (default method for LAB loads):
+     - Generates LAB-corrected curves via `make256(..., true)` for gain blending
+     - Stores corrected curves in `LinearizationState.globalCorrectedCurvesBase`
+     - `loadedData.curves` contains baseline for rendering; corrected curves used only for gain blending
+     - See `docs/features/correction_gain.md` for blending architecture details
 
 4. **Undo/Redo**
    - Loading measurement data is undoable; undo clears measurement state and restores original `.quad` curves and Smart metadata.
@@ -57,3 +62,49 @@
 - Parser modules: `src/js/data/`.
 - Smoothing helpers: `src/js/data/linearization-utils.js`.
 - UI wiring: `src/js/ui/event-handlers.js` (file inputs), `src/js/ui/revert-controls.js`.
+
+## Implementation Architecture: Simple Scaling and Corrected Curves
+
+### Simple Scaling Correction Method
+The default correction method for LAB data loads is `SIMPLE_SCALING` (`src/js/core/correction-method.js`), which:
+
+1. **Computes gain curve metadata** without modifying the baseline curves in `loadedData.curves`
+2. **Generates LAB-corrected curves** separately for gain blending via `make256(..., true)`
+3. **Stores both** in LinearizationState:
+   - `globalBaselineCurves`: Original .quad curves or linear ramps (for 0% gain)
+   - `globalCorrectedCurvesBase`: LAB-corrected curves (for 100% gain)
+   - Correction gain slider blends between these two curve sets
+
+### Critical Implementation Requirements
+
+**Problem**: `loadedData.curves` contains baseline curves (used for rendering/export). Zero-smoothing and normalization code paths restore/manipulate these baseline curves. If these paths call `setGlobalCorrectedCurves(loadedData.curves)`, they overwrite LAB-corrected curves with baseline, causing 100% gain to render without corrections.
+
+**Solution**: Guard all `setGlobalCorrectedCurves()` calls with:
+```javascript
+if (loadedData.correctionMethod !== CORRECTION_METHODS.SIMPLE_SCALING) {
+    LinearizationState.setGlobalCorrectedCurves(loadedData.curves);
+}
+```
+
+**Required guard locations** (event-handlers.js):
+- Line 1288-1289: `restoreZeroSmoothingSnapshot()` - zero-restore path
+- Line 1799-1800: `refreshLinearizationDataForNormalization()` - baseline rescale
+- Line 1900-1901: `refreshLinearizationDataForNormalization()` - zero-snapshot sync
+- Line 3757: `rebaseChannelsToCorrectedCurves()` - rebase path (already has guard)
+
+**Correct corrected curve generation** (event-handlers.js:3416-3419):
+```javascript
+// Generate LAB-corrected curves by calling make256 WITH linearization applied
+const labCorrected = make256(entry.currentEnd, entry.channelName, true, undefined);
+correctedCurves[entry.channelName] = Array.isArray(labCorrected) ? labCorrected.slice() : samples.slice();
+```
+
+### Test Coverage
+- `tests/e2e/correction-gain-100-baseline.spec.ts` validates:
+  - At 100% gain, LAB corrections are fully applied (not baseline)
+  - 99% and 100% gain produce identical results
+  - Corrected curves in LinearizationState contain LAB-corrected data
+
+### References
+- Correction gain blending architecture: `docs/features/correction_gain.md`
+- Bug investigation history: `artifacts/correction_gain_bug.md`

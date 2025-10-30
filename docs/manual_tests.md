@@ -24,6 +24,17 @@ Goal: confirm the Manual L* modal restores the saved Patch % layout instead of r
 
 Reset: Clear browser storage (e.g., `localStorage.removeItem('quadgen.manualLstarLayout')`) if you need to restore the default five evenly spaced rows before the next run.
 
+## Global Correction Tab Layout
+Goal: ensure selecting the Global Correction tab in the right panel does not reflow the layout or expand the side panel beyond its saved width.
+
+### Manual Steps:
+1. Load the latest `index.html`, then click the 🌐 **Global Correction** vertical tab in the right panel.
+2. Confirm the Global Correction controls render directly under the tab buttons (inside the existing column) and the panel width matches the previously saved size—no second column should appear.
+3. Resize the app window narrower and wider; the tab content must continue stacking under the navigation without forcing the right panel past its maximum width.
+4. Reload the page. The right panel should initialize at the saved width and, once again, the Global Correction tab should occupy the same column when activated.
+
+If any step causes the panel to double in width or move the tab content outside the column, capture a screenshot and include console logs from `window.getComputedStyle(document.querySelector('#rightPanel')).width`.
+
 ## Edit Mode — Curve Point Dragging
 Goal: confirm the curve point dragging toggle (Options panel) works and preserves Smart-curve ordering.
 
@@ -103,6 +114,15 @@ Goal: confirm that loading a new LAB/CGATS/manual dataset reshapes baked `.quad`
    - Optionally sample the values via `window.__quadDebug?.chartDebug?.getCurveSamplesForChannel?.('K', document.querySelector('tr.channel-row[data-channel=\"K\"]'));` – the `percent` at ~40 % input should differ from the baseline by at least 5 %.
 5. Toggle the gain to 99 % and back to 100 % to confirm the curve stays reshaped (no more “only at 99 %” workaround).
 6. Document pass/fail with a screenshot of the chart showing the corrected highlight segment. Include the console sample if the visual difference is subtle.
+
+### Automated Coverage
+This workflow is now covered by automated regression tests:
+- `tests/e2e/correction-gain-100-baseline.spec.ts` validates:
+  - At 100% gain, LAB corrections are fully applied (not baseline curves)
+  - 99% and 100% gain produce identical results (fixing the "only at 99%" bug)
+  - Stored corrected curves in LinearizationState contain LAB-corrected data
+- Run with: `npx playwright test tests/e2e/correction-gain-100-baseline.spec.ts`
+- See `artifacts/correction_gain_bug.md` for bug investigation history and `docs/features/correction_gain.md` for implementation architecture
 
 ## Plot Smoothing Tail
 Goal: confirm aggressive plot smoothing keeps the highlight region smooth.
@@ -338,7 +358,20 @@ Goal: validate the per-channel Bell Apex control only appears for bell-classifie
 5. While still in Edit Mode, verify the Smart point list (and numbered labels on the chart) keeps the same ordinals before and after each shift—only the X positions should slide; no points should be inserted, removed, or renumbered automatically.
 6. Repeat steps 3–5 for LK (use the channel dropdown) to confirm each bell channel maintains its own offset and the card updates as you switch channels.
 6. Load a monotonic file (e.g., `data/P800_K36C26LK25_V6.quad`) and confirm the Bell Apex card hides itself until you load another bell-classified dataset.
-7. Capture a screenshot of the Edit panel before/after shifting plus a console metadata dump; store alongside the automated Playwright artifact.
+
+## Bell Width Scale Control
+Goal: verify the Bell Width card shows only for bell-classified channels, honors the left/right/link inputs, and preserves Smart-curve metadata plus undo history.
+
+### Manual Steps:
+1. Load the latest `index.html`, import `data/KCLK.quad`, enable **Edit Mode**, and select **C**. The new **Bell Width** card (tooltip + left/right rows + link toggle + Reset) should appear beneath Bell Apex. Select a monotonic channel (e.g., K) and confirm the entire card hides.
+2. With **Link sides** enabled (⛓ button pressed), click the left `−` nudge once (−2 %) and confirm both inputs update to `98` and the channel’s metadata reflects the change: `window.getChannelShapeMeta('C').bellWidthScale.leftFactor` ≈ 0.98 and `rightFactor` matches. Undo should revert both percentages to `100`.
+3. Toggle **Link sides** off (button shows “Unlinked”), enter `120` in the left input, blur, and confirm only the left column updates while `window.getChannelShapeMeta('C').bellWidthScale` reports left ≈ 1.2, right ≈ 1.0. Repeat for the right input (set `85`) verifying the apex value stays unchanged.
+4. Still unlinked, click the `+` button three times, then immediately click `−` once—expect the very next redraw to move the curve downward (no extra “lagging” increases). Repeat on the opposite side to confirm direction reversals take effect on the first click every time.
+5. Hold Shift while clicking the right `+` nudge to add +5 % steps; the input should jump by 5s (85 → 90 → 95). Confirm the Smart points remain ordered (`window.ControlPoints.get('C')` retains ascending X values).
+6. Click **Reset** and confirm both inputs snap to `100`, the metadata factors return to 1.0, and a history entry (“Bell width scale • C”) appears in the undo stack. Undo/redo should round-trip the width values and redraw the chart each time.
+7. Load a monotonic file (e.g., `data/P800_K36C26LK25_V6.quad`) to ensure the Bell Width card hides itself, then reload `data/KCLK.quad` and confirm the card reappears with its last linked/unlinked preference.
+
+Capture screenshots when the card fails to hide/show as expected, the link toggle desynchronizes from metadata, or width edits do not update the chart/Smart points. Attach the console dump of `getChannelShapeMeta()` if the reported factors diverge from the UI.
 
 ### Optional Automation
 - `npx playwright test tests/e2e/bell-curve-apex-shift.spec.ts` drives the control on C, verifies metadata updates, and saves `test-screenshots/bell-apex-shift-control.png`.
@@ -440,6 +473,7 @@ node test-undo-regression.js
 
 ## Automated Coverage: LAB Linearization Audits
 - `tests/e2e/triforce-correction-audit.spec.ts` drives the Options modal with TRIFORCE datasets, captures correction snapshots at 5 % and 95 %, and saves a JSON artifact (see `tests/e2e/utils/lab-flow.ts` for the shared harness). Use this when validating LAB smoothing, density redistribution, or regression reports.
+- `tests/e2e/correction-gain-100-baseline.spec.ts` validates LAB correction gain behavior at 100% gain, ensuring LAB-corrected curves are applied (not baseline), and that 99% and 100% gain produce identical results. This test prevents regression of the "100% shows less correction than 99%" bug fixed in October 2025.
 
 ## Global Scale Undo Screenshot Check
 Goal: capture before/after artifacts that confirm the global scale batch history entry.

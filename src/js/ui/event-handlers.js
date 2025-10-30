@@ -1149,13 +1149,9 @@ function applyPlotSmoothingToLoadedChannels(percent) {
                     });
                     syncPlotSmoothingBaselines(loadedData, null, { source: zeroCurves, force: true });
                     loadedData._zeroSmoothingReapplied = true;
-                    if (typeof LinearizationState?.setGlobalCorrectedCurves === 'function') {
-                        try {
-                            LinearizationState.setGlobalCorrectedCurves(loadedData.curves);
-                        } catch (snapshotErr) {
-                            console.warn('[PlotSmoothing] Failed to push zero-snapshot corrected curves:', snapshotErr);
-                        }
-                    }
+                    // NOTE: Do NOT set corrected curves to zero-smoothing snapshot
+                    // Zero-smoothing snapshot contains baseline curves from before LAB load
+                    // Corrected curves will be set by simple scaling when it runs (bug fix 2025-10-29)
                     const baselineSnapshot = cloneBaselineCurvesFromLoadedData(loadedData);
                     if (baselineSnapshot && typeof LinearizationState?.setGlobalBaselineCurves === 'function') {
                         try {
@@ -1289,8 +1285,13 @@ function restoreZeroSmoothingSnapshot(filename) {
             }
         });
         syncPlotSmoothingBaselines(loadedData, null, { source: 'curves', force: true });
-        if (LinearizationState && typeof LinearizationState.setGlobalCorrectedCurves === 'function') {
+        if (LinearizationState && typeof LinearizationState.setGlobalCorrectedCurves === 'function'
+            && loadedData.correctionMethod !== CORRECTION_METHODS.SIMPLE_SCALING) {
             try {
+                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                    const K_preview = loadedData.curves?.K?.slice(0, 10);
+                    console.log('[ZeroRestore] Setting corrected curves at line 1290 - K first 10:', K_preview);
+                }
                 LinearizationState.setGlobalCorrectedCurves(loadedData.curves);
             } catch (err) {
                 console.warn('[ZeroSmoothing] Failed to sync corrected curves after restore:', err);
@@ -1618,6 +1619,47 @@ function refreshLinearizationDataForNormalization() {
             }
         }
         updateCoverageIndicators();
+
+        // CRITICAL: After zero-smoothing restore, still run simple scaling to capture corrected curves
+        // Zero-smoothing snapshot contains baseline; we need to apply LAB corrections (bug fix 2025-10-29)
+        if (globalData) {
+            const loadedDataForZero = typeof getLoadedQuadData === 'function' ? getLoadedQuadData() : null;
+            const activeChannelNames = loadedDataForZero?.curves
+                ? Object.keys(loadedDataForZero.curves).filter(chName => {
+                    const curve = loadedDataForZero.curves[chName];
+                    return Array.isArray(curve) && curve.some(v => v > 0);
+                })
+                : [];
+
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                console.log('[LabNormalization] After zero restore - activeChannelNames:', activeChannelNames);
+            }
+
+            if (activeChannelNames.length > 0) {
+                if (typeof LinearizationState.setGlobalBakedMeta === 'function') {
+                    try {
+                        LinearizationState.setGlobalBakedMeta(null);
+                    } catch (err) {
+                        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                            console.warn('[LabNormalization] Failed to clear global baked meta after zero restore:', err);
+                        }
+                    }
+                }
+
+                rebaseChannelsToCorrectedCurves(activeChannelNames, {
+                    source: 'labNormalizationChange',
+                    useOriginalBaseline: false,
+                    resetEndsToBaseline: false
+                });
+
+                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                    console.log('[LabNormalization] Applied LAB corrections after zero-smoothing restore');
+                    const correctedSnapshot = LinearizationState?.getGlobalCorrectedCurves?.();
+                    console.log('[LabNormalization] Corrected curves at end of zero-restore path - K first 10:', correctedSnapshot?.K?.slice(0, 10));
+                }
+            }
+        }
+
         return;
     }
 
@@ -1754,7 +1796,8 @@ function refreshLinearizationDataForNormalization() {
                         loadedData.baselineEnd[channelName] = targetEnd;
                     }
                 });
-                if (LinearizationState && typeof LinearizationState.setGlobalCorrectedCurves === 'function') {
+                if (LinearizationState && typeof LinearizationState.setGlobalCorrectedCurves === 'function'
+                    && loadedData.correctionMethod !== CORRECTION_METHODS.SIMPLE_SCALING) {
                     LinearizationState.setGlobalCorrectedCurves(loadedData.curves);
                 }
                 const baselineSnapshot = cloneBaselineCurvesFromLoadedData(loadedData);
@@ -1854,7 +1897,8 @@ function refreshLinearizationDataForNormalization() {
                         loadedData.baselineEnd[channelName] = peak;
                     }
                 });
-                if (LinearizationState && typeof LinearizationState.setGlobalCorrectedCurves === 'function') {
+                if (LinearizationState && typeof LinearizationState.setGlobalCorrectedCurves === 'function'
+                    && loadedData.correctionMethod !== CORRECTION_METHODS.SIMPLE_SCALING) {
                     try {
                         LinearizationState.setGlobalCorrectedCurves(loadedData.curves);
                     } catch (correctedErr) {
@@ -3369,24 +3413,40 @@ function rebaseChannelsToCorrectedCurves(channelNames = [], options = {}) {
             pendingEntries.forEach((entry) => {
                 const channelResult = simpleScalingResult.channels?.[entry.channelName];
                 if (!channelResult) {
+                    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                        console.log('[SimpleScaling] No channelResult for', entry.channelName);
+                    }
                     return;
                 }
                 const samples = Array.isArray(channelResult.samples) ? channelResult.samples.slice() : entry.curve;
                 entry.curve = samples;
                 entry.currentEnd = Number(channelResult.endValue) || samples.reduce((max, value) => (value > max ? value : max), 0);
-                correctedCurves[entry.channelName] = samples.slice();
+
+                // Generate LAB-corrected curves by calling make256 WITH linearization applied
+                // These are what should be stored as "corrected curves" (what you'd see at 100% gain)
+                const labCorrected = make256(entry.currentEnd, entry.channelName, true, undefined);
+                correctedCurves[entry.channelName] = Array.isArray(labCorrected) ? labCorrected.slice() : samples.slice();
+
+                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS && entry.channelName === 'K') {
+                    console.log('[SimpleScaling] baseline samples for K:', samples?.slice(0, 10));
+                    console.log('[SimpleScaling] LAB-corrected for K:', labCorrected?.slice(0, 10));
+                }
             });
 
+            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                const K_preview = correctedCurves.K?.slice(0, 10);
+                console.log('[SimpleScaling] About to set corrected curves - K first 10:', K_preview);
+            }
             if (LinearizationState && typeof LinearizationState.setGlobalCorrectedCurves === 'function') {
                 LinearizationState.setGlobalCorrectedCurves(correctedCurves);
+                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                    const K_preview = correctedCurves.K?.slice(0, 10);
+                    console.log('[SimpleScaling] Set corrected curves at line 3432 - K first 10:', K_preview);
+                }
             }
-            if (LinearizationState && typeof LinearizationState.setGlobalBakedMeta === 'function') {
-                LinearizationState.setGlobalBakedMeta({
-                    source: 'simpleScaling',
-                    timestamp: Date.now(),
-                    channels: Object.keys(correctedCurves)
-                });
-            }
+            // NOTE: Do NOT set baked metadata here during LAB load
+            // Baked metadata should only be set when user explicitly bakes corrections into Smart Curves
+            // Setting it here causes 100% correction gain to skip corrections (bug fix 2025-10-29)
             if (LinearizationState) {
                 LinearizationState.globalPeakIndices = null;
                 LinearizationState.setCompositeCoverageSummary?.(null);
@@ -3692,7 +3752,12 @@ function rebaseChannelsToCorrectedCurves(channelNames = [], options = {}) {
             if (manager) {
                 manager.set('linearization.global.applied', shouldMarkApplied, { skipHistory: true, allowDuringRestore: true });
             }
-            if (shouldMarkApplied && typeof LinearizationState.setGlobalCorrectedCurves === 'function') {
+            // NOTE: Skip setting corrected curves for simple scaling - already set at line 3381
+            // Simple scaling captures corrected curves immediately after computation
+            // This path is for density solver workflow only (bug fix 2025-10-29)
+            if (shouldMarkApplied
+                && typeof LinearizationState.setGlobalCorrectedCurves === 'function'
+                && loadedData.correctionMethod !== CORRECTION_METHODS.SIMPLE_SCALING) {
                 try {
                     LinearizationState.setGlobalCorrectedCurves(loadedData.curves);
                     if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
@@ -4251,14 +4316,20 @@ function handleEndInput(input, options = {}) {
             const row = input?.closest('tr');
             if (input) {
                 InputValidator.clearValidationStyling(input);
-                input.value = String(Math.round(baseEnd));
+                // Only overwrite if user isn't actively typing a new value
+                if (input.dataset.userEditing !== 'true') {
+                    input.value = String(Math.round(baseEnd));
+                }
             }
             if (row) {
                 const siblingPercent = row.querySelector('.percent-input');
                 if (siblingPercent) {
                     const basePercent = getBasePercentFromInput(siblingPercent);
                     InputValidator.clearValidationStyling(siblingPercent);
-                    siblingPercent.value = formatPercentDisplay(basePercent);
+                    // Only overwrite if user isn't actively typing in percent field
+                    if (siblingPercent.dataset.userEditing !== 'true') {
+                        siblingPercent.value = formatPercentDisplay(basePercent);
+                    }
                 }
             }
             if (input) {
@@ -4361,7 +4432,7 @@ function handleEndInput(input, options = {}) {
         if (percentInput) {
             newPercentValue = InputValidator.computePercentFromEnd(validatedEnd);
             setBasePercentOnInput(percentInput, newPercentValue);
-            if (globalScope) {
+            if (globalScope && globalScope.__percentDebug) {
                 globalScope.__percentDebug.push({ stage: 'syncPercent', channelName, value: newPercentValue });
             }
             percentInput.value = formatPercentDisplay(newPercentValue);
@@ -5080,28 +5151,8 @@ function initializeFileHandlers() {
                             try { globalScope.updateInterpolationControls(); } catch (err) { /* ignore */ }
                         }
 
-                        // Update chart to reflect changes
-                        updateInkChart();
-
-                        // Update session status to show the loaded file
-                        if (typeof updateSessionStatus === 'function') {
-                            updateSessionStatus();
-                        }
-
-                        try {
-                            postLinearizationSummary();
-                        } catch (summaryErr) {
-                            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-                                console.warn('[LabTechSummary] Failed to post summary after global load:', summaryErr);
-                            }
-                        }
-                        updateCoverageIndicators();
-
-                        console.log('✅ Global linearization applied successfully');
-
-                        const countLabel = getBasePointCountLabel(normalized);
-                        showStatus(`Loaded global correction: ${file.name} (${countLabel})`);
-
+                        // CRITICAL: Capture baseline curves BEFORE first chart update
+                        // This ensures correction gain at 100% uses the correct baseline
                         try {
                             const baselineData = getLoadedQuadData?.();
                             if (baselineData) {
@@ -5132,13 +5183,31 @@ function initializeFileHandlers() {
                             console.warn('Failed to capture global baseline snapshot:', snapshotErr);
                         }
 
-                        if (typeof LinearizationState.setGlobalCorrectedCurves === 'function') {
-                            try {
-                                LinearizationState.setGlobalCorrectedCurves(null);
-                            } catch (snapshotErr) {
-                                console.warn('Failed to clear global corrected snapshot before reload:', snapshotErr);
+                        // Update chart to reflect changes
+                        updateInkChart();
+
+                        // Update session status to show the loaded file
+                        if (typeof updateSessionStatus === 'function') {
+                            updateSessionStatus();
+                        }
+
+                        try {
+                            postLinearizationSummary();
+                        } catch (summaryErr) {
+                            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+                                console.warn('[LabTechSummary] Failed to post summary after global load:', summaryErr);
                             }
                         }
+                        updateCoverageIndicators();
+
+                        console.log('✅ Global linearization applied successfully');
+
+                        const countLabel = getBasePointCountLabel(normalized);
+                        showStatus(`Loaded global correction: ${file.name} (${countLabel})`);
+
+                        // NOTE: Do NOT clear corrected curves here
+                        // Simple scaling correction has already set them during updateInkChart()
+                        // Clearing here breaks 100% correction gain (bug fix 2025-10-29)
 
                         applyGlobalLinearizationToggle(true);
 
@@ -6466,7 +6535,11 @@ export function setupChannelRow(tr) {
     // Create the refreshDisplay function (critical for global scale integration)
     function refreshDisplay() {
         const endVal = InputValidator.clampEnd(endInput.value);
-        endInput.value = String(endVal);
+
+        // Don't overwrite if user is actively editing the end field
+        if (endInput.dataset.userEditing !== 'true') {
+            endInput.value = String(endVal);
+        }
 
         const isUserDisabled = tr.hasAttribute('data-user-disabled');
         const isAtZero = endVal === 0;

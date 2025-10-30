@@ -57,3 +57,43 @@
 ## References
 - Apply intent spec: `docs/features/apply-intent-to-quad.md`.
 - Revert spec: `docs/features/revert-controls.md`.
+
+## Correction Methods and State Management
+
+### Simple Scaling (Default for LAB Data)
+When LAB measurement data is loaded, the correction method defaults to `SIMPLE_SCALING`:
+
+**Architecture**:
+- **Baseline curves** remain in `loadedData.curves` (used for rendering, export, and 0% gain)
+- **LAB-corrected curves** generated separately via `make256(..., true)` and stored in `LinearizationState.globalCorrectedCurvesBase`
+- **Correction gain slider** blends between baseline and corrected curves using `blendCurveMapsWithGain()`
+
+**Why this design**:
+- Preserves original .quad curves for comparison and revert operations
+- Allows seamless gain blending from 0% (baseline) to 100% (LAB-corrected)
+- Separates rendering curves from correction metadata
+
+**Critical implementation note**: Zero-smoothing, normalization, and rebase code paths must NOT overwrite corrected curves with baseline. See guards at event-handlers.js lines 1288-1289, 1799-1800, 1900-1901, 3757.
+
+### LinearizationState API
+Manages global and per-channel correction metadata:
+
+**Global correction state**:
+- `setGlobalData(data)` / `getGlobalData()` - LAB/CGATS metadata, filename, smoothing helpers
+- `setGlobalBaselineCurves(curves)` - Uncorrected curves for 0% gain blending
+- `setGlobalCorrectedCurves(curves)` - LAB-corrected curves for 100% gain blending
+- `getGlobalBakedMeta()` - Tracks whether corrections are baked into Smart Curves
+
+**Per-channel correction state**:
+- `setPerChannelData(channel, data)` / `getPerChannelData(channel)` - Channel-specific LAB/CGATS
+- `hasPerChannelLinearization(channel)` - Check if channel has measurement data
+
+**Usage in gain blending** (correction-gain.md):
+- Retrieves baseline and corrected curves from LinearizationState
+- Calls `blendCurveMapsWithGain(correctedBase, baseline, gain)`
+- Returns blended result for chart rendering and export
+
+### References
+- Correction gain architecture: `docs/features/correction_gain.md`
+- LAB ingestion implementation: `docs/features/lab-ingestion.md`
+- Simple scaling bug fix history: `artifacts/correction_gain_bug.md`

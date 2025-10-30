@@ -16,6 +16,28 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '4.3.3': {
+    date: '2025-10-29',
+    title: 'Correction gain fix',
+    sections: {
+      ADDED: [],
+      CHANGED: [],
+      FIXED: [
+        'Correction gain at 100% now applies full LAB linearization corrections instead of reverting to baseline curves. The zero-smoothing and normalization code paths no longer overwrite LAB-corrected curves with baseline data.'
+      ],
+      REMOVED: [],
+      DOCS: [
+        'Updated correction gain, LAB ingestion, and global correction loader documentation with architectural details about Simple Scaling correction method and required guards to prevent baseline overwrite.',
+        'Added regression test coverage (tests/e2e/correction-gain-100-baseline.spec.ts) validating that 100% gain applies full LAB corrections and that 99% and 100% gain produce identical results.'
+      ]
+    },
+    aboutDialog: [
+      {
+        label: 'Correction gain 100% fix',
+        desc: 'At 100% gain, LAB corrections are now fully applied. Previously, zero-smoothing and normalization paths were overwriting corrected curves with baseline.'
+      }
+    ]
+  },
   '4.3.2': {
     date: '2025-10-30',
     title: 'Light blocking overlay fixes',
