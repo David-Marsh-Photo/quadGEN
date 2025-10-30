@@ -1838,7 +1838,6 @@ if (isBrowser) {
     globalScope.rescaleSmartCurveForInkLimit = rescaleSmartCurveForInkLimit;
 }
 
-export { toRelativeOutput, toAbsoluteOutput, ensureInkLimitForAbsoluteTarget };
 export function refreshPlotSmoothingSnapshotsForSmartEdit(channelName, samples) {
     try {
         const loadedData = ensureLoadedQuadData(() => ({}));
@@ -1895,3 +1894,61 @@ export function refreshPlotSmoothingSnapshotsForSmartEdit(channelName, samples) 
         }
     }
 }
+
+export function regenerateSmartCurveSamples(channelName, options = {}) {
+    if (!channelName) {
+        return { success: false, reason: 'invalid_channel' };
+    }
+
+    const data = ensureLoadedQuadData(() => ({ curves: {}, sources: {} }));
+    if (!data) {
+        return { success: false, reason: 'no_data' };
+    }
+
+    const {
+        points: overridePoints = null,
+        interpolation: overrideInterpolation = null,
+        skipPlotSmoothingRefresh = false
+    } = options || {};
+
+    const entry = ControlPoints.get(channelName);
+    const sourcePoints = Array.isArray(overridePoints) && overridePoints.length >= 2
+        ? overridePoints
+        : entry.points;
+    if (!sourcePoints || sourcePoints.length < 2) {
+        return { success: false, reason: 'no_points' };
+    }
+
+    const interpolation = typeof overrideInterpolation === 'string'
+        ? overrideInterpolation
+        : entry.interpolation || 'smooth';
+
+    const normalized = ControlPoints.normalize(sourcePoints);
+    const channelPercent = getChannelPercent(channelName);
+    const samples = new Array(CURVE_RESOLUTION);
+    for (let i = 0; i < CURVE_RESOLUTION; i += 1) {
+        const x = (i / (CURVE_RESOLUTION - 1)) * 100;
+        const relative = ControlPoints.sampleY(normalized, interpolation, x);
+        const absolute = (Math.max(0, relative) / 100) * channelPercent;
+        const lockClamp = clampAbsoluteToChannelLock(channelName, absolute);
+        const value = Number.isFinite(lockClamp?.value) ? lockClamp.value : absolute;
+        samples[i] = Math.round((value / 100) * TOTAL);
+    }
+
+    if (!data.curves || typeof data.curves !== 'object') {
+        data.curves = {};
+    }
+    data.curves[channelName] = samples.slice();
+    if (!data.sources || typeof data.sources !== 'object') {
+        data.sources = {};
+    }
+    data.sources[channelName] = 'smart';
+
+    if (!skipPlotSmoothingRefresh) {
+        refreshPlotSmoothingSnapshotsForSmartEdit(channelName, samples);
+    }
+
+    return { success: true, samples };
+}
+
+export { toRelativeOutput, toAbsoluteOutput, ensureInkLimitForAbsoluteTarget };

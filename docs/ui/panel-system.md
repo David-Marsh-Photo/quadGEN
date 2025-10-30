@@ -218,6 +218,10 @@ initializeEventHandlers();
 2. Chart divider before panel divider (no strict dependency, but conventional)
 3. Event handlers after UI components are initialized
 
+### Tab Content Guard
+
+`initializeTabs()` now re-parents the Global Correction tab body back into `.tab-content-wrapper-vertical` on boot if markup ever drifts. This prevents the tab from sitting at the app root (a regression that doubled the right-panel width when the tab was activated). The Playwright regression `tests/e2e/panel-resize.spec.ts` asserts the tab content’s parent class list includes `tab-content-wrapper-vertical` and captures a screenshot for traceability.
+
 ## Layout Optimization for Narrow Panels
 
 The right panel (256px minimum) uses optimized layouts:

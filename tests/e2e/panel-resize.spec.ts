@@ -80,6 +80,33 @@ test.describe('Panel Resize Functionality', () => {
     console.log('✓ Tab switching works');
   });
 
+  test('global correction tab content stays within right panel wrapper', async ({ page }) => {
+    const globalBtn = page.locator('.tab-btn-vertical[data-tab="global"]');
+    await globalBtn.click();
+    await page.waitForSelector('.tab-content[data-tab-content="global"]', { state: 'attached' });
+
+    const parentInfo = await page.evaluate(() => {
+      const panel = document.querySelector('.tab-content[data-tab-content="global"]');
+      if (!panel) {
+        return { parentClassList: [], parentId: null };
+      }
+      const parent = panel.parentElement;
+      return {
+        parentClassList: parent ? Array.from(parent.classList) : [],
+        parentId: parent ? parent.id || null : null
+      };
+    });
+
+    expect(parentInfo.parentClassList).toContain('tab-content-wrapper-vertical');
+
+    const screenshotPath = test.info().outputPath('global-correction-tab.png');
+    await page.screenshot({ path: screenshotPath, fullPage: true });
+    await test.info().attach('global-correction-tab', {
+      path: screenshotPath,
+      contentType: 'image/png'
+    });
+  });
+
   test('should keep tab groups independent', async ({ page }) => {
     // Click Edit tab (vertical)
     await page.click('.tab-btn-vertical[data-tab="edit"]');

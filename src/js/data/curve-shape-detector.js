@@ -43,6 +43,18 @@ function normalize(samples) {
     return samples.map((value) => clamp01(value / MAX_VALUE));
 }
 
+function hashSamples(samples) {
+    if (!Array.isArray(samples) || samples.length === 0) {
+        return null;
+    }
+    let hash = 2166136261 >>> 0; // FNV-1a basis
+    for (let i = 0; i < samples.length; i += 1) {
+        hash ^= Number(samples[i]) & 0xffff;
+        hash = (hash * 16777619) >>> 0;
+    }
+    return hash >>> 0;
+}
+
 function movingAverage(values, windowSize) {
     if (!Array.isArray(values) || values.length === 0) return [];
     const size = Math.max(1, Math.floor(windowSize));
@@ -87,12 +99,25 @@ function estimateApexSpan(samples, peakIndex) {
     while (right < samples.length - 1 && samples[right] > threshold) {
         right += 1;
     }
-    return Math.max(0, right - left);
+    const leftSpan = Math.max(0, peakIndex - left);
+    const rightSpan = Math.max(0, right - peakIndex);
+    const totalSpan = Math.max(0, right - left);
+    const domain = samples.length > 1 ? (samples.length - 1) : null;
+    const toPercent = (value) => (domain ? (value / domain) * 100 : null);
+    return {
+        totalSamples: totalSpan,
+        leftSamples: leftSpan,
+        rightSamples: rightSpan,
+        totalPercent: toPercent(totalSpan),
+        leftPercent: toPercent(leftSpan),
+        rightPercent: toPercent(rightSpan)
+    };
 }
 
 function buildBaseResult(samples) {
     const sanitized = sanitizeSamples(samples);
     const length = sanitized.length;
+    const curveHash = hashSamples(sanitized);
     const peakIndex = length > 0 ? sanitized.reduce((idx, value, i, arr) => (value > arr[idx] ? i : idx), 0) : null;
     const peakValue = peakIndex != null ? sanitized[peakIndex] : null;
     const apexSpan = peakIndex != null ? estimateApexSpan(sanitized, peakIndex) : null;
@@ -109,11 +134,16 @@ function buildBaseResult(samples) {
         apexSampleIndex: peakIndex,
         apexInputPercent: peakIndex != null && length > 1 ? (peakIndex / (length - 1)) * 100 : null,
         apexOutputPercent: peakValue != null ? clamp01(peakValue / MAX_VALUE) * 100 : null,
-        apexSpanSamples: apexSpan,
-        apexSpanPercent: apexSpan != null && length > 1 ? (apexSpan / (length - 1)) * 100 : null,
+        apexSpanSamples: apexSpan?.totalSamples ?? null,
+        apexSpanPercent: apexSpan?.totalPercent ?? null,
+        apexSpanLeftSamples: apexSpan?.leftSamples ?? null,
+        apexSpanRightSamples: apexSpan?.rightSamples ?? null,
+        apexSpanLeftPercent: apexSpan?.leftPercent ?? null,
+        apexSpanRightPercent: apexSpan?.rightPercent ?? null,
         sampleCount: length,
         normalizedPeak: peakValue != null ? clamp01(peakValue / MAX_VALUE) : null,
         reasons: [],
+        curveHash: curveHash,
         sanitized
     };
 }

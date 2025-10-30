@@ -44,7 +44,16 @@ test-file-load.cjs
 test-resize-alignment.cjs
 test-trace.cjs
 test-ui-state.cjs
+test-*.cjs
 scripts/__pycache__/
 scripts/playwright-head-smoothing-check.js
 test-screenshots/
 scratch/
+
+# Pinegrow IDE artifacts
+_pgbackup/
+_pginfo/
+pinegrow.json
+
+# Facebook group archiver (separate project, not part of quadGEN)
+facebook-archive/

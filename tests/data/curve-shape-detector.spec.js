@@ -48,4 +48,20 @@ describe('curve shape detector', () => {
     expect(meta.classification).toBe(CurveShapeClassification.FLAT);
     expect(meta.peakValue).toBeLessThan(0.03 * MAX);
   });
+
+  it('reports left/right apex span metadata and a curve hash for bell curves', () => {
+    const gaussian = [];
+    for (let i = 0; i < 256; i += 1) {
+      const distance = (i - 132) / (i < 132 ? 24 : 32);
+      const value = Math.exp(-(distance * distance)) * 0.9;
+      gaussian.push(value);
+    }
+    const samples = toSamples(gaussian);
+    const meta = classifyCurve(samples);
+    expect(meta.classification).toBe(CurveShapeClassification.BELL);
+    expect(meta.apexSpanLeftPercent).toBeGreaterThan(0);
+    expect(meta.apexSpanRightPercent).toBeGreaterThan(0);
+    expect(meta.apexSpanLeftPercent).not.toBe(meta.apexSpanRightPercent);
+    expect(meta.curveHash).toBeGreaterThan(0);
+  });
 });

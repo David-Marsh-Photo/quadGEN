@@ -1,60 +1,10 @@
 // Bell Curve Shift Helper
 // Provides weighted apex shift for bell-shaped curves without distorting tails.
 
-const MAX_VALUE = 65535;
+import { sanitizeSamples, linearSample, clamp, estimateFalloff } from './bell-curve-utils.js';
+
 const DEFAULT_MIN_APEX_INDEX = 4;
 const DEFAULT_MAX_MARGIN = 4;
-
-function clamp(value, min, max) {
-    if (!Number.isFinite(value)) return min;
-    return Math.min(Math.max(value, min), max);
-}
-
-function sanitizeSamples(samples) {
-    if (!samples || typeof samples.length !== 'number') {
-        return [];
-    }
-    const length = samples.length >>> 0;
-    const result = new Array(length);
-    for (let i = 0; i < length; i += 1) {
-        const numeric = Number(samples[i]);
-        if (!Number.isFinite(numeric)) {
-            result[i] = 0;
-        } else if (numeric < 0) {
-            result[i] = 0;
-        } else if (numeric > MAX_VALUE) {
-            result[i] = MAX_VALUE;
-        } else {
-            result[i] = numeric;
-        }
-    }
-    return result;
-}
-
-function linearSample(values, position) {
-    const length = values.length;
-    if (length === 0) return 0;
-    const clamped = clamp(position, 0, length - 1);
-    const left = Math.floor(clamped);
-    const right = Math.min(length - 1, left + 1);
-    const t = clamped - left;
-    if (t <= 1e-6 || left === right) return values[left];
-    return (values[left] * (1 - t)) + (values[right] * t);
-}
-
-function estimateFalloff(values, apexIndex) {
-    const length = values.length;
-    if (!length) return 12;
-    const apexValue = values[apexIndex] || 1;
-    if (apexValue <= 0) return 12;
-    const threshold = apexValue * 0.2;
-    let left = apexIndex;
-    let right = apexIndex;
-    while (left > 0 && values[left] > threshold) left -= 1;
-    while (right < length - 1 && values[right] > threshold) right += 1;
-    const span = Math.max(6, right - left);
-    return span * 0.45;
-}
 
 /**
  * Shift a bell curve horizontally by weighting distances from the apex.

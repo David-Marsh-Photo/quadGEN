@@ -17,6 +17,13 @@ let tabContents = [];
  * Initialize the tab system
  */
 export function initializeTabs() {
+    const verticalContentWrapper = document.querySelector('.tab-content-wrapper-vertical');
+    const globalTabContent = document.querySelector('.tab-content[data-tab-content="global"]');
+
+    if (verticalContentWrapper && globalTabContent && globalTabContent.parentElement !== verticalContentWrapper) {
+        verticalContentWrapper.appendChild(globalTabContent);
+    }
+
     // Separate horizontal and vertical tab buttons
     horizontalTabButtons = Array.from(document.querySelectorAll('.tab-btn'));
     verticalTabButtons = Array.from(document.querySelectorAll('.tab-btn-vertical'));

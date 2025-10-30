@@ -1,14 +1,15 @@
 // Bell Curve Apex Shift Controller
 // Applies weighted apex shifts to bell-classified channels and keeps UI/state in sync.
 
-import { ensureLoadedQuadData, getChannelShapeMeta, getEditModeFlag, elements } from './state.js';
+import { ensureLoadedQuadData, getChannelShapeMeta, getEditModeFlag } from './state.js';
 import { shiftBellCurve, clampInputPercent } from './bell-shift.js';
 import { ensureBellShiftContainer, markBellShiftRequest } from './bell-shift-state.js';
 import { triggerInkChartUpdate, triggerProcessingDetail, triggerPreviewUpdate } from '../ui/ui-hooks.js';
 import { captureState } from './history-manager.js';
 import { showStatus } from '../ui/status-service.js';
 import { isChannelLocked, getChannelLockEditMessage } from './channel-locks.js';
-import { simplifySmartKeyPointsFromCurve, ControlPoints, ControlPolicy } from '../curves/smart-curves.js';
+import { simplifySmartKeyPointsFromCurve, ControlPoints, ControlPolicy, regenerateSmartCurveSamples } from '../curves/smart-curves.js';
+import { getBellEditSimplifyOptions } from './bell-edit-helpers.js';
 
 const DEFAULT_NUDGE_STEP = 0.5;
 
@@ -20,7 +21,7 @@ function adjustSmartPointsAfterShift(channelName, deltaPercent, referenceApex, m
     if (!entry?.points || entry.points.length < 2) {
         try {
             simplifySmartKeyPointsFromCurve(channelName, {
-                ...getEditSimplifyOptions()
+                ...getBellEditSimplifyOptions()
             });
         } catch (err) {
             if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
@@ -64,31 +65,17 @@ function adjustSmartPointsAfterShift(channelName, deltaPercent, referenceApex, m
     }
 
     try {
-        ControlPoints.persist(channelName, points, entry.interpolation || 'smooth');
+        const interpolation = entry.interpolation || 'smooth';
+        ControlPoints.persist(channelName, points, interpolation);
+        regenerateSmartCurveSamples(channelName, {
+            points,
+            interpolation
+        });
     } catch (err) {
         if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
             console.warn('[BELL SHIFT] Failed to persist Smart key points after shift:', err);
         }
     }
-}
-
-function getEditSimplifyOptions() {
-    const options = {};
-    const errorInput = elements.editMaxError;
-    if (errorInput) {
-        const value = Number(errorInput.value);
-        if (Number.isFinite(value) && value > 0) {
-            options.maxErrorPercent = value;
-        }
-    }
-    const pointsInput = elements.editMaxPoints;
-    if (pointsInput) {
-        const count = Number(pointsInput.value);
-        if (Number.isInteger(count) && count >= 2) {
-            options.maxPoints = count;
-        }
-    }
-    return options;
 }
 
 function getSamplesForChannel(data, channelName) {
@@ -156,6 +143,13 @@ export function applyBellShiftTarget(channelName, targetInputPercent, options = 
     ensureBellShiftContainer(data);
     markBellShiftRequest(data, channelName, clampedTarget);
     adjustSmartPointsAfterShift(channelName, deltaPercent, referenceApex, meta);
+    try {
+        regenerateSmartCurveSamples(channelName);
+    } catch (err) {
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.warn('[BELL SHIFT] Failed to regenerate Smart curve samples after shift:', err);
+        }
+    }
 
     captureState(`Bell apex shift • ${channelName}`);
     triggerInkChartUpdate();

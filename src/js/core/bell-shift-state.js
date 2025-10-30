@@ -1,6 +1,15 @@
 // Bell Curve Shift State Helpers
 // Normalizes bell apex metadata storage on loadedQuadData.
 
+const DEFAULT_WIDTH_SCALE = {
+    leftFactor: 1,
+    rightFactor: 1,
+    linked: true,
+    baselineHash: null,
+    lastCurveHash: null,
+    baselineCurve: null
+};
+
 function ensureContainer(loadedData) {
     if (!loadedData || typeof loadedData !== 'object') {
         return null;
@@ -15,6 +24,64 @@ export function ensureBellShiftContainer(loadedData) {
     return ensureContainer(loadedData);
 }
 
+function ensureWidthScale(entry) {
+    if (!entry) return null;
+    if (!entry.widthScale || typeof entry.widthScale !== 'object') {
+        entry.widthScale = { ...DEFAULT_WIDTH_SCALE };
+    } else {
+        if (!Number.isFinite(entry.widthScale.leftFactor)) {
+            entry.widthScale.leftFactor = 1;
+        }
+        if (!Number.isFinite(entry.widthScale.rightFactor)) {
+            entry.widthScale.rightFactor = 1;
+        }
+        if (typeof entry.widthScale.linked !== 'boolean') {
+            entry.widthScale.linked = true;
+        }
+        if (entry.widthScale.baselineHash == null) {
+            entry.widthScale.baselineHash = null;
+        }
+        if (entry.widthScale.lastCurveHash == null) {
+            entry.widthScale.lastCurveHash = null;
+        }
+        if (!Array.isArray(entry.widthScale.baselineCurve)) {
+            entry.widthScale.baselineCurve = null;
+        }
+    }
+    return entry.widthScale;
+}
+
+export function getBellWidthScale(loadedData, channelName) {
+    const entry = getBellShiftEntry(loadedData, channelName, { create: false });
+    if (!entry) return null;
+    return cloneWidthScale(ensureWidthScale(entry));
+}
+
+export function setBellWidthScale(loadedData, channelName, updates = {}) {
+    const entry = getBellShiftEntry(loadedData, channelName, { create: true });
+    if (!entry) return null;
+    const scale = ensureWidthScale(entry);
+    if (!scale) return null;
+    if (Number.isFinite(updates.leftFactor)) {
+        scale.leftFactor = updates.leftFactor;
+    }
+    if (Number.isFinite(updates.rightFactor)) {
+        scale.rightFactor = updates.rightFactor;
+    }
+    if (typeof updates.linked === 'boolean') {
+        scale.linked = updates.linked;
+    }
+    if (Array.isArray(updates.baselineCurve)) {
+        scale.baselineCurve = updates.baselineCurve.slice();
+    }
+    if (updates.invalidateBaseline) {
+        scale.baselineHash = null;
+        scale.lastCurveHash = null;
+        scale.baselineCurve = null;
+    }
+    return cloneWidthScale(scale);
+}
+
 export function getBellShiftEntry(loadedData, channelName, { create = false } = {}) {
     if (!channelName) return null;
     const map = ensureContainer(loadedData);
@@ -22,7 +89,11 @@ export function getBellShiftEntry(loadedData, channelName, { create = false } = 
     if (!map[channelName] && create) {
         map[channelName] = {};
     }
-    return map[channelName] || null;
+    const entry = map[channelName] || null;
+    if (entry && create) {
+        ensureWidthScale(entry);
+    }
+    return entry;
 }
 
 export function clearBellShiftEntry(loadedData, channelName) {
@@ -44,6 +115,53 @@ function cloneEntry(entry) {
         lastClassificationTs: entry.lastClassificationTs || null,
         lastRequestedTs: entry.lastRequestedTs || null
     };
+}
+
+function cloneWidthScale(scale) {
+    if (!scale) {
+        return { ...DEFAULT_WIDTH_SCALE };
+    }
+    return {
+        leftFactor: Number.isFinite(scale.leftFactor) ? scale.leftFactor : 1,
+        rightFactor: Number.isFinite(scale.rightFactor) ? scale.rightFactor : 1,
+        linked: typeof scale.linked === 'boolean' ? scale.linked : true,
+        baselineHash: scale.baselineHash ?? null,
+        lastCurveHash: scale.lastCurveHash ?? null
+    };
+}
+
+function applyCurveHashToWidthScale(scale, curveHash) {
+    if (!scale || !Number.isFinite(curveHash)) {
+        return;
+    }
+    if (scale.baselineHash == null) {
+        scale.baselineHash = curveHash;
+        scale.lastCurveHash = curveHash;
+        return;
+    }
+    if (scale.lastCurveHash !== curveHash) {
+        scale.lastCurveHash = curveHash;
+        scale.baselineHash = curveHash;
+    }
+}
+
+export function getBellWidthBaselineCurve(loadedData, channelName) {
+    const entry = getBellShiftEntry(loadedData, channelName, { create: false });
+    if (!entry) return null;
+    const scale = ensureWidthScale(entry);
+    if (!scale?.baselineCurve || !Array.isArray(scale.baselineCurve)) {
+        return null;
+    }
+    return scale.baselineCurve;
+}
+
+export function setBellWidthBaselineCurve(loadedData, channelName, samples) {
+    if (!Array.isArray(samples)) return null;
+    const entry = getBellShiftEntry(loadedData, channelName, { create: true });
+    if (!entry) return null;
+    const scale = ensureWidthScale(entry);
+    scale.baselineCurve = samples.slice();
+    return scale.baselineCurve;
 }
 
 export function syncBellShiftFromMeta(loadedData, channelName, classificationMeta) {
@@ -89,7 +207,13 @@ export function syncBellShiftFromMeta(loadedData, channelName, classificationMet
         entry.lastClassificationTs = Date.now();
     }
 
-    return cloneEntry(entry);
+    const widthScale = ensureWidthScale(entry);
+    applyCurveHashToWidthScale(widthScale, classificationMeta?.curveHash);
+
+    return {
+        shift: cloneEntry(entry),
+        widthScale: cloneWidthScale(widthScale)
+    };
 }
 
 export function markBellShiftRequest(loadedData, channelName, requestedInputPercent) {
