@@ -13,6 +13,24 @@
 - State integration: `LinearizationState.setGlobalData`, `LinearizationState.setPerChannelData` with metadata `{ format, measurementIntent, originalData, getSmoothingControlPoints }`.
 - History: `history.recordMeasurementLoad` captures loads for undo.
 
+## Smoothing Parameters & Behavior
+- **Gaussian Kernel Tuning** (`buildInkInterpolatorFromMeasurements` in `src/js/data/lab-utils.js`):
+  - `K_NEIGHBORS = 4`: Each point influenced by 4 nearest measurement points (increased from legacy 2 to better handle sparse regions like 20-25% gaps)
+  - `SIGMA_FLOOR = 0.036`: Minimum kernel width (3.6% of normalized range)
+  - `SIGMA_CEIL = 0.30`: Maximum kernel width (30% of normalized range, increased from 0.15/0.20 to prevent early ceiling saturation)
+  - `SIGMA_ALPHA = 2.0`: Multiplier for adaptive sigma calculation based on local point density
+- **LAB Smoothing Slider** (Global Correction panel, 0-600%):
+  - Maps percentage to `widenFactor` via **linear scaling** (exponent 1.0): `widenFactor = 1 + (percent/600) × 3` → range [1.0, 4.0]
+  - Linear transformation (changed from power curve exponent 1.35) eliminates undulation artifacts caused by differential ceiling saturation at mid-range percentages
+  - At 0%: widen = 1.0 (baseline Gaussian smoothing with adaptive sigma)
+  - At 300%: widen = 2.5 (moderate additional smoothing)
+  - At 600%: widen = 4.0 (maximum smoothing for noisy data)
+- **Highlight Taper**: Smoothstep easing applied in 0-15% range blends from widen=1.0 to full widenFactor to preserve highlight detail
+- **Effective Sigma**: `min(SIGMA_CEIL, max(SIGMA_FLOOR, localSigma × highlightTaper × widenFactor))`
+  - Prevents over-smoothing via hard ceiling clamp
+  - Adapts to local measurement density (sparse regions get wider kernels, dense regions get narrower)
+  - Monotonic behavior across full slider range with current parameters
+
 ## Expected Behavior
 1. **Parse & Normalize**
    - Validate headers, units, and grayscale channels; capture original rows in `originalData`.

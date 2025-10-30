@@ -166,6 +166,15 @@ export const elements = {
     editBellShiftInput: null,
     editBellShiftDec: null,
     editBellShiftInc: null,
+    editBellWidthContainer: null,
+    bellWidthLeftInput: null,
+    bellWidthRightInput: null,
+    bellWidthLeftDec: null,
+    bellWidthLeftInc: null,
+    bellWidthRightDec: null,
+    bellWidthRightInc: null,
+    bellWidthLinkToggle: null,
+    bellWidthResetBtn: null,
 
     // Chat/AI elements
     chatMessages: null,
@@ -427,6 +436,15 @@ export function initializeElements() {
     elements.editBellShiftInput = document.getElementById('editBellShiftInput');
     elements.editBellShiftDec = document.getElementById('editBellShiftDec');
     elements.editBellShiftInc = document.getElementById('editBellShiftInc');
+    elements.editBellWidthContainer = document.getElementById('editBellWidthContainer');
+    elements.bellWidthLeftInput = document.getElementById('bellWidthLeftInput');
+    elements.bellWidthRightInput = document.getElementById('bellWidthRightInput');
+    elements.bellWidthLeftDec = document.getElementById('bellWidthLeftDec');
+    elements.bellWidthLeftInc = document.getElementById('bellWidthLeftInc');
+    elements.bellWidthRightDec = document.getElementById('bellWidthRightDec');
+    elements.bellWidthRightInc = document.getElementById('bellWidthRightInc');
+    elements.bellWidthLinkToggle = document.getElementById('bellWidthLinkToggle');
+    elements.bellWidthResetBtn = document.getElementById('bellWidthResetBtn');
 
     // Help system elements
     elements.helpBtn = document.getElementById('helpBtn');
@@ -620,19 +638,21 @@ function refreshChannelShapeMeta(data, channelName = null) {
 
     const decorateMeta = (channel, result) => {
         const enriched = syncBellShiftFromMeta(data, channel, result);
-        if (enriched) {
+        if (enriched?.shift) {
             const normalized = {
-                ...enriched,
-                shiftedApexInputPercent: Number.isFinite(enriched.latestInputPercent)
-                    ? enriched.latestInputPercent
-                    : enriched.baselineInputPercent,
-                shiftedApexOutputPercent: Number.isFinite(enriched.latestOutputPercent)
-                    ? enriched.latestOutputPercent
-                    : enriched.baselineOutputPercent
+                ...enriched.shift,
+                shiftedApexInputPercent: Number.isFinite(enriched.shift.latestInputPercent)
+                    ? enriched.shift.latestInputPercent
+                    : enriched.shift.baselineInputPercent,
+                shiftedApexOutputPercent: Number.isFinite(enriched.shift.latestOutputPercent)
+                    ? enriched.shift.latestOutputPercent
+                    : enriched.shift.baselineOutputPercent
             };
             result.bellShift = normalized;
+            result.bellWidthScale = enriched.widthScale || null;
         } else {
             result.bellShift = null;
+            result.bellWidthScale = null;
         }
         return result;
     };
@@ -920,7 +940,7 @@ export function getPlotSmoothingPercent() {
 
 export function setPlotSmoothingPercent(percent) {
     const numeric = Number(percent);
-    const clamped = Number.isFinite(numeric) ? Math.max(0, Math.min(300, Math.round(numeric))) : 0;
+    const clamped = Number.isFinite(numeric) ? Math.max(0, Math.min(600, Math.round(numeric))) : 0;
     appState.plotSmoothingPercent = clamped;
     return clamped;
 }

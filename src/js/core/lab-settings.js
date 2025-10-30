@@ -11,8 +11,8 @@ export const LAB_NORMALIZATION_MODES = Object.freeze({
 export const DEFAULT_LAB_SMOOTHING_PERCENT = 0;
 const LEGACY_DEFAULT_LAB_SMOOTHING_PERCENT = 50;
 
-const LAB_SMOOTHING_MAX = 300;
-const LAB_SMOOTHING_EXPONENT = 1.35;
+const LAB_SMOOTHING_MAX = 600;
+const LAB_SMOOTHING_EXPONENT = 1.0;
 const LAB_SMOOTHING_MAX_DELTA = 3;
 
 const SMOOTHING_STORAGE_KEY = 'quadgen.labSmoothingPercent';
@@ -44,7 +44,7 @@ function sanitizeSmoothingPercent(value) {
     if (!Number.isFinite(numeric)) {
         return DEFAULT_LAB_SMOOTHING_PERCENT;
     }
-    return Math.max(0, Math.min(300, Math.round(numeric)));
+    return Math.max(0, Math.min(600, Math.round(numeric)));
 }
 
 function loadInitialSmoothingPercent() {

@@ -720,7 +720,7 @@ export function parseManualLstarData(validation, options = {}) {
         }) || baseSamples;
 
         const buildControlPoints = (smoothingPercent) => {
-            const sp = Math.max(0, Math.min(300, Number(smoothingPercent) || 0));
+            const sp = Math.max(0, Math.min(600, Number(smoothingPercent) || 0));
             const widen = mapSmoothingPercentToWiden(sp);
             const widenedSamples = rebuildLabSamplesFromOriginal(usableData, {
                 widenFactor: widen,

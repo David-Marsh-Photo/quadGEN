@@ -16,6 +16,33 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '4.3.4': {
+    date: '2025-10-30',
+    title: 'LAB smoothing improvements',
+    sections: {
+      ADDED: [],
+      CHANGED: [
+        'LAB smoothing defaults improved for better handling of sparse measurement regions: K_NEIGHBORS increased from 2 to 4 (more neighboring points influence smoothing), SIGMA_CEIL increased from 0.15 to 0.30 (allows wider Gaussian kernels in sparse regions).',
+        'Plot smoothing and LAB smoothing sliders now support up to 600% (previously capped at 300%) for extreme smoothing cases with noisy data or sparse measurement sets.',
+        'LAB smoothing slider now scales linearly instead of using power curve (exponent changed from 1.35 to 1.0), providing more predictable and monotonic smoothing behavior across the full range.'
+      ],
+      FIXED: [
+        'LAB smoothing slider no longer produces undulations (ripples that appear and disappear) as you increase the percentage. The combination of linear scaling and raised sigma ceiling prevents differential ceiling saturation across curve regions.'
+      ],
+      REMOVED: [],
+      DOCS: []
+    },
+    aboutDialog: [
+      {
+        label: 'LAB smoothing improvements',
+        desc: 'Better handling of sparse measurement regions with improved defaults (K_NEIGHBORS=4, SIGMA_CEIL=0.30) and extended slider range up to 600%.'
+      },
+      {
+        label: 'Linear smoothing scaling',
+        desc: 'LAB smoothing slider now scales linearly (exponent 1.0 instead of 1.35), eliminating undulation artifacts and providing more predictable behavior.'
+      }
+    ]
+  },
   '4.3.3': {
     date: '2025-10-29',
     title: 'Correction gain fix',

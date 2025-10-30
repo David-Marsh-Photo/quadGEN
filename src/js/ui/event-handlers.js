@@ -538,7 +538,7 @@ function syncLabNormalizationCheckboxes(mode = getLabNormalizationMode()) {
 
 function syncLabSmoothingControls(percent = getLabSmoothingPercent()) {
     const numeric = Number(percent);
-    const clamped = Number.isFinite(numeric) ? Math.max(0, Math.min(300, Math.round(numeric))) : getLabSmoothingPercent();
+    const clamped = Number.isFinite(numeric) ? Math.max(0, Math.min(600, Math.round(numeric))) : getLabSmoothingPercent();
     if (elements.labSmoothingSlider) {
         if (Number(elements.labSmoothingSlider.value) !== clamped) {
             elements.labSmoothingSlider.value = String(clamped);
@@ -1311,7 +1311,7 @@ function restoreZeroSmoothingSnapshot(filename) {
 
 function syncPlotSmoothingControls(percent = getPlotSmoothingPercent()) {
     const numeric = Number(percent);
-    const clamped = Number.isFinite(numeric) ? Math.max(0, Math.min(300, Math.round(numeric))) : getPlotSmoothingPercent();
+    const clamped = Number.isFinite(numeric) ? Math.max(0, Math.min(600, Math.round(numeric))) : getPlotSmoothingPercent();
     if (elements.plotSmoothingSlider && Number(elements.plotSmoothingSlider.value) !== clamped) {
         elements.plotSmoothingSlider.value = String(clamped);
     }

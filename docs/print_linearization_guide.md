@@ -48,13 +48,14 @@ and samples it at 256 evenly spaced inputs. PCHIP interpolation keeps both the f
 - Set `expected = position` and record `correction = expected − actual` along with original inputs and measurements. These correction points drive the reconstruction pass and provide hover detail in the UI.
 
 ### 3. Reconstruct the 256-sample curve
-- quadGEN blends the sparse corrections with an adaptive Gaussian kernel: `σ(x)` scales with local patch spacing (`median` distance to ~6 neighbours) but is clamped between 0.02 and 0.15.
+- quadGEN blends the sparse corrections with an adaptive Gaussian kernel: `σ(x)` scales with local patch spacing (`median` distance to 4 neighbours, increased from 2 for better sparse-region handling) but is clamped between `SIGMA_FLOOR = 0.036` and `SIGMA_CEIL = 0.30` (raised from 0.15/0.20 to prevent early ceiling saturation).
 - Each of the 256 output samples evaluates the weighted correction, adds it to the baseline `position`, clamps to `[0,1]`, and pins endpoints (sample 0 = 0, sample 255 = 1).
 - A baseline pass (widen ×1.0) always runs so identity datasets remain perfectly monotone. When the LAB smoothing slider sits at 0 % the pipeline skips any additional widening.
 
 ### 4. Optional smoothing path
-- The LAB smoothing slider (0–300 %) widens the Gaussian kernel using `baseRadius = 0.08`, `maxRadius = 0.25`, and `radius = baseRadius + (sp/100) * (maxRadius - baseRadius)`.
-- `getSmoothingControlPoints(sp)` rebuilds the 256-sample array with the wider radius, downsamples to evenly spaced control points, and returns `{ samples, xCoords, needsDualTransformation }`. The `needsDualTransformation` flag tells downstream consumers to perform the horizontal/vertical flip that preserves plotting semantics.
+- The LAB smoothing slider (0–600 %, increased from 300 %) maps to `widenFactor` via **linear scaling** (exponent 1.0): `widenFactor = 1 + (percent/600) × 3` → range [1.0, 4.0]. Linear transformation (previously power curve with exponent 1.35) eliminates undulation artifacts caused by differential ceiling saturation at mid-range percentages.
+- The `widenFactor` multiplies the adaptive sigma before ceiling clamp: `effectiveSigma = min(SIGMA_CEIL, localSigma × widenFactor)`, providing monotonic smoothing behavior across the full slider range.
+- `getSmoothingControlPoints(sp)` rebuilds the 256-sample array with the adjusted widen factor, downsamples to evenly spaced control points, and returns `{ samples, xCoords, needsDualTransformation }`. The `needsDualTransformation` flag tells downstream consumers to perform the horizontal/vertical flip that preserves plotting semantics.
 
 ### 5. Apply the LUT to channel curves
 - `apply1DLUT(values, lutOrData, domainMin, domainMax, maxValue, interpolationType, smoothingPercent)` converts the 256-sample LUT into channel-specific corrections.

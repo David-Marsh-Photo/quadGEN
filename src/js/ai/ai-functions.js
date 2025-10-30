@@ -597,15 +597,15 @@ export const CLAUDE_FUNCTIONS = [
   },
   {
     name: "set_smoothing_percentage",
-    description: "Set the data point smoothing percentage (0-300%)",
+    description: "Set the data point smoothing percentage (0-600%)",
     parameters: {
       type: "object",
       properties: {
         percentage: {
           type: "number",
-          description: "Smoothing percentage (0=none, 300=maximum)",
+          description: "Smoothing percentage (0=none, 600=maximum)",
           minimum: 0,
-          maximum: 300
+          maximum: 600
         }
       },
       required: ["percentage"]
