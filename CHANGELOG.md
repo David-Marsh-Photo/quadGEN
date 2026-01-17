@@ -6,16 +6,23 @@ This changelog follows a concise, user-facing format. Engineering details live i
 
 ## [Unreleased]
 ### Added
-- _Nothing yet._
+- Bell curve classifier now reports asymmetry metrics (`asymmetryRatio`, `isLeftSkewed`, `isRightSkewed`) for diagnostic insight into peak shape.
+- Bell curve classifier now reports Gaussian fit quality (`gaussianFitQuality`) as R² coefficient measuring how well the curve matches an ideal Gaussian.
 
 ### Changed
-- _Nothing yet._
+- Bell apex shift and width scaling now use Gaussian falloff (`exp(-d²/2σ²)`) instead of linear exponential, providing smoother weighting without cusp artifacts at the apex.
+- Bell curve resampling now uses PCHIP (monotone cubic Hermite) interpolation instead of linear interpolation, better preserving curve shape during transforms.
+- Curve shape classification now uses Savitzky-Golay smoothing by default (configurable), which preserves peak height better than moving average.
+- Chart rendering performance improved via static layer caching and RAF batching for update triggers.
+- Binary search optimization in interpolation functions reduces lookup complexity from O(n) to O(log n).
+- Error handling improvements in LAB redistribution pipeline for more robust correction processing.
+- Refactored toggle handlers to use centralized utilities (`syncToggleState`, `initializeToggle`).
 
 ### Fixed
-- _Nothing yet._
+- XSS prevention via HTML escaping in status messages.
 
 ### Docs
-- _Nothing yet._
+- Added `docs/features/bell-curve-improvements-plan.md` documenting multi-agent audit results and implementation status.
 
 ## [4.3.4] — 2025-10-30
 ### Added
