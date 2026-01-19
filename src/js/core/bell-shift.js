@@ -1,7 +1,8 @@
 // Bell Curve Shift Helper
 // Provides weighted apex shift for bell-shaped curves without distorting tails.
 
-import { sanitizeSamples, linearSample, clamp, estimateFalloff } from './bell-curve-utils.js';
+import { sanitizeSamples, pchipSample, estimateFalloff } from './bell-curve-utils.js';
+import { clamp } from '../data/processing-utils.js';
 
 const DEFAULT_MIN_APEX_INDEX = 4;
 const DEFAULT_MAX_MARGIN = 4;
@@ -50,10 +51,11 @@ export function shiftBellCurve(samples, apexIndex, deltaPercent, options = {}) {
     const result = new Array(length);
     for (let i = 0; i < length; i += 1) {
         const distance = Math.abs(i - clampedApex);
-        const weight = Math.exp(-distance / falloff) * strength;
+        // Gaussian falloff: exp(-d²/2σ²) provides smooth weighting without cusp at apex
+        const weight = Math.exp(-(distance * distance) / (2 * falloff * falloff)) * strength;
         const shiftAmount = limitedDelta * weight;
         const sourceIndex = clamp(i - shiftAmount, 0, length - 1);
-        result[i] = Math.round(linearSample(sanitized, sourceIndex));
+        result[i] = Math.round(pchipSample(sanitized, sourceIndex));
     }
 
     // Preserve endpoints exactly so ink limits stay intact.

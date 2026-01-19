@@ -6,6 +6,19 @@ This changelog follows a concise, user-facing format. Engineering details live i
 
 ## [Unreleased]
 ### Added
+- _Nothing yet._
+
+### Changed
+- _Nothing yet._
+
+### Fixed
+- _Nothing yet._
+
+### Docs
+- _Nothing yet._
+
+## [4.3.5] — 2025-01-19
+### Added
 - Bell curve classifier now reports asymmetry metrics (`asymmetryRatio`, `isLeftSkewed`, `isRightSkewed`) for diagnostic insight into peak shape.
 - Bell curve classifier now reports Gaussian fit quality (`gaussianFitQuality`) as R² coefficient measuring how well the curve matches an ideal Gaussian.
 
@@ -19,6 +32,7 @@ This changelog follows a concise, user-facing format. Engineering details live i
 - Refactored toggle handlers to use centralized utilities (`syncToggleState`, `initializeToggle`).
 
 ### Fixed
+- .quad file parser now supports externally-created files that lack the `## QuadToneRIP` header. Channel count is inferred from data (values ÷ 256) and standard channel names are applied for 8-channel (P600/P800) and 10-channel (P700/P900) configurations.
 - XSS prevention via HTML escaping in status messages.
 
 ### Docs

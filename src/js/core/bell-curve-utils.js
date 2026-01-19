@@ -1,13 +1,11 @@
 // Shared helpers for bell-curve transforms (apex shift, width scaling, etc.)
 
+import { clamp } from '../data/processing-utils.js';
+
 export const MAX_CURVE_VALUE = 65535;
 
-export function clamp(value, min, max) {
-    if (!Number.isFinite(value)) return min;
-    if (value < min) return min;
-    if (value > max) return max;
-    return value;
-}
+// Re-export clamp for backwards compatibility
+export { clamp };
 
 export function sanitizeSamples(samples) {
     if (!samples || typeof samples.length !== 'number') {
@@ -39,6 +37,62 @@ export function linearSample(values, position) {
     const t = clamped - left;
     if (t <= 1e-6 || left === right) return values[left];
     return (values[left] * (1 - t)) + (values[right] * t);
+}
+
+/**
+ * Compute PCHIP (monotone-preserving) slope at a point
+ * Returns zero at local extrema to preserve monotonicity
+ */
+function pchipSlope(p0, p1, p2) {
+    const d0 = p1 - p0;
+    const d1 = p2 - p1;
+
+    // Monotonicity-preserving: return 0 at extrema
+    if (d0 * d1 <= 0) return 0;
+
+    // Weighted harmonic mean of slopes (PCHIP formula)
+    const w0 = 2 + 1;
+    const w1 = 1 + 2;
+    return (w0 + w1) / (w0 / d0 + w1 / d1);
+}
+
+/**
+ * PCHIP (monotone cubic Hermite) interpolation for smooth resampling
+ * Preserves curve shape better than linear interpolation
+ * @param {number[]} samples - Source samples
+ * @param {number} index - Fractional index to sample
+ * @returns {number} Interpolated value
+ */
+export function pchipSample(samples, index) {
+    if (!Array.isArray(samples) || samples.length === 0) return 0;
+    if (samples.length === 1) return samples[0];
+
+    const clamped = clamp(index, 0, samples.length - 1);
+    const i = Math.floor(clamped);
+    const t = clamped - i;
+
+    if (t < 1e-9) return samples[i];
+    if (i >= samples.length - 1) return samples[samples.length - 1];
+
+    // Get 4 points for cubic interpolation (clamp at boundaries)
+    const p0 = samples[Math.max(0, i - 1)];
+    const p1 = samples[i];
+    const p2 = samples[Math.min(samples.length - 1, i + 1)];
+    const p3 = samples[Math.min(samples.length - 1, i + 2)];
+
+    // PCHIP slopes (monotone-preserving)
+    const d1 = pchipSlope(p0, p1, p2);
+    const d2 = pchipSlope(p1, p2, p3);
+
+    // Hermite basis functions
+    const t2 = t * t;
+    const t3 = t2 * t;
+    const h00 = 2 * t3 - 3 * t2 + 1;
+    const h10 = t3 - 2 * t2 + t;
+    const h01 = -2 * t3 + 3 * t2;
+    const h11 = t3 - t2;
+
+    return h00 * p1 + h10 * d1 + h01 * p2 + h11 * d2;
 }
 
 export function estimateFalloff(values, apexIndex) {

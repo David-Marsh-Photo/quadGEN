@@ -187,3 +187,94 @@ export function setCSSCustomProperty(propertyName, value, element = document.doc
     const prop = propertyName.startsWith('--') ? propertyName : `--${propertyName}`;
     element.style.setProperty(prop, value);
 }
+
+/**
+ * Sync a toggle checkbox element with its state getter.
+ * Handles null-safety, checked property, and aria-checked attribute.
+ *
+ * @param {HTMLInputElement|null} element - Toggle checkbox element
+ * @param {Function} isEnabledFn - Function that returns current enabled state
+ * @returns {boolean} The synced enabled state (false if element missing)
+ *
+ * @example
+ * // Before (repeated pattern):
+ * function syncMyToggle() {
+ *     if (!elements.myToggle) return;
+ *     const enabled = isMyFeatureEnabled();
+ *     elements.myToggle.checked = enabled;
+ *     elements.myToggle.setAttribute('aria-checked', String(enabled));
+ * }
+ *
+ * // After:
+ * function syncMyToggle() {
+ *     syncToggleState(elements.myToggle, isMyFeatureEnabled);
+ * }
+ */
+export function syncToggleState(element, isEnabledFn) {
+    if (!element) {
+        return false;
+    }
+    const enabled = typeof isEnabledFn === 'function' ? isEnabledFn() : !!isEnabledFn;
+    element.checked = enabled;
+    element.setAttribute('aria-checked', String(enabled));
+    return enabled;
+}
+
+/**
+ * Initialize a toggle checkbox with change handler.
+ * Syncs initial state, attaches change listener, and optionally shows status.
+ *
+ * @param {Object} options - Configuration options
+ * @param {HTMLInputElement|null} options.element - Toggle checkbox element
+ * @param {Function} options.getEnabled - Function that returns current enabled state
+ * @param {Function} options.setEnabled - Function that sets enabled state (receives boolean)
+ * @param {Function} [options.syncFn] - Optional sync function to call after state change
+ * @param {string} [options.enabledMessage] - Status message when enabled
+ * @param {string} [options.disabledMessage] - Status message when disabled
+ * @param {Function} [options.showStatus] - Function to show status message
+ * @returns {boolean} True if initialization successful
+ */
+export function initializeToggle(options) {
+    const {
+        element,
+        getEnabled,
+        setEnabled,
+        syncFn,
+        enabledMessage,
+        disabledMessage,
+        showStatus
+    } = options;
+
+    // Initial sync
+    syncToggleState(element, getEnabled);
+
+    if (!element) {
+        return false;
+    }
+
+    element.addEventListener('change', (event) => {
+        const enabled = !!event.target.checked;
+
+        if (typeof setEnabled === 'function') {
+            setEnabled(enabled);
+        }
+
+        // Sync UI state
+        if (typeof syncFn === 'function') {
+            syncFn();
+        } else {
+            syncToggleState(element, getEnabled);
+        }
+
+        // Show status message
+        if (typeof showStatus === 'function') {
+            if (enabled && enabledMessage) {
+                showStatus(enabledMessage);
+            } else if (!enabled && disabledMessage) {
+                showStatus(disabledMessage);
+            }
+        }
+    });
+
+    return true;
+}

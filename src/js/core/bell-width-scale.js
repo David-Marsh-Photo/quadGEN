@@ -3,7 +3,7 @@
 
 import {
     sanitizeSamples,
-    linearSample,
+    pchipSample,
     clamp,
     estimateFalloff,
     clampFalloff,
@@ -124,7 +124,8 @@ export function scaleBellCurve(samples, apexIndex, factors = {}, options = {}, p
             continue;
         }
         const falloff = isLeft ? leftFalloff : rightFalloff;
-        const weight = Math.exp(-Math.abs(distance) / falloff);
+        // Gaussian falloff: exp(-d²/2σ²) provides smooth weighting without cusp at apex
+        const weight = Math.exp(-(distance * distance) / (2 * falloff * falloff));
         const blendedPrev = 1 + ((prevFactor - 1) * weight);
         const blendedNext = 1 + ((factor - 1) * weight);
         if (isApproximatelyOne(blendedPrev) && isApproximatelyOne(blendedNext)) {
@@ -138,7 +139,7 @@ export function scaleBellCurve(samples, apexIndex, factors = {}, options = {}, p
         const ratio = blendedPrev / blendedNext;
         const sourceDistance = distance * ratio;
         const sourceIndex = clamp(pivotIndex + sourceDistance, 0, length - 1);
-        result[i] = Math.round(linearSample(sanitized, sourceIndex));
+        result[i] = Math.round(pchipSample(sanitized, sourceIndex));
     }
 
     // Preserve endpoints exactly so ink limits remain untouched.

@@ -1784,6 +1784,9 @@ function applySmartKeyPointsInternal(channelName, keyPoints, interpolationType =
         }
     }
 
+    // Invalidate make256 cache since smart curve changed
+    globalScope.invalidateMake256Cache?.();
+
     return {
         success: true,
         message: `Set ${normalized.length} key points for ${channelName}`,

@@ -43,8 +43,36 @@ import {
     syncSnapshotsWithSlopeLimiter
 } from './snapshot-slope-limiter.js';
 import { applySnapshotSlopeKernel } from './snapshot-slope-kernel.js';
+import { showError } from '../ui/status-service.js';
 
 const globalScope = typeof globalThis !== 'undefined' ? globalThis : {};
+
+// Gain-based LUT correction constants
+const GAIN_TARGET_NEUTRAL = 0.45;  // Midtone anchor point for neutral detection
+const GAIN_WINDOW_WIDTH = 0.2;    // Search window around target neutral
+const GAIN_MIN = 0.05;            // Minimum allowed gain (prevents divide-by-zero effects)
+const GAIN_MAX = 20;              // Maximum allowed gain (prevents extreme corrections)
+
+// Feature flag for legacy LUT mapping (direct interpolation without gain correction)
+let useLegacyLUTMapping = false;
+
+/**
+ * Enable/disable legacy LUT mapping mode.
+ * Legacy mode uses direct interpolation without gain-based correction.
+ * @param {boolean} enabled - True to use legacy mode, false for gain-based mode
+ */
+export function setLegacyLUTMappingEnabled(enabled) {
+    useLegacyLUTMapping = !!enabled;
+    console.log(`[LUT] Legacy mapping mode ${useLegacyLUTMapping ? 'enabled' : 'disabled'}`);
+}
+
+/**
+ * Check if legacy LUT mapping mode is enabled
+ * @returns {boolean}
+ */
+export function isLegacyLUTMappingEnabled() {
+    return useLegacyLUTMapping;
+}
 
 function computeEffectiveHeadroom(info) {
     if (!info) {
@@ -550,7 +578,8 @@ export function beginCompositeLabRedistribution(config = {}) {
         return false;
     }
 
-    compositeLabSession.active = true;
+    try {
+        compositeLabSession.active = true;
     compositeLabSession.channels = Array.isArray(channelNames) ? channelNames.slice() : [];
     compositeLabSession.endValues = { ...endValues };
     compositeLabSession.baseCurves = {};
@@ -665,7 +694,13 @@ export function beginCompositeLabRedistribution(config = {}) {
             autoCompute: compositeLabSession.autoComputeDensity
         });
     }
-    return true;
+        return true;
+    } catch (error) {
+        console.error('[beginCompositeLabRedistribution] Error during redistribution setup:', error);
+        showError('LAB redistribution setup failed');
+        compositeLabSession.active = false;
+        return false;
+    }
 }
 
 export function registerCompositeLabBase(channelName, values) {
@@ -676,7 +711,20 @@ export function registerCompositeLabBase(channelName, values) {
 }
 
 function solveLinearSystemSymmetric(matrix, vector) {
+    // Validate inputs to prevent TypeError on malformed data
+    if (!Array.isArray(matrix) || !Array.isArray(vector) || matrix.length === 0) {
+        return null;
+    }
     const n = matrix.length;
+    if (vector.length !== n) {
+        return null;
+    }
+    // Verify matrix is properly formed (n x n)
+    for (let i = 0; i < n; i += 1) {
+        if (!Array.isArray(matrix[i]) || matrix[i].length !== n) {
+            return null;
+        }
+    }
     const augmented = new Array(n);
 
     for (let i = 0; i < n; i += 1) {
@@ -782,7 +830,8 @@ function recordSampleForSmoothing(context, index, delta, contributions, weightMa
 }
 
 function computeCompositeDensityWeights(channels, baseCurves, endValues, normalizedEntry, options = {}) {
-    const weightingMode = options.weightingMode || COMPOSITE_WEIGHTING_MODES.NORMALIZED;
+    try {
+        const weightingMode = options.weightingMode || COMPOSITE_WEIGHTING_MODES.NORMALIZED;
     const weights = new Map();
     const constants = new Map();
     const measurementDeltas = new Array(CURVE_RESOLUTION).fill(0);
@@ -1988,6 +2037,34 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
         smoothingContext,
         perSampleCeilingEnabled
     };
+    } catch (error) {
+        console.error('[computeCompositeDensityWeights] Error computing density weights:', error);
+        showError('Composite density calculation failed');
+        // Return empty/default weights on error
+        return {
+            weights: new Map(),
+            constants: new Map(),
+            measurementDeltas: new Array(CURVE_RESOLUTION).fill(0),
+            densityProfiles: new Array(CURVE_RESOLUTION).fill(null),
+            momentumByChannel: new Map(),
+            momentumSummary: {},
+            momentumOptions: null,
+            densitySources: new Map(),
+            coverageSummary: {},
+            coverageByChannel: new Map(),
+            coverageLimits: new Map(),
+            coverageBuffers: new Map(),
+            coverageThresholds: new Map(),
+            coverageThresholdsNormalized: new Map(),
+            coverageClampEvents: new Map(),
+            coverageUsage: new Map(),
+            smoothingWindows: null,
+            smoothingConfig: null,
+            remainingByChannel: {},
+            smoothingContext: null,
+            perSampleCeilingEnabled: false
+        };
+    }
 }
 
 function prepareCompositeInterpolation() {
@@ -4635,7 +4712,7 @@ export function finalizeCompositeLabRedistribution() {
         const curve = correctedCurves[name];
         const baseline = baselineSnapshot[name];
         if (Array.isArray(curve)) {
-            correctedCurves[name] = preserveLeadingInk(curve, baseline);
+            correctedCurves[name] = preserveLeadingInk(curve);
         }
     });
 
@@ -5814,6 +5891,30 @@ export function applyAutoEndpointAdjustments(values, endValue, channelName, smar
     });
 }
 
+// Memoization cache for make256 to avoid redundant curve generation
+const make256Cache = new Map();
+let make256CacheVersion = 0;
+
+/**
+ * Invalidate the make256 cache - call when any state affecting curves changes:
+ * - LAB data loaded/cleared
+ * - Smart curve edited
+ * - Feature flag changed
+ * - End values changed
+ */
+export function invalidateMake256Cache() {
+    make256Cache.clear();
+    make256CacheVersion += 1;
+}
+
+function getMake256CacheKey(endValue, channelName, applyLinearization, options) {
+    // Include version to auto-invalidate on state changes
+    const smoothing = options?.smoothingPercent ?? 0;
+    const forceSmartApplied = options?.forceSmartApplied ?? null;
+    const smartState = isSmartCurve(channelName) ? 'smart' : 'linear';
+    return `v${make256CacheVersion}:${channelName}:${endValue}:${applyLinearization}:${smoothing}:${forceSmartApplied}:${smartState}`;
+}
+
 /**
  * Main curve generation function - make256
  * Generates a 256-point curve for a channel with all corrections applied
@@ -5826,6 +5927,13 @@ export function make256(endValue, channelName, applyLinearization = false, optio
     try {
         if (endValue === 0) {
             return new Array(CURVE_RESOLUTION).fill(0);
+        }
+
+        // Check cache first
+        const cacheKey = getMake256CacheKey(endValue, channelName, applyLinearization, options);
+        const cached = make256Cache.get(cacheKey);
+        if (cached) {
+            return cached.slice(); // Return copy to prevent mutation
         }
 
         const debugEnabled = typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS;
@@ -5988,10 +6096,14 @@ export function make256(endValue, channelName, applyLinearization = false, optio
             }
         }
 
+        // Store in cache before returning
+        make256Cache.set(cacheKey, arr.slice()); // Store copy
+
         return arr;
 
     } catch (error) {
         console.error('Error in make256:', error);
+        showError(`Curve generation failed for ${channelName}: ${error.message}`);
         return new Array(CURVE_RESOLUTION).fill(0);
     }
 }
@@ -6186,23 +6298,103 @@ export function apply1DLUTFixedDomain(values, lutOrData, domainMin = 0, domainMa
             return values.slice();
         }
 
-        const { interpolationFunction, lutDomainMin, lutDomainMax, domainSpan } = context;
+        const { interpolationFunction, lutDomainMin, domainSpan } = context;
 
         const maxOutput = Math.max(1, maxValue || TOTAL);
-        const enableDebug = typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS;
+        const start = typeof lutDomainMin === 'number' ? lutDomainMin : 0;
+        const span = Math.abs(domainSpan) > 1e-9 ? domainSpan : 1;
+        const epsilon = 1e-6;
 
-        const result = values.map((value, index) => {
-            const normalized = clamp01(maxOutput > 0 ? value / maxOutput : 0);
-            const t = lutDomainMin + normalized * domainSpan;
-            const lutValue = clamp01(interpolationFunction(t));
-            const output = Math.round(lutValue * maxOutput);
-            if (enableDebug && index % 32 === 0) {
-                console.log('[apply1DLUT]', { index, value, normalized, t, lutValue, output });
+        // Legacy mode: direct LUT interpolation without gain-based correction
+        if (useLegacyLUTMapping) {
+            const result = values.map((value) => {
+                const baseValue = Number(value) || 0;
+                const normalized = maxOutput > 0 ? baseValue / maxOutput : 0;
+                const t = start + clamp01(normalized) * span;
+                const lutValue = clamp01(interpolationFunction(t));
+                return Math.round(lutValue * maxOutput);
+            });
+            return preserveLeadingInk(result);
+        }
+
+        // Gain-based correction mode (default)
+        const rawGains = new Array(CURVE_RESOLUTION);
+        for (let i = 0; i < CURVE_RESOLUTION; i += 1) {
+            const inputNorm = CURVE_RESOLUTION > 1 ? i / (CURVE_RESOLUTION - 1) : 0;
+            const lutInput = start + inputNorm * span;
+            const lutValue = clamp01(interpolationFunction(lutInput));
+            const identity = clamp01(inputNorm);
+            const safeIdentity = identity > epsilon ? identity : epsilon;
+            rawGains[i] = clampGain(lutValue / safeIdentity);
+        }
+
+        const windowMin = Math.max(0, GAIN_TARGET_NEUTRAL - GAIN_WINDOW_WIDTH);
+        const windowMax = Math.min(1, GAIN_TARGET_NEUTRAL + GAIN_WINDOW_WIDTH);
+        const smoothedGains = smoothGainCurve(rawGains);
+
+        let preferredIndex = null;
+        let preferredScore = Infinity;
+        let fallbackIndex = null;
+        let fallbackScore = Infinity;
+
+        for (let i = 1; i < CURVE_RESOLUTION - 1; i += 1) {
+            const evalGain = smoothedGains[i];
+            const score = Math.abs(evalGain - 1);
+            const inputNorm = CURVE_RESOLUTION > 1 ? i / (CURVE_RESOLUTION - 1) : 0;
+            const inWindow = inputNorm >= windowMin && inputNorm <= windowMax;
+
+            if (score < fallbackScore) {
+                fallbackScore = score;
+                fallbackIndex = i;
             }
-            return output;
+
+            if (inWindow) {
+                if (score < preferredScore - 1e-6) {
+                    preferredScore = score;
+                    preferredIndex = i;
+                } else if (Math.abs(score - preferredScore) <= 1e-6 && preferredIndex !== null) {
+                    const currentDist = Math.abs(inputNorm - GAIN_TARGET_NEUTRAL);
+                    const bestDist = Math.abs((preferredIndex / (CURVE_RESOLUTION - 1)) - GAIN_TARGET_NEUTRAL);
+                    if (currentDist < bestDist) {
+                        preferredIndex = i;
+                    }
+                }
+            }
+        }
+
+        const neutralIndex = preferredIndex != null
+            ? preferredIndex
+            : (fallbackIndex != null ? fallbackIndex : Math.floor(CURVE_RESOLUTION / 2));
+        const anchorGain = rawGains[neutralIndex] || 1;
+        const safeAnchor = Math.abs(anchorGain) > epsilon ? anchorGain : 1;
+
+        const normalizedGains = rawGains.map((gain) => clampGain(gain / safeAnchor));
+
+        let baselinePeak = 0;
+        let correctedPeak = 0;
+        const result = values.map((value) => {
+            const baseValue = Number(value) || 0;
+            if (baseValue > baselinePeak) {
+                baselinePeak = baseValue;
+            }
+            const normalized = clamp01(maxOutput > 0 ? baseValue / maxOutput : 0);
+            const gain = sampleGainFromCurve(normalizedGains, normalized);
+            const adjusted = Math.max(0, Math.min(TOTAL, Math.round(baseValue * gain)));
+            if (adjusted > correctedPeak) {
+                correctedPeak = adjusted;
+            }
+            return adjusted;
         });
 
-        return preserveLeadingInk(result, values);
+        if (baselinePeak > 0 && correctedPeak > 0 && Math.abs(correctedPeak - baselinePeak) > 1) {
+            const scaleRatio = baselinePeak / correctedPeak;
+            for (let i = 0; i < result.length; i += 1) {
+                const scaled = result[i] * scaleRatio;
+                result[i] = Math.max(0, Math.min(TOTAL, Math.round(scaled)));
+            }
+        }
+
+        return preserveLeadingInk(result);
 
     } catch (error) {
         console.error('Error in apply1DLUT:', error);
@@ -6228,7 +6420,7 @@ export function apply1DLUTActiveRange(values, lutOrData, domainMin = 0, domainMa
         const activeRange = detectActiveRange(values);
         const remapped = remapActiveRange(values, targets, activeRange, { maxOutput });
         const monotonic = enforceMonotonic(remapped);
-        return preserveLeadingInk(monotonic, values);
+        return preserveLeadingInk(monotonic);
     } catch (error) {
         console.error('Error in apply1DLUTActiveRange:', error);
         return values.slice();
@@ -6372,6 +6564,49 @@ export function enforceMonotonic(curve) {
     return result;
 }
 
+function sampleGainFromCurve(gainSamples, normalized) {
+    if (!Array.isArray(gainSamples) || gainSamples.length === 0) {
+        return 1;
+    }
+    if (gainSamples.length === 1) {
+        return gainSamples[0];
+    }
+    const clamped = clamp01(Number(normalized) || 0);
+    const position = clamped * (gainSamples.length - 1);
+    const leftIndex = Math.floor(position);
+    const rightIndex = Math.min(gainSamples.length - 1, leftIndex + 1);
+    const alpha = position - leftIndex;
+    const leftValue = gainSamples[leftIndex];
+    const rightValue = gainSamples[rightIndex];
+    return leftValue + (rightValue - leftValue) * alpha;
+}
+
+function smoothGainCurve(gainSamples) {
+    if (!Array.isArray(gainSamples) || gainSamples.length === 0) {
+        return [];
+    }
+    const result = new Array(gainSamples.length);
+    for (let i = 0; i < gainSamples.length; i += 1) {
+        let sum = 0;
+        let count = 0;
+        for (let j = i - 1; j <= i + 1; j += 1) {
+            if (j >= 0 && j < gainSamples.length) {
+                sum += gainSamples[j];
+                count += 1;
+            }
+        }
+        result[i] = count > 0 ? (sum / count) : gainSamples[i];
+    }
+    return result;
+}
+
+function clampGain(value) {
+    if (!Number.isFinite(value)) {
+        return 1;
+    }
+    return Math.max(GAIN_MIN, Math.min(GAIN_MAX, value));
+}
+
 /**
  * Build .quad file content - buildFile
  * @returns {string} Complete .quad file content
@@ -6479,6 +6714,7 @@ export function buildFile() {
  */
 registerDebugNamespace('processingPipeline', {
     make256,
+    invalidateMake256Cache,
     apply1DLUT,
     apply1DLUTFixedDomain,
     apply1DLUTActiveRange,
@@ -6491,8 +6727,11 @@ registerDebugNamespace('processingPipeline', {
     applyPerChannelLinearizationStep,
     applyGlobalLinearizationStep,
     replayCompositeDebugSessionFromCache,
-    getCompositeDebugSessionCache
+    getCompositeDebugSessionCache,
+    // Feature flag controls
+    setLegacyLUTMappingEnabled,
+    isLegacyLUTMappingEnabled
 }, {
     exposeOnWindow: typeof window !== 'undefined',
-    windowAliases: ['make256', 'apply1DLUT', 'buildFile', 'buildBaseCurve']
+    windowAliases: ['make256', 'invalidateMake256Cache', 'apply1DLUT', 'buildFile', 'buildBaseCurve']
 });

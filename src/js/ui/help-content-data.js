@@ -6,7 +6,19 @@ import { APP_RELEASE_CHANNEL } from '../core/version.js';
 export const VERSION_HISTORY = {
   'Unreleased': {
     date: '—',
-    title: 'Bell curve improvements',
+    title: '',
+    sections: {
+      ADDED: [],
+      CHANGED: [],
+      FIXED: [],
+      REMOVED: [],
+      DOCS: []
+    },
+    aboutDialog: []
+  },
+  '4.3.5': {
+    date: '2025-01-19',
+    title: 'Bell curve improvements & .quad parser fix',
     sections: {
       ADDED: [
         'Bell curve classifier now reports asymmetry metrics (asymmetryRatio, isLeftSkewed, isRightSkewed) for diagnostic insight into peak shape.',
@@ -22,6 +34,7 @@ export const VERSION_HISTORY = {
         'Refactored toggle handlers to use centralized utilities (syncToggleState, initializeToggle).'
       ],
       FIXED: [
+        '.quad file parser now supports externally-created files that lack the ## QuadToneRIP header. Channel count is inferred from data and standard names applied for 8-channel (P600/P800) and 10-channel (P700/P900) configurations.',
         'XSS prevention via HTML escaping in status messages.'
       ],
       REMOVED: [],
@@ -30,6 +43,10 @@ export const VERSION_HISTORY = {
       ]
     },
     aboutDialog: [
+      {
+        label: 'External .quad support',
+        desc: 'Parser now loads .quad files created by external tools (no header required). Channels inferred from data count.'
+      },
       {
         label: 'Bell curve diagnostics',
         desc: 'Classifier now reports asymmetry metrics and Gaussian fit quality (R²) for better peak shape analysis.'

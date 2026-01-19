@@ -4,7 +4,7 @@
 import { elements, getCurrentPrinter, setLoadedQuadData, getLoadedQuadData, ensureLoadedQuadData, getAppState, updateAppState, TOTAL, getPlotSmoothingPercent, setPlotSmoothingPercent, getCorrectionGain, getReferenceQuadData, setReferenceQuadData, clearReferenceQuadData, isReferenceQuadLoaded } from '../core/state.js';
 import { getStateManager } from '../core/state-manager.js';
 import { ensureChannelLock, setChannelLock, isChannelLocked, updateChannelLockBounds, subscribeToChannelLock, clampAbsoluteToChannelLock, getChannelLockInfo, getLockedChannels, getGlobalScaleLockMessage } from '../core/channel-locks.js';
-import { sanitizeFilename, debounce, formatScalePercent } from './ui-utils.js';
+import { sanitizeFilename, debounce, formatScalePercent, syncToggleState, initializeToggle } from './ui-utils.js';
 import { generateFilename, downloadFile, readFileAsText } from '../files/file-operations.js';
 import { loadReferenceQuadFile } from '../files/reference-quad-loader.js';
 import { InputValidator } from '../core/validation.js';
@@ -1936,12 +1936,7 @@ const scheduleNormalizationRefresh = debounce(() => {
 }, 250);
 
 function syncSmartPointDragToggle() {
-    if (!elements.smartPointDragToggle) {
-        return;
-    }
-    const enabled = isSmartPointDragEnabled();
-    elements.smartPointDragToggle.checked = enabled;
-    elements.smartPointDragToggle.setAttribute('aria-checked', String(enabled));
+    syncToggleState(elements.smartPointDragToggle, isSmartPointDragEnabled);
 }
 
 function initializeSmartPointDragOption() {
@@ -1958,12 +1953,7 @@ function initializeSmartPointDragOption() {
 }
 
 function syncCorrectionOverlayToggle() {
-    if (!elements.correctionOverlayToggle) {
-        return;
-    }
-    const enabled = isChartDebugShowCorrectionTarget();
-    elements.correctionOverlayToggle.checked = enabled;
-    elements.correctionOverlayToggle.setAttribute('aria-checked', String(enabled));
+    syncToggleState(elements.correctionOverlayToggle, isChartDebugShowCorrectionTarget);
 }
 
 function initializeCorrectionOverlayOption() {
@@ -2008,12 +1998,7 @@ function initializeLabSpotMarkersOption() {
 }
 
 function syncLightBlockingOverlayToggle() {
-    if (!elements.lightBlockingOverlayToggle) {
-        return;
-    }
-    const enabled = isChartLightBlockingOverlayEnabled();
-    elements.lightBlockingOverlayToggle.checked = enabled;
-    elements.lightBlockingOverlayToggle.setAttribute('aria-checked', String(enabled));
+    syncToggleState(elements.lightBlockingOverlayToggle, isChartLightBlockingOverlayEnabled);
 }
 
 function initializeLightBlockingOverlayOption() {
@@ -2030,12 +2015,7 @@ function initializeLightBlockingOverlayOption() {
 }
 
 function syncInkLoadOverlayToggle() {
-    if (!elements.inkLoadOverlayToggle) {
-        return;
-    }
-    const enabled = isChartInkLoadOverlayEnabled();
-    elements.inkLoadOverlayToggle.checked = enabled;
-    elements.inkLoadOverlayToggle.setAttribute('aria-checked', String(enabled));
+    syncToggleState(elements.inkLoadOverlayToggle, isChartInkLoadOverlayEnabled);
 }
 
 function initializeInkLoadOverlayOption() {

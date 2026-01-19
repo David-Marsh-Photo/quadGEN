@@ -3,6 +3,18 @@
 
 const noop = () => {};
 
+// RAF batching state for chart updates
+let inkChartRAFId = null;
+let inkChartPendingUpdate = false;
+
+// RAF batching state for processing detail updates
+let processingDetailRAFId = null;
+let processingDetailPendingChannels = new Set();
+
+// RAF batching state for preview updates
+let previewRAFId = null;
+let previewPendingUpdate = false;
+
 let inkChartHandler = noop;
 let processingDetailHandler = noop;
 let processingDetailAllHandler = noop;
@@ -15,7 +27,16 @@ export function registerInkChartHandler(fn) {
 }
 
 export function triggerInkChartUpdate() {
-  return inkChartHandler();
+  // RAF batching: multiple calls in same frame = 1 render
+  if (inkChartPendingUpdate) return;
+  inkChartPendingUpdate = true;
+  if (!inkChartRAFId) {
+    inkChartRAFId = requestAnimationFrame(() => {
+      inkChartRAFId = null;
+      inkChartPendingUpdate = false;
+      inkChartHandler();
+    });
+  }
 }
 
 export function registerProcessingDetailHandler(fn) {
@@ -23,7 +44,18 @@ export function registerProcessingDetailHandler(fn) {
 }
 
 export function triggerProcessingDetail(channelName) {
-  return processingDetailHandler(channelName);
+  // RAF batching: multiple calls in same frame = 1 render per channel
+  if (channelName) {
+    processingDetailPendingChannels.add(channelName);
+  }
+  if (!processingDetailRAFId) {
+    processingDetailRAFId = requestAnimationFrame(() => {
+      processingDetailRAFId = null;
+      const channels = Array.from(processingDetailPendingChannels);
+      processingDetailPendingChannels.clear();
+      channels.forEach(ch => processingDetailHandler(ch));
+    });
+  }
 }
 
 export function registerProcessingDetailAllHandler(fn) {
@@ -55,5 +87,14 @@ export function registerPreviewHandler(fn) {
 }
 
 export function triggerPreviewUpdate() {
-  return previewHandler();
+  // RAF batching: multiple calls in same frame = 1 render
+  if (previewPendingUpdate) return;
+  previewPendingUpdate = true;
+  if (!previewRAFId) {
+    previewRAFId = requestAnimationFrame(() => {
+      previewRAFId = null;
+      previewPendingUpdate = false;
+      previewHandler();
+    });
+  }
 }

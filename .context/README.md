@@ -25,6 +25,16 @@ Load modules based on your task:
 | `ai-integration.md` | Lab Tech functions, tool contracts, documentation policy |
 | `agent_logging.md` | When/how to log agent work, log template, documentation updates |
 
+## Domain Knowledge
+
+Reference workflows for understanding the real-world processes quadGEN supports:
+
+| Document | Purpose |
+|----------|---------|
+| `docs/photogravure-multi-ink-calibration-workflow.md` | Multi-ink channel calibration for direct-to-plate photogravure |
+
+These explain the "why" behind quadGEN features—bell curves for secondary channels, ink limits, density ratios, and linearization.
+
 ## Quick Reference
 
 - **Build command:** `npm run build:agent`

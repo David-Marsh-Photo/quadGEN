@@ -11,6 +11,7 @@ export const CurveShapeClassification = {
 const MAX_VALUE = 65535;
 const DEFAULTS = {
     smoothingWindow: 5,
+    useSavitzkyGolay: true,  // Use Savitzky-Golay by default (better peak preservation)
     slopeTolerance: 150 / MAX_VALUE,
     monotonicPositiveFraction: 0.9,
     monotonicRiseThreshold: 0.05,
@@ -74,6 +75,35 @@ function movingAverage(values, windowSize) {
     return result;
 }
 
+/**
+ * Savitzky-Golay smoothing (2nd order, window=5)
+ * Better peak preservation than moving average - standard in chromatography
+ * Uses polynomial fitting instead of simple boxcar averaging
+ * @param {number[]} values - Input values
+ * @returns {number[]} Smoothed values
+ */
+function savitzkyGolay5(values) {
+    if (!Array.isArray(values) || values.length < 5) {
+        return values.slice();
+    }
+
+    // Savitzky-Golay coefficients for window=5, polynomial=2
+    // Coefficients: [-3, 12, 17, 12, -3] / 35
+    const coeffs = [-3 / 35, 12 / 35, 17 / 35, 12 / 35, -3 / 35];
+    const result = new Array(values.length);
+
+    for (let i = 0; i < values.length; i++) {
+        let sum = 0;
+        for (let j = -2; j <= 2; j++) {
+            const idx = Math.min(values.length - 1, Math.max(0, i + j));
+            sum += values[idx] * coeffs[j + 2];
+        }
+        result[i] = sum;
+    }
+
+    return result;
+}
+
 function getSlopes(values) {
     if (!Array.isArray(values) || values.length < 2) {
         return [];
@@ -114,6 +144,47 @@ function estimateApexSpan(samples, peakIndex) {
     };
 }
 
+/**
+ * Compute R² (coefficient of determination) vs ideal Gaussian
+ * Measures how well the curve matches a Gaussian bell shape
+ * @param {number[]} samples - Normalized curve samples (0-1)
+ * @param {number} peakIndex - Index of peak value
+ * @returns {number|null} R² value (0-1) or null if cannot compute
+ */
+function computeGaussianFitQuality(samples, peakIndex) {
+    if (!Array.isArray(samples) || samples.length < 10) return null;
+    if (!Number.isFinite(peakIndex)) return null;
+
+    const peakValue = samples[peakIndex];
+    if (!Number.isFinite(peakValue) || peakValue <= 0) return null;
+
+    // Estimate sigma from FWHM (Full Width at Half Maximum)
+    const halfMax = peakValue * 0.5;
+    let leftHalf = peakIndex;
+    let rightHalf = peakIndex;
+    while (leftHalf > 0 && samples[leftHalf] > halfMax) leftHalf--;
+    while (rightHalf < samples.length - 1 && samples[rightHalf] > halfMax) rightHalf++;
+    const fwhm = rightHalf - leftHalf;
+    const sigma = fwhm / 2.355; // FWHM to sigma conversion
+
+    if (sigma < 1) return null;
+
+    // Compute sum of squared residuals vs Gaussian model
+    let ssRes = 0;
+    let ssTot = 0;
+    const mean = samples.reduce((a, b) => a + b, 0) / samples.length;
+
+    for (let i = 0; i < samples.length; i++) {
+        const d = i - peakIndex;
+        const gaussian = peakValue * Math.exp(-(d * d) / (2 * sigma * sigma));
+        ssRes += (samples[i] - gaussian) ** 2;
+        ssTot += (samples[i] - mean) ** 2;
+    }
+
+    const rSquared = ssTot > 0 ? 1 - (ssRes / ssTot) : 0;
+    return Math.max(0, Math.min(1, rSquared));
+}
+
 function buildBaseResult(samples) {
     const sanitized = sanitizeSamples(samples);
     const length = sanitized.length;
@@ -123,6 +194,9 @@ function buildBaseResult(samples) {
     const apexSpan = peakIndex != null ? estimateApexSpan(sanitized, peakIndex) : null;
     const startValue = length > 0 ? sanitized[0] : null;
     const endValue = length > 0 ? sanitized[length - 1] : null;
+    // Compute Gaussian fit quality on normalized samples
+    const normalizedForFit = normalize(sanitized);
+    const fitQuality = peakIndex != null ? computeGaussianFitQuality(normalizedForFit, peakIndex) : null;
     return {
         classification: CurveShapeClassification.UNKNOWN,
         confidence: 0,
@@ -140,6 +214,14 @@ function buildBaseResult(samples) {
         apexSpanRightSamples: apexSpan?.rightSamples ?? null,
         apexSpanLeftPercent: apexSpan?.leftPercent ?? null,
         apexSpanRightPercent: apexSpan?.rightPercent ?? null,
+        // Asymmetry metrics (added per multi-agent audit recommendation)
+        asymmetryRatio: apexSpan?.leftSamples && apexSpan?.rightSamples
+            ? apexSpan.leftSamples / apexSpan.rightSamples
+            : null,
+        isLeftSkewed: (apexSpan?.leftSamples ?? 0) < (apexSpan?.rightSamples ?? 0) * 0.8,
+        isRightSkewed: (apexSpan?.leftSamples ?? 0) > (apexSpan?.rightSamples ?? 0) * 1.2,
+        // Gaussian fit quality (R² coefficient of determination)
+        gaussianFitQuality: fitQuality,
         sampleCount: length,
         normalizedPeak: peakValue != null ? clamp01(peakValue / MAX_VALUE) : null,
         reasons: [],
@@ -247,7 +329,9 @@ export function classifyCurve(samples, options = {}) {
     }
 
     const normalized = normalize(base.sanitized);
-    const smoothed = movingAverage(normalized, mergedOptions.smoothingWindow);
+    const smoothed = mergedOptions.useSavitzkyGolay
+        ? savitzkyGolay5(normalized)
+        : movingAverage(normalized, mergedOptions.smoothingWindow);
     const slopes = getSlopes(smoothed);
 
     if (classifyFlatProfile(base, normalized, mergedOptions)) {

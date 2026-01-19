@@ -1,3 +1,5 @@
+import { clamp } from '../data/processing-utils.js';
+
 const INPUT_MIN = 0;
 const INPUT_MAX = 100;
 const OUTPUT_MIN = 0;
@@ -7,16 +9,6 @@ const SCALE_EPSILON = 1e-6;
 const SHIFT_WARNING_THRESHOLD = 5;
 const AUTO_FLAG_SHIFT_THRESHOLD = 1;
 const FLOAT_TOLERANCE = 1e-4;
-
-function clamp(value, min, max) {
-  const numeric = Number(value);
-  if (!Number.isFinite(numeric)) {
-    return min;
-  }
-  if (numeric < min) return min;
-  if (numeric > max) return max;
-  return numeric;
-}
 
 function isUsablePoint(point) {
   return point && Number.isFinite(point.input) && Number.isFinite(point.output);

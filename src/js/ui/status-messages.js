@@ -7,6 +7,24 @@ import { registerDebugNamespace } from '../utils/debug-registry.js';
 const globalScope = typeof globalThis !== 'undefined' ? globalThis : {};
 
 /**
+ * Escape HTML special characters to prevent XSS
+ * @param {string} value - String to escape
+ * @returns {string} - Escaped string
+ */
+function escapeHTML(value) {
+    return String(value).replace(/[&<>"']/g, (char) => {
+        switch (char) {
+            case '&': return '&amp;';
+            case '<': return '&lt;';
+            case '>': return '&gt;';
+            case '"': return '&quot;';
+            case '\'': return '&#39;';
+            default: return char;
+        }
+    });
+}
+
+/**
  * Status message handler for Lab Tech console
  * Based on addChatMessage from quadgen.html with exact same functionality
  */
@@ -35,8 +53,8 @@ export class StatusMessages {
         const prefix = role === 'user' ? '> ' : '';
 
         if (role === 'assistant') {
-            // Minimal formatting for readability; keep console feel
-            let formatted = message
+            // Escape HTML first to prevent XSS, then apply minimal markdown formatting
+            let formatted = escapeHTML(message)
                 .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
                 .replace(/\*(.*?)\*/g, '<em>$1</em>')
                 .replace(/^- (.+)$/gm, '• $1')

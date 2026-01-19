@@ -373,8 +373,8 @@ function seedChannelFromSamples(channelName, samples, contextLabel = 'default') 
         });
         const tightened = deriveSeedPointsFromSamples(channelName, activeSamples, {
             scaleMax,
-            maxErrorPercent: Math.max(0.02, (options?.maxErrorPercent || KP_SIMPLIFY.maxErrorPercent) * 0.5),
-            maxPoints: options?.maxPoints || KP_SIMPLIFY.maxPoints
+            maxErrorPercent: Math.max(0.02, KP_SIMPLIFY.maxErrorPercent * 0.5),
+            maxPoints: KP_SIMPLIFY.maxPoints
         });
         if (tightened && Array.isArray(tightened.points) && tightened.points.length >= 2) {
             const tightenedAbsolute = convertToAbsolutePoints(tightened.points);
@@ -558,7 +558,10 @@ function deriveSeedPointsFromSamples(channelName, samples, options = {}) {
 
     let keyPoints = extractAdaptiveKeyPointsFromValues(samples, extractionOptions);
 
-    if (!Array.isArray(keyPoints) || keyPoints.length <= 2) {
+    // For linear ramps, 2 points is the correct result - skip fallback attempts
+    const samplesAreLinear = isSampleApproximatelyLinear(samples);
+
+    if ((!Array.isArray(keyPoints) || keyPoints.length <= 2) && !samplesAreLinear) {
         const refined = extractAdaptiveKeyPointsFromValues(samples, {
             maxErrorPercent: Math.max(0.02, extractionOptions.maxErrorPercent * 0.25),
             maxPoints: Math.max(16, extractionOptions.maxPoints + 10),
@@ -569,7 +572,7 @@ function deriveSeedPointsFromSamples(channelName, samples, options = {}) {
         }
     }
 
-    if (!Array.isArray(keyPoints) || keyPoints.length <= 2) {
+    if ((!Array.isArray(keyPoints) || keyPoints.length <= 2) && !samplesAreLinear) {
         editModeDebugLog(`Adaptive extraction fallback for ${channelName}`, {
             pointCount: keyPoints?.length || 0,
             peak,
@@ -578,7 +581,7 @@ function deriveSeedPointsFromSamples(channelName, samples, options = {}) {
         keyPoints = buildInflectionPointsFromSamples(samples, scaleMax);
     }
 
-    if (Array.isArray(keyPoints) && keyPoints.length <= 2) {
+    if (Array.isArray(keyPoints) && keyPoints.length <= 2 && !samplesAreLinear) {
         keyPoints = ensurePlateauAnchors(channelName, samples, keyPoints, { scaleMax, peak });
     }
 

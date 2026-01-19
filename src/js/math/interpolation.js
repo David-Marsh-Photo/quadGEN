@@ -33,6 +33,36 @@ export function popsCompatStandard(t) {
 }
 
 /**
+ * Binary search to find the interval index for a value in a sorted array.
+ * Returns index i such that x[i] <= t < x[i+1] (or boundary indices for edge cases).
+ * O(log n) instead of O(n) linear search.
+ * @param {number[]} x - Sorted array of x values
+ * @param {number} t - Value to find interval for
+ * @returns {number} Index of the interval
+ */
+function findIntervalBinary(x, t) {
+  const n = x.length;
+  if (n < 2) return 0;
+  if (t <= x[0]) return 0;
+  if (t >= x[n - 1]) return n - 2;
+
+  let lo = 0;
+  let hi = n - 1;
+
+  // Binary search for the interval containing t
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >>> 1; // Integer division by 2
+    if (x[mid] <= t) {
+      lo = mid;
+    } else {
+      hi = mid;
+    }
+  }
+
+  return lo;
+}
+
+/**
  * Cubic spline interpolation
  * @param {number[]} x - input points (typically 0, 1, 2, ..., n-1)
  * @param {number[]} y - output values at each point
@@ -96,9 +126,8 @@ export function createCubicSpline(x, y) {
     if (t <= x[0]) return y[0];
     if (t >= x[n - 1]) return y[n - 1];
 
-    // Find interval
-    let i = 0;
-    while (i < n - 1 && x[i + 1] < t) i++;
+    // Find interval using binary search (O(log n) instead of O(n))
+    const i = findIntervalBinary(x, t);
 
     // Evaluate cubic polynomial - clamped cubic spline interpolation
     const dt = t - x[i];
@@ -121,9 +150,8 @@ export function createCatmullRomSpline(x, y, tension = 0.5) {
     if (t <= x[0]) return y[0];
     if (t >= x[n - 1]) return y[n - 1];
 
-    // Find interval
-    let i = 0;
-    while (i < n - 1 && x[i + 1] < t) i++;
+    // Find interval using binary search (O(log n) instead of O(n))
+    const i = findIntervalBinary(x, t);
 
     // Get the four control points (with boundary handling)
     const p0 = y[Math.max(0, i - 1)];
@@ -192,9 +220,8 @@ export function createPCHIPSpline(x, y) {
     if (t <= x[0]) return y[0];
     if (t >= x[n - 1]) return y[n - 1];
 
-    // Find interval
-    let i = 0;
-    while (i < n - 1 && x[i + 1] < t) i++;
+    // Find interval using binary search (O(log n) instead of O(n))
+    const i = findIntervalBinary(x, t);
 
     // Normalize t within the interval
     const dt = t - x[i];

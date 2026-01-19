@@ -1309,19 +1309,55 @@ export function setChartStatusMessage(message, duration = 2000) {
 
 
 /**
+ * Static layer cache for performance optimization
+ */
+const staticLayerCache = {
+    canvas: null,
+    ctx: null,
+    geom: null,
+    colors: null,
+    displayMax: null,
+    dpr: 1
+};
+
+/**
+ * Compare two geometry objects for equality
+ */
+function isGeomEqual(g1, g2) {
+    if (g1 === g2) return true;
+    if (!g1 || !g2) return false;
+    return g1.width === g2.width &&
+           g1.height === g2.height &&
+           g1.padding === g2.padding &&
+           g1.bottomPadding === g2.bottomPadding &&
+           g1.leftPadding === g2.leftPadding &&
+           g1.rightPadding === g2.rightPadding &&
+           g1.displayMax === g2.displayMax &&
+           g1.dpr === g2.dpr;
+}
+
+/**
+ * Compare two color objects for equality
+ */
+function isColorsEqual(c1, c2) {
+    if (c1 === c2) return true;
+    if (!c1 || !c2) return false;
+    return c1.grid === c2.grid &&
+           c1.axis === c2.axis &&
+           c1.text === c2.text &&
+           c1.bg === c2.bg &&
+           c1.border === c2.border;
+}
+
+/**
  * Main chart update function
  * This is the core chart rendering pipeline
  */
 export function updateInkChart() {
-    console.log('🎨 updateInkChart called'); // Debug log
+    // console.log('🎨 updateInkChart called');
     if (!elements.inkChart || !elements.rows) {
-        console.log('🎨 updateInkChart exiting early - missing elements:', {
-            inkChart: !!elements.inkChart,
-            rows: !!elements.rows
-        });
         return;
     }
-    console.log('🎨 updateInkChart proceeding with chart update...');
 
     // Get chart elements
     const canvas = elements.inkChart;
@@ -1341,7 +1377,6 @@ export function updateInkChart() {
     const fontScale = 1 + (deviceScale - 1) * widthProgress;
 
     if (!rect.width || !rect.height) {
-        console.log('🎨 updateInkChart skipping render - canvas is hidden or has zero size');
         return;
     }
 
@@ -1352,27 +1387,32 @@ export function updateInkChart() {
     if (canvas.width !== targetWidth || canvas.height !== targetHeight) {
         canvas.width = targetWidth;
         canvas.height = targetHeight;
-        console.log(`🎨 Resized canvas to ${canvas.width}x${canvas.height} (DPR: ${dpr})`);
+        // Invalidate cache on resize
+        staticLayerCache.geom = null;
+    }
+
+    // Sync overlay canvas size with main canvas
+    if (elements.inkChartOverlay) {
+        const overlay = elements.inkChartOverlay;
+        if (overlay.width !== targetWidth || overlay.height !== targetHeight) {
+            overlay.width = targetWidth;
+            overlay.height = targetHeight;
+            overlay.style.width = canvas.style.width || `${rect.width}px`;
+            overlay.style.height = canvas.style.height || `${rect.height}px`;
+        }
     }
 
     lastCanvasMetrics.width = targetWidth;
     lastCanvasMetrics.height = targetHeight;
     lastCanvasMetrics.dpr = dpr;
 
-    const ctx = canvas.getContext('2d');
+    const ctx = canvas.getContext('2d', { alpha: false }); // Optimization: disable alpha if possible, but might break transparency
     const colors = getChartColors();
-    console.log('🎨 Got canvas context and colors');
-
-    // Clear canvas
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    console.log('🎨 Canvas cleared, starting chart drawing...');
 
     // Check and adjust zoom based on active channels
     const minZoomIdx = getMinimumAllowedZoomIndex();
     const currentIdx = getChartZoomIndex();
     if (currentIdx < minZoomIdx) {
-        // Auto clamp the zoom for rendering but avoid persisting so the user's preferred
-        // level (stored in localStorage) is restored once the guard relaxes.
         setChartZoomIndex(minZoomIdx, { persist: false, refresh: false });
     }
 
@@ -1381,13 +1421,65 @@ export function updateInkChart() {
     const geom = createChartGeometry(canvas, displayMax, deviceScale);
     ensureSmartPointDragHandlers(geom);
 
-    // Draw chart background if specified
-    if (colors.bg && colors.bg !== 'transparent') {
-        ctx.save();
-        ctx.fillStyle = colors.bg;
-        ctx.fillRect(geom.leftPadding, geom.padding, geom.chartWidth, geom.chartHeight);
-        ctx.restore();
+    // --- Static Layer Caching Optimization ---
+    let useCache = false;
+    if (staticLayerCache.canvas &&
+        staticLayerCache.ctx &&
+        isGeomEqual(staticLayerCache.geom, geom) &&
+        isColorsEqual(staticLayerCache.colors, colors)) {
+        useCache = true;
     }
+
+    if (!useCache) {
+        // console.log('🎨 Cache miss - redrawing static layer');
+        if (!staticLayerCache.canvas) {
+            staticLayerCache.canvas = document.createElement('canvas');
+        }
+        
+        if (staticLayerCache.canvas.width !== canvas.width || staticLayerCache.canvas.height !== canvas.height) {
+            staticLayerCache.canvas.width = canvas.width;
+            staticLayerCache.canvas.height = canvas.height;
+        }
+        
+        if (!staticLayerCache.ctx) {
+            staticLayerCache.ctx = staticLayerCache.canvas.getContext('2d', { alpha: false });
+        }
+        
+        const cCtx = staticLayerCache.ctx;
+        
+        // Clear cache and set base background
+        cCtx.fillStyle = '#ffffff';
+        cCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Draw chart background area
+        if (colors.bg && colors.bg !== 'transparent') {
+            cCtx.save();
+            cCtx.fillStyle = colors.bg;
+            cCtx.fillRect(geom.leftPadding, geom.padding, geom.chartWidth, geom.chartHeight);
+            cCtx.restore();
+        }
+
+        // Draw chart components
+        drawChartGrid(cCtx, geom, colors);
+        drawChartAxes(cCtx, geom, colors);
+
+        // Draw gradients and capture their dimensions for label alignment
+        const inkGradientInfo = drawInkLevelGradient(cCtx, geom, colors);
+        const inputGradientInfo = drawInputLevelGradient(cCtx, geom, colors);
+
+        // Draw axis labels and titles using gradient dimensions
+        const tickValues = getTickValues(geom.displayMax);
+        drawAxisLabels(cCtx, geom, colors, tickValues, inkGradientInfo, inputGradientInfo);
+        drawAxisTitles(cCtx, geom, colors, inkGradientInfo);
+
+        // Update cache state
+        staticLayerCache.geom = geom;
+        staticLayerCache.colors = colors;
+    }
+
+    // Draw cached static layer to main canvas
+    ctx.drawImage(staticLayerCache.canvas, 0, 0);
+    // --- End Optimization ---
 
     // Auto-toggle overlays based on active channels
     const activeChannelCount = Array.from(elements.rows.children).reduce((count, row) => {
@@ -1411,19 +1503,6 @@ export function updateInkChart() {
             updateAppState({ overlayAutoToggledOff: false });
         }
     }
-
-    // Draw chart components
-    drawChartGrid(ctx, geom, colors);
-    drawChartAxes(ctx, geom, colors);
-
-    // Draw gradients and capture their dimensions for label alignment
-    const inkGradientInfo = drawInkLevelGradient(ctx, geom, colors);
-    const inputGradientInfo = drawInputLevelGradient(ctx, geom, colors);
-
-    // Draw axis labels and titles using gradient dimensions
-    const tickValues = getTickValues(geom.displayMax);
-    drawAxisLabels(ctx, geom, colors, tickValues, inkGradientInfo, inputGradientInfo);
-    drawAxisTitles(ctx, geom, colors, inkGradientInfo);
 
     if (chartDebugSettings.showCorrectionTarget) {
         drawCorrectionTargetCurve(ctx, geom);
@@ -1562,18 +1641,6 @@ export function initializeChart() {
                         updateInkChart();
                         scheduleAdditionalResponsivePasses();
                     }, { once: true });
-                    globalScope.setTimeout(() => {
-                        updateResponsiveWrapperDimensions();
-                        updateInkChart();
-                    }, 500);
-                    globalScope.setTimeout(() => {
-                        updateResponsiveWrapperDimensions();
-                        updateInkChart();
-                    }, 1000);
-                    globalScope.setTimeout(() => {
-                        updateResponsiveWrapperDimensions();
-                        updateInkChart();
-                    }, 2000);
                 }
             } else {
                 wrapper.dataset.chartResponsive = 'false';
@@ -1589,6 +1656,24 @@ export function initializeChart() {
     // Initial chart render
     if (elements.inkChart) {
         ensureChartResizeObserver();
+
+        // Create overlay canvas for cursor/tooltip (avoids full chart redraw on hover)
+        if (!elements.inkChartOverlay) {
+            const overlayCanvas = document.createElement('canvas');
+            overlayCanvas.id = 'inkChartOverlay';
+            overlayCanvas.style.cssText = 'position:absolute;top:0;left:0;pointer-events:none;z-index:10;';
+            const parent = elements.inkChart.parentElement;
+            if (parent) {
+                // Ensure parent is positioned for absolute overlay
+                const parentPosition = globalScope.getComputedStyle(parent).position;
+                if (parentPosition === 'static') {
+                    parent.style.position = 'relative';
+                }
+                parent.appendChild(overlayCanvas);
+                elements.inkChartOverlay = overlayCanvas;
+            }
+        }
+
         updateInkChart();
         if (ENABLE_RESPONSIVE_CHART && !responsiveInitScheduled && isBrowser && typeof globalScope.requestAnimationFrame === 'function') {
             responsiveInitScheduled = true;
@@ -1605,21 +1690,16 @@ export function initializeChart() {
 }
 
 function scheduleAdditionalResponsivePasses() {
+    // With RAF batching in triggerInkChartUpdate(), we only need a single
+    // follow-up pass. The ResizeObserver handles actual layout changes.
     if (!ENABLE_RESPONSIVE_CHART || !isBrowser || typeof globalScope.requestAnimationFrame !== 'function') {
         return;
     }
-    responsiveInitialPasses = 0;
-    const runPass = () => {
-        responsiveInitialPasses += 1;
+    // Single follow-up pass after layout stabilizes
+    globalScope.requestAnimationFrame(() => {
         updateResponsiveWrapperDimensions();
         updateInkChart();
-        if (responsiveInitialPasses < RESPONSIVE_INITIAL_MAX_PASSES) {
-            globalScope.requestAnimationFrame(() => {
-                globalScope.setTimeout(runPass, 100);
-            });
-        }
-    };
-    runPass();
+    });
 }
 
 function ensureColumnResizeObserver() {
@@ -2939,32 +3019,32 @@ export function setupChartCursorTooltip(geom) {
     const tip = elements.chartCursorTooltip;
 
     if (!canvas || !tip) {
-        console.warn('Chart cursor tooltip setup failed: missing elements', { canvas: !!canvas, tip: !!tip });
         return;
     }
 
     if (!canvas._cursorTooltipBound) {
         const container = canvas.closest('.relative') || canvas.parentElement || document.body;
+        let tooltipRafId = null;
 
-        const onMove = (e) => {
+        const performTooltipUpdate = (clientX, clientY) => {
             if (smartDragState.active) {
                 return;
             }
             if (!CHART_CURSOR_MAP) return;
 
-            // Re-render chart to clear prior cursor marker overlay
-            try {
-                updateInkChart();
-            } catch (err) {
-                console.warn('Chart update during tooltip failed:', err);
+            // Clear overlay canvas (no full chart redraw needed)
+            const overlayCanvas = elements.inkChartOverlay;
+            const overlayCtx = overlayCanvas?.getContext('2d');
+            if (overlayCtx) {
+                overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
             }
 
             // Convert mouse coordinates to canvas coordinates
             const rect = canvas.getBoundingClientRect();
             const scaleX = canvas.width / rect.width;
             const scaleY = canvas.height / rect.height;
-            const cx = (e.clientX - rect.left) * scaleX;
-            const cy = (e.clientY - rect.top) * scaleY;
+            const cx = (clientX - rect.left) * scaleX;
+            const cy = (clientY - rect.top) * scaleY;
 
             // Convert to chart coordinates
             const { leftPadding, chartWidth } = CHART_CURSOR_MAP;
@@ -2975,10 +3055,8 @@ export function setupChartCursorTooltip(geom) {
             let drawY = mapPercentToY(yPct, CHART_CURSOR_MAP);
 
             // Check if we're in edit mode and have a selected channel
-            // For now, we'll implement basic tooltip without edit mode dependencies
             let canInsert = false;
             try {
-                // Basic check for edit mode functionality - can be enhanced later
                 if (typeof globalScope.isEditModeEnabled === 'function' && globalScope.isEditModeEnabled()) {
                     const editModeEnabled = globalScope.isEditModeEnabled();
                     if (editModeEnabled && globalScope.EDIT && globalScope.EDIT.selectedChannel) {
@@ -3002,17 +3080,16 @@ export function setupChartCursorTooltip(geom) {
                                 yPct = vPct; // Lock tooltip Y to curve value
                                 drawY = mapPercentToY(vPct, CHART_CURSOR_MAP);
 
-                                // Draw cursor indicator circle on the curve
-                                const ctx = canvas.getContext('2d');
-                                if (ctx) {
+                                // Draw cursor indicator circle on the overlay canvas
+                                if (overlayCtx) {
                                     const inkColor = INK_COLORS[selCh] || '#000000';
-                                    ctx.save();
-                                    ctx.beginPath();
-                                    ctx.arc(Math.max(leftPadding, Math.min(leftPadding + chartWidth, drawX)), drawY, 8, 0, Math.PI * 2);
-                                    ctx.lineWidth = 4;
-                                    ctx.strokeStyle = inkColor;
-                                    ctx.stroke();
-                                    ctx.restore();
+                                    overlayCtx.save();
+                                    overlayCtx.beginPath();
+                                    overlayCtx.arc(Math.max(leftPadding, Math.min(leftPadding + chartWidth, drawX)), drawY, 8, 0, Math.PI * 2);
+                                    overlayCtx.lineWidth = 4;
+                                    overlayCtx.strokeStyle = inkColor;
+                                    overlayCtx.stroke();
+                                    overlayCtx.restore();
                                 }
                             }
                         }
@@ -3049,32 +3126,32 @@ export function setupChartCursorTooltip(geom) {
             // Update tooltip content and position
             const tooltipLines = [];
             if (labMarkerInfo) {
-                const highlightCtx = canvas.getContext('2d');
-                if (highlightCtx) {
-                    highlightCtx.save();
-                    highlightCtx.strokeStyle = labMarkerInfo.action === 'darken' ? LAB_SPOT_DARKEN_COLOR : (labMarkerInfo.action === 'lighten' ? LAB_SPOT_LIGHTEN_COLOR : LAB_SPOT_PASS_STROKE);
-                    highlightCtx.lineWidth = Math.max((labMarkerInfo.radius || 8) * 0.35, 2 * (CHART_CURSOR_MAP?.dpr || 1));
-                    highlightCtx.setLineDash([6, 4]);
-                    highlightCtx.beginPath();
-                    highlightCtx.arc(labMarkerInfo.canvasX, labMarkerInfo.canvasY, (labMarkerInfo.radius || 8) + Math.max(4 * (CHART_CURSOR_MAP?.dpr || 1), 4), 0, Math.PI * 2);
-                    highlightCtx.stroke();
+                // Draw LAB marker highlight on overlay canvas
+                if (overlayCtx) {
+                    overlayCtx.save();
+                    overlayCtx.strokeStyle = labMarkerInfo.action === 'darken' ? LAB_SPOT_DARKEN_COLOR : (labMarkerInfo.action === 'lighten' ? LAB_SPOT_LIGHTEN_COLOR : LAB_SPOT_PASS_STROKE);
+                    overlayCtx.lineWidth = Math.max((labMarkerInfo.radius || 8) * 0.35, 2 * (CHART_CURSOR_MAP?.dpr || 1));
+                    overlayCtx.setLineDash([6, 4]);
+                    overlayCtx.beginPath();
+                    overlayCtx.arc(labMarkerInfo.canvasX, labMarkerInfo.canvasY, (labMarkerInfo.radius || 8) + Math.max(4 * (CHART_CURSOR_MAP?.dpr || 1), 4), 0, Math.PI * 2);
+                    overlayCtx.stroke();
                     if (Number.isFinite(labMarkerInfo.measuredCanvasY)) {
                         const dprHighlight = CHART_CURSOR_MAP?.dpr || geom.dpr || 1;
                         const bottomEdge = (CHART_CURSOR_MAP?.height ?? geom.height) - (CHART_CURSOR_MAP?.bottomPadding ?? geom.bottomPadding ?? 0);
 
-                        highlightCtx.lineWidth = Math.max(1.5 * dprHighlight, 1.5);
-                        highlightCtx.setLineDash([3, 3]);
-                        highlightCtx.beginPath();
-                        highlightCtx.moveTo(labMarkerInfo.canvasX, labMarkerInfo.canvasY + (labMarkerInfo.radius || 8));
-                        highlightCtx.lineTo(labMarkerInfo.canvasX, bottomEdge);
-                        highlightCtx.stroke();
+                        overlayCtx.lineWidth = Math.max(1.5 * dprHighlight, 1.5);
+                        overlayCtx.setLineDash([3, 3]);
+                        overlayCtx.beginPath();
+                        overlayCtx.moveTo(labMarkerInfo.canvasX, labMarkerInfo.canvasY + (labMarkerInfo.radius || 8));
+                        overlayCtx.lineTo(labMarkerInfo.canvasX, bottomEdge);
+                        overlayCtx.stroke();
 
-                        highlightCtx.fillStyle = `${(labMarkerInfo.action === 'darken' ? LAB_SPOT_DARKEN_COLOR : LAB_SPOT_LIGHTEN_COLOR)}66`;
-                        highlightCtx.beginPath();
-                        highlightCtx.arc(labMarkerInfo.canvasX, labMarkerInfo.measuredCanvasY, Math.max(3 * dprHighlight, 3), 0, Math.PI * 2);
-                        highlightCtx.fill();
+                        overlayCtx.fillStyle = `${(labMarkerInfo.action === 'darken' ? LAB_SPOT_DARKEN_COLOR : LAB_SPOT_LIGHTEN_COLOR)}66`;
+                        overlayCtx.beginPath();
+                        overlayCtx.arc(labMarkerInfo.canvasX, labMarkerInfo.measuredCanvasY, Math.max(3 * dprHighlight, 3), 0, Math.PI * 2);
+                        overlayCtx.fill();
                     }
-                    highlightCtx.restore();
+                    overlayCtx.restore();
                 }
 
                 tooltipLines.push(`Input ${labMarkerInfo.inputPercent.toFixed(1)}%`);
@@ -3114,19 +3191,38 @@ export function setupChartCursorTooltip(geom) {
             }
             tip.innerHTML = tooltipLines.join('<br>');
             const contRect = container.getBoundingClientRect();
-            const left = e.clientX - contRect.left + 12;
-            const top = e.clientY - contRect.top - 24;
+            const left = clientX - contRect.left + 12;
+            const top = clientY - contRect.top - 24;
             tip.style.left = `${left}px`;
             tip.style.top = `${top}px`;
             tip.classList.remove('hidden');
         };
 
+        const onMove = (e) => {
+            if (tooltipRafId) {
+                cancelAnimationFrame(tooltipRafId);
+            }
+            const clientX = e.clientX;
+            const clientY = e.clientY;
+            tooltipRafId = requestAnimationFrame(() => {
+                tooltipRafId = null;
+                performTooltipUpdate(clientX, clientY);
+            });
+        };
+
         const onLeave = () => {
+            if (tooltipRafId) {
+                cancelAnimationFrame(tooltipRafId);
+                tooltipRafId = null;
+            }
             tip.classList.add('hidden');
-            try {
-                updateInkChart();
-            } catch (err) {
-                console.warn('Chart update during tooltip leave failed:', err);
+            // Clear overlay canvas only (no full chart redraw needed)
+            const overlayCanvas = elements.inkChartOverlay;
+            if (overlayCanvas) {
+                const overlayCtx = overlayCanvas.getContext('2d');
+                if (overlayCtx) {
+                    overlayCtx.clearRect(0, 0, overlayCanvas.width, overlayCanvas.height);
+                }
             }
         };
 
@@ -3315,6 +3411,7 @@ function ensureSmartPointDragHandlers(geom) {
     }
 
     const OFF_CANVAS_CANCEL_BUFFER = 64;
+    let dragRafId = null;
 
     const handlePointerDown = (event) => {
         if (event.button !== 0) return;
@@ -3426,40 +3523,47 @@ function ensureSmartPointDragHandlers(geom) {
         event.preventDefault();
     };
 
-    const handlePointerMove = (event) => {
+    const processPointerMove = (clientX, clientY, pointerId) => {
         if (!smartDragState.geom) {
             return;
         }
         const geomRef = smartDragState.geom;
-        const coords = getPointerCanvasCoordinates(event, canvas);
+        
+        // Re-calculate coords since we are in RAF and event is gone, 
+        // but we have fresh clientX/Y
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const canvasX = (clientX - rect.left) * scaleX;
+        const canvasY = (clientY - rect.top) * scaleY;
+        const coords = { canvasX, canvasY, scaleX, scaleY };
 
-        if (smartDragState.active && smartDragState.pointerId === event.pointerId) {
-            const rect = canvas.getBoundingClientRect();
+        if (smartDragState.active && smartDragState.pointerId === pointerId) {
             if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
                 console.log('[CHART] Pointer move', {
-                    clientX: event.clientX,
-                    clientY: event.clientY,
+                    clientX,
+                    clientY,
                     rect
                 });
             }
             const outside =
-                event.clientX < rect.left - OFF_CANVAS_CANCEL_BUFFER ||
-                event.clientX > rect.right + OFF_CANVAS_CANCEL_BUFFER ||
-                event.clientY < rect.top - OFF_CANVAS_CANCEL_BUFFER ||
-                event.clientY > rect.bottom + OFF_CANVAS_CANCEL_BUFFER;
+                clientX < rect.left - OFF_CANVAS_CANCEL_BUFFER ||
+                clientX > rect.right + OFF_CANVAS_CANCEL_BUFFER ||
+                clientY < rect.top - OFF_CANVAS_CANCEL_BUFFER ||
+                clientY > rect.bottom + OFF_CANVAS_CANCEL_BUFFER;
 
             if (outside) {
                 if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
                     console.log('[CHART] Cancelling drag: pointer outside', {
-                        clientX: event.clientX,
-                        clientY: event.clientY,
+                        clientX,
+                        clientY,
                         rect
                     });
                 }
-                const pointerId = smartDragState.pointerId;
-                if (pointerId != null) {
+                const pId = smartDragState.pointerId;
+                if (pId != null) {
                     try {
-                        canvas.releasePointerCapture(pointerId);
+                        canvas.releasePointerCapture(pId);
                     } catch (releaseError) {
                         if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
                             console.warn('[CHART] Pointer release during cancel failed:', releaseError);
@@ -3561,6 +3665,23 @@ function ensureSmartPointDragHandlers(geom) {
         }
     };
 
+    const handlePointerMove = (event) => {
+        if (!smartDragState.geom) return;
+        
+        if (dragRafId) {
+            cancelAnimationFrame(dragRafId);
+        }
+        
+        const clientX = event.clientX;
+        const clientY = event.clientY;
+        const pointerId = event.pointerId;
+        
+        dragRafId = requestAnimationFrame(() => {
+            dragRafId = null;
+            processPointerMove(clientX, clientY, pointerId);
+        });
+    };
+
     function finalizeDrag(commit) {
         if (!smartDragState.active) return;
         const channelName = smartDragState.channel;
@@ -3641,6 +3762,10 @@ function ensureSmartPointDragHandlers(geom) {
     };
 
     const handlePointerLeave = (event) => {
+        if (dragRafId) {
+            cancelAnimationFrame(dragRafId);
+            dragRafId = null;
+        }
         if (smartDragState.active) {
             const pointerId = smartDragState.pointerId;
             if (pointerId != null) {
@@ -3665,6 +3790,10 @@ function ensureSmartPointDragHandlers(geom) {
     };
 
     const handlePointerCancel = (event) => {
+        if (dragRafId) {
+            cancelAnimationFrame(dragRafId);
+            dragRafId = null;
+        }
         if (!smartDragState.active || smartDragState.pointerId !== event.pointerId) {
             return;
         }

@@ -4,7 +4,7 @@
 import { registerDebugNamespace } from '../utils/debug-registry.js';
 import { getLegacyStateBridge } from '../legacy/state-bridge.js';
 import { getCorrectionMethod } from './correction-method.js';
-import { classifyCurve } from '../data/curve-shape-detector.js';
+import { classifyCurve, CurveShapeClassification } from '../data/curve-shape-detector.js';
 import { ensureBellShiftContainer, syncBellShiftFromMeta, clearBellShiftEntry } from './bell-shift-state.js';
 
 const legacyBridge = getLegacyStateBridge();
@@ -469,8 +469,7 @@ export function initializeElements() {
     elements.undoBtn = document.getElementById('undoBtn');
     elements.redoBtn = document.getElementById('redoBtn');
 
-    // Global linearization elements
-    elements.globalLinearizationBtn = document.getElementById('globalLinearizationBtn');
+    // Global linearization elements (globalLinearizationBtn assigned earlier in Linearization controls)
     elements.globalLinearizationDetails = document.getElementById('globalLinearizationDetails');
     elements.globalLinearizationFilename = document.getElementById('globalLinearizationFilename');
     elements.globalLinearizationInfo = document.getElementById('globalLinearizationInfo');
@@ -523,6 +522,30 @@ export function initializeElements() {
     elements.notesChevron = document.getElementById('notesChevron');
     elements.notesContent = document.getElementById('notesContent');
     elements.userNotes = document.getElementById('userNotes');
+
+    // Curve smoothing controls (previously missing)
+    elements.curveSmoothingMethod = document.getElementById('curveSmoothingMethod');
+    elements.catmullTension = document.getElementById('catmullTension');
+    elements.catmullTensionContainer = document.getElementById('catmullTensionContainer');
+    elements.smoothingSlider = document.getElementById('smoothingSlider');
+    elements.smoothingValue = document.getElementById('smoothingValue');
+    elements.smoothingWarning = document.getElementById('smoothingWarning');
+    elements.kpSimplifierContainer = document.getElementById('kpSimplifierContainer');
+
+    // Edit mode key points container (previously missing)
+    elements.editKeyPointsContainer = document.getElementById('editKeyPointsContainer');
+
+    // Intent tuning detailed controls (previously missing)
+    elements.tuningInterpolationSelect = document.getElementById('tuningInterpolationSelect');
+    elements.tuningSmoothingPercent = document.getElementById('tuningSmoothingPercent');
+    elements.tuningSmoothingLabel = document.getElementById('tuningSmoothingLabel');
+    elements.tuningSmoothingAlgorithm = document.getElementById('tuningSmoothingAlgorithm');
+    elements.tuningPostPasses = document.getElementById('tuningPostPasses');
+    elements.tuningPostPercent = document.getElementById('tuningPostPercent');
+    elements.tuningPostLabel = document.getElementById('tuningPostLabel');
+    elements.tuningPostAlgorithm = document.getElementById('tuningPostAlgorithm');
+    elements.tuningNeighbors = document.getElementById('tuningNeighbors');
+    elements.tuningSigmaFloor = document.getElementById('tuningSigmaFloor');
 
     if (typeof window !== 'undefined') {
         window.elements = elements;
@@ -835,10 +858,34 @@ export function ensureLoadedQuadData(initialValue = { curves: {}, sources: {}, n
     return appState.loadedQuadData;
 }
 
+/**
+ * Check if channel should normalize curve to End value.
+ *
+ * Default behavior (as of bell curve support):
+ * - BELL curves: return false (preserve bell shape, don't stretch to End)
+ * - All other curves: return true (normalize to End for consistent output)
+ *
+ * Can be overridden per-channel via data.normalizeToEndChannels map.
+ *
+ * @param {string} channelName - Channel to check
+ * @returns {boolean} True if channel should normalize to End
+ */
 export function isChannelNormalizedToEnd(channelName) {
     if (!channelName) return false;
     const data = appState.loadedQuadData;
-    return !!data?.normalizeToEndChannels?.[channelName];
+    if (!data) return false;
+
+    const map = data.normalizeToEndChannels || {};
+    if (Object.prototype.hasOwnProperty.call(map, channelName)) {
+        return !!map[channelName];
+    }
+
+    const meta = (data.channelShapeMeta && data.channelShapeMeta[channelName])
+        || refreshChannelShapeMeta(data, channelName);
+    if (meta?.classification === CurveShapeClassification.BELL) {
+        return false;
+    }
+    return true;
 }
 
 export function subscribeLoadedQuadData(callback) {
@@ -982,10 +1029,14 @@ export function setCorrectionGain(normalizedValue, options = {}) {
  * Reset application state to defaults
  */
 export function resetAppState() {
+    // Core data state
     appState.loadedQuadData = null;
     appState.linearizationData = null;
     appState.linearizationApplied = false;
     appState.perChannelLinearization = {};
+    appState.perChannelEnabled = {};
+
+    // Chart/UI state
     appState.chartZoomIndex = 0;
     appState.overlayAutoToggledOff = false;
     appState.showCorrectionOverlay = true;
@@ -993,13 +1044,52 @@ export function resetAppState() {
     appState.showLightBlockingOverlay = false;
     appState.showInkLoadOverlay = false;
     appState.inkLoadThreshold = 25;
+
+    // Edit mode state
     appState.editMode = false;
     appState.selectedChannel = null;
+
+    // Correction state
     appState.correctionMethod = getCorrectionMethod();
     appState.correctionGain = 1;
 
+    // Scaling state
+    appState.scaleAllPercent = 100;
+    appState.scaleBaselineEnds = null;
+
+    // Sync legacy bridges
     syncWindowLoadedQuadData();
     notifyLoadedQuadListeners(null, null);
+
+    // Clear LinearizationState singleton (if available)
+    try {
+        const globalScope = typeof globalThis !== 'undefined' ? globalThis : {};
+        if (globalScope.LinearizationState?.clear) {
+            globalScope.LinearizationState.clear();
+        }
+    } catch (err) {
+        // Silently ignore if not available
+    }
+
+    // Invalidate curve cache (if available)
+    try {
+        const globalScope = typeof globalThis !== 'undefined' ? globalThis : {};
+        if (typeof globalScope.invalidateMake256Cache === 'function') {
+            globalScope.invalidateMake256Cache();
+        }
+    } catch (err) {
+        // Silently ignore if not available
+    }
+
+    // Clear history (if available)
+    try {
+        const globalScope = typeof globalThis !== 'undefined' ? globalThis : {};
+        if (typeof globalScope.clearHistory === 'function') {
+            globalScope.clearHistory();
+        }
+    } catch (err) {
+        // Silently ignore if not available
+    }
 
     console.log('Application state reset');
 }
