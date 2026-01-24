@@ -32,8 +32,21 @@ Reference workflows for understanding the real-world processes quadGEN supports:
 | Document | Purpose |
 |----------|---------|
 | `docs/photogravure-multi-ink-calibration-workflow.md` | Multi-ink channel calibration for direct-to-plate photogravure |
+| `docs/plans/channel-builder.md` | Channel Builder feature spec — incremental multi-ink .quad construction |
 
 These explain the "why" behind quadGEN features—bell curves for secondary channels, ink limits, density ratios, and linearization.
+
+## Reference Documentation
+
+For comprehensive codebase analysis (architecture deep-dives, tech debt audit, conventions):
+
+| Document | Purpose |
+|----------|---------|
+| `.planning/codebase/ARCHITECTURE.md` | Layer diagrams, data flow, key abstractions |
+| `.planning/codebase/CONCERNS.md` | Tech debt, fragile areas, test coverage gaps |
+| `.planning/codebase/STACK.md` | Full technology stack inventory |
+| `.planning/codebase/INTEGRATIONS.md` | External APIs and file format audit |
+| `.planning/codebase/CONVENTIONS.md` | Naming patterns, code style guide |
 
 ## Quick Reference
 

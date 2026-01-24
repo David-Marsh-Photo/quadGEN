@@ -26,6 +26,33 @@ quadGEN is a web-based tool for creating and editing QuadToneRIP .quad files use
 - **Build command:** `npm run build:agent`
 - **Output:** Single-file HTML bundle
 
+## Technology Stack
+
+| Category | Technology | Version |
+|----------|-----------|---------|
+| Build | Vite | 7.1.7 |
+| Bundling | vite-plugin-singlefile | 2.3.0 |
+| Styling | Tailwind CSS | 4.1.13 |
+| Unit Tests | Vitest | 3.2.4 |
+| E2E Tests | Playwright | 1.55.1 |
+
+**Runtime:** ES2020+ browser, pure client-side SPA, no backend required.
+
+For full stack details, see `.planning/codebase/STACK.md`.
+
+## External Integrations
+
+**Claude AI (optional):**
+- Proxied via Cloudflare Worker to avoid exposing API keys
+- Config: `src/js/ai/ai-config.js`
+- API key provided by user at runtime (session-only, not persisted)
+
+**Local Storage:**
+- Theme preference, chart divider positions
+- No IndexedDB or server-side storage
+
+For full integration audit, see `.planning/codebase/INTEGRATIONS.md`.
+
 ## File Format Reference
 
 | Format | Spec Location | Purpose |

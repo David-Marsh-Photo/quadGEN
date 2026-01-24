@@ -78,6 +78,26 @@ Control points are stored as "relative" percentages but presented as "absolute":
 - Relative values can legitimately exceed 100% when channel ink limit < 100%
 - Use `Math.max(0, value)` for clamping, NOT `ControlPolicy.clampY(value)`
 
+## Fragile Areas (Proceed with Caution)
+
+### Revert Control State Machine
+- Files: `src/js/ui/revert-controls.js`, `src/js/ui/event-handlers.js`
+- Risk: Revert must clear `linearizationData = null` completely or LAB data remains active causing scaling artifacts
+- Test: After load LAB → scale → revert, verify curves return to baseline not scaled state
+
+### Bell Curve Scaling Interactions
+- Files: `src/js/core/bell-width-controller.js`, `src/js/core/bell-shift-controller.js`
+- Risk: Bell apex shift + global scaling can reorder Smart-point ordinals unexpectedly
+- Test: shift apex → scale globally → verify no point reordering
+
+### Smart Curve Simplification After Edits
+- Files: `src/js/curves/smart-curves.js`, `src/js/data/curve-simplification.js`
+- Risk: Re-seeding after edits may shift point counts, breaking ordinal mapping
+
+### Auto-Limit Endpoint Rolloff
+- Files: `src/js/core/processing-pipeline.js`, `src/js/core/auto-limit-config.js`
+- Risk: Curves with natural shallow slopes near endpoints may trigger false positives
+
 ## Assistant Behavior Guidelines
 
 - Walk through thought process step by step
