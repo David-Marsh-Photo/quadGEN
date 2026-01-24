@@ -73,6 +73,7 @@ import {
 
 import { initializeManualLstar } from './js/ui/manual-lstar.js';
 import { initializeOptionsModal } from './js/ui/options-modal.js';
+import { initChannelBuilderModal, openChannelBuilderModal } from './js/ui/channel-builder-modal.js';
 import { initializeTooltipSystem } from './js/ui/tooltips.js';
 import { initializeCompositeDebugPanel } from './js/ui/composite-debug-panel.js';
 import { initializeTabs } from './js/ui/tab-manager.js';
@@ -860,6 +861,14 @@ function initializeApplication() {
     initializeAutoLimitHandlers();
     initializeManualLstar();
     initializeOptionsModal();
+    initChannelBuilderModal();
+
+    // Connect Channel Builder button
+    const channelBuilderBtn = document.getElementById('channelBuilderBtn');
+    if (channelBuilderBtn) {
+        channelBuilderBtn.addEventListener('click', openChannelBuilderModal);
+    }
+
     initializeTooltipSystem();
     initializeEditMode();
     initializeChart();

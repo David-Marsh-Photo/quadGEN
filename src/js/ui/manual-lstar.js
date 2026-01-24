@@ -15,6 +15,14 @@ import { getLegacyLinearizationBridge } from '../legacy/linearization-bridge.js'
 import { getLabNormalizationMode, setLabNormalizationMode, isDensityNormalizationEnabled, LAB_NORMALIZATION_MODES } from '../core/lab-settings.js';
 import { parseManualLstarData as coreParseManualLstarData } from '../parsers/file-parsers.js';
 import { maybeAutoRaiseInkLimits } from '../core/auto-raise-on-import.js';
+import {
+  lstarToHex,
+  formatPatchPercent,
+  clampPatchPercent,
+  isStrictlyIncreasing,
+  updateMeasuredSwatch,
+  updateTargetSwatch
+} from './lstar-entry-utils.js';
 
 const MIN_ROWS = 5;
 const MAX_ROWS = 50;
@@ -26,34 +34,6 @@ let lastLstarValues = [];
 let storedPatchPercents = [];
 
 const legacyLinearizationBridge = getLegacyLinearizationBridge();
-
-function lstarToHex(value) {
-  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-  const L = clamp(Number(value), 0, 100);
-  let Y;
-  if (L > 8) {
-    const f = (L + 16) / 116;
-    Y = f * f * f;
-  } else {
-    Y = L / 903.3;
-  }
-  let s = Y <= 0.0031308 ? 12.92 * Y : 1.055 * Math.pow(Y, 1 / 2.4) - 0.055;
-  s = clamp(s, 0, 1);
-  const channel = Math.round(s * 255).toString(16).padStart(2, '0');
-  return `#${channel}${channel}${channel}`;
-}
-
-function formatPatchPercent(index, total) {
-  if (total <= 1) return '0.0';
-  const pct = (index / (total - 1)) * 100;
-  return pct.toFixed(1);
-}
-
-function clampPatchPercent(value) {
-  const num = Number(value);
-  if (!Number.isFinite(num)) return null;
-  return Math.max(0, Math.min(100, num));
-}
 
 function loadStoredLayout() {
   if (typeof window === 'undefined' || !window.localStorage) return null;
@@ -243,30 +223,7 @@ function updateRows(options = {}) {
   validateInputs();
 }
 
-function isStrictlyIncreasing(values) {
-  for (let i = 1; i < values.length; i++) {
-    if (!(values[i] > values[i - 1])) return false;
-  }
-  return true;
-}
-
-function updateMeasuredSwatch(row, value) {
-  const swatch = row ? row.querySelector('.lstar-swatch') : null;
-  if (!swatch) return;
-
-  if (value === null) {
-    swatch.style.backgroundColor = '#ffffff';
-    swatch.style.backgroundImage = 'repeating-linear-gradient(45deg, #f3f4f6 0, #f3f4f6 2px, #ffffff 2px, #ffffff 4px)';
-    swatch.style.borderStyle = 'dashed';
-    swatch.innerHTML = '<span class="text-[10px] text-gray-500">—</span>';
-    return;
-  }
-
-  swatch.style.backgroundImage = 'none';
-  swatch.style.borderStyle = 'solid';
-  swatch.style.backgroundColor = lstarToHex(value);
-  swatch.innerHTML = '';
-}
+// isStrictlyIncreasing and updateMeasuredSwatch imported from lstar-entry-utils.js
 
 function validateInputs() {
   const result = {
@@ -292,9 +249,7 @@ function validateInputs() {
       if (Number.isFinite(rawX) && rawX >= 0 && rawX <= 100) {
         xValues[index] = rawX;
         xInput.style.borderColor = '#d1d5db';
-        const target = Math.max(TARGET_LSTAR_FLOOR, 100 - rawX);
-        const targetSwatch = row.querySelector('.lstar-target-swatch');
-        if (targetSwatch) targetSwatch.style.backgroundColor = lstarToHex(target);
+        updateTargetSwatch(row, rawX, TARGET_LSTAR_FLOOR);
       } else {
         hasErrors = true;
         if (!message) message = 'All Patch % must be set (0–100)';
