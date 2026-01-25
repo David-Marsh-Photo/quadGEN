@@ -6365,20 +6365,23 @@ export function apply1DLUTFixedDomain(values, lutOrData, domainMin = 0, domainMa
         const neutralIndex = preferredIndex != null
             ? preferredIndex
             : (fallbackIndex != null ? fallbackIndex : Math.floor(CURVE_RESOLUTION / 2));
-        const anchorGain = rawGains[neutralIndex] || 1;
-        const safeAnchor = Math.abs(anchorGain) > epsilon ? anchorGain : 1;
+        // Clamp anchor to >= 1 to prevent direction inversion when anchor < 1
+        // (dividing by a value < 1 would amplify all gains, inverting correction direction)
+        const anchorGain = Math.max(1, rawGains[neutralIndex] || 1);
 
-        const normalizedGains = rawGains.map((gain) => clampGain(gain / safeAnchor));
+        const normalizedGains = rawGains.map((gain) => clampGain(gain / anchorGain));
 
         let baselinePeak = 0;
         let correctedPeak = 0;
-        const result = values.map((value) => {
+        const result = values.map((value, index) => {
             const baseValue = Number(value) || 0;
             if (baseValue > baselinePeak) {
                 baselinePeak = baseValue;
             }
-            const normalized = clamp01(maxOutput > 0 ? baseValue / maxOutput : 0);
-            const gain = sampleGainFromCurve(normalizedGains, normalized);
+            // Use INPUT position (index-based) to match spot marker domain
+            // Gain curve is built with inputNorm = i/(CURVE_RESOLUTION-1), so sample same way
+            const inputPosition = values.length > 1 ? index / (values.length - 1) : 0;
+            const gain = sampleGainFromCurve(normalizedGains, inputPosition);
             const adjusted = Math.max(0, Math.min(TOTAL, Math.round(baseValue * gain)));
             if (adjusted > correctedPeak) {
                 correctedPeak = adjusted;

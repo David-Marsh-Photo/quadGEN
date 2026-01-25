@@ -1942,6 +1942,48 @@ function drawCorrectionTargetCurve(ctx, geom) {
             gain
         };
 
+        // Build inverse lookup from baseline curve to map correction positions
+        // from LUT-index domain (ink level) to curve-output domain (input position)
+        let inverseMap = null;
+        const baselineCurves = typeof LinearizationState?.getGlobalBaselineCurves === 'function'
+            ? LinearizationState.getGlobalBaselineCurves()
+            : null;
+        // Get first enabled channel's baseline curve for domain mapping
+        const channelRows = elements?.channelTable ?
+            Array.from(elements.channelTable.querySelectorAll('[data-channel]')) : [];
+        let baselineCurve = null;
+        let baselineMax = TOTAL;
+        for (const row of channelRows) {
+            const chName = row.getAttribute('data-channel');
+            const percentInput = row.querySelector('.percent-input');
+            const percent = percentInput ? InputValidator.clampPercent(percentInput.value) : 0;
+            if (percent > 0 && baselineCurves?.[chName]) {
+                baselineCurve = baselineCurves[chName];
+                baselineMax = Math.max(...baselineCurve.filter(v => Number.isFinite(v)));
+                break;
+            }
+        }
+        // Build inverse: for each output level (0-255), find the input index that produces it
+        if (baselineCurve && baselineCurve.length === 256 && baselineMax > 0) {
+            inverseMap = new Array(256);
+            for (let outLevel = 0; outLevel < 256; outLevel++) {
+                const targetOutput = (outLevel / 255) * baselineMax;
+                // Linear search for input that produces closest output
+                let bestIdx = 0;
+                let bestDiff = Infinity;
+                for (let inp = 0; inp < 256; inp++) {
+                    const curveVal = baselineCurve[inp];
+                    if (!Number.isFinite(curveVal)) continue;
+                    const diff = Math.abs(curveVal - targetOutput);
+                    if (diff < bestDiff) {
+                        bestDiff = diff;
+                        bestIdx = inp;
+                    }
+                }
+                inverseMap[outLevel] = bestIdx;
+            }
+        }
+
         ctx.save();
         ctx.strokeStyle = CORRECTION_OVERLAY_COLOR;
         ctx.lineWidth = 2;
@@ -1950,7 +1992,22 @@ function drawCorrectionTargetCurve(ctx, geom) {
 
         ctx.beginPath();
         for (let i = 0; i < gainAdjustedSamples.length; i += 1) {
-            const inputPercent = (i / (samples.length - 1)) * 100;
+            // Map from LUT-index domain to curve-output domain
+            // The correction at index i applies at ink level i/255, which corresponds
+            // to input position inverseMap[i] on the baseline curve
+            let inputPercent;
+            if (inverseMap) {
+                // Scale index to 0-255 range if samples.length differs
+                const scaledIdx = samples.length === 256 ? i : Math.round((i / (samples.length - 1)) * 255);
+                if (scaledIdx < inverseMap.length) {
+                    inputPercent = (inverseMap[scaledIdx] / 255) * 100;
+                } else {
+                    inputPercent = (i / (samples.length - 1)) * 100;
+                }
+            } else {
+                // Fallback to linear mapping if no baseline curve available
+                inputPercent = (i / (samples.length - 1)) * 100;
+            }
             const outputPercent = Math.max(0, Math.min(effectiveMaxPercent, gainAdjustedSamples[i] * effectiveMaxPercent));
             const x = mapPercentToX(inputPercent, geom);
             const y = mapPercentToY(outputPercent, geom);

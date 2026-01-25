@@ -12,7 +12,9 @@ This changelog follows a concise, user-facing format. Engineering details live i
 - _Nothing yet._
 
 ### Fixed
-- _Nothing yet._
+- LAB correction now applies at correct input positions for non-linear .quad curves
+  - Previously, gain sampling used output ink level instead of input position
+  - Spot markers and actual corrections now align for all curve shapes
 
 ### Docs
 - _Nothing yet._
