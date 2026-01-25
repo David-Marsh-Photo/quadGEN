@@ -16,6 +16,31 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '5.0.0': {
+    date: '2026-01-24',
+    title: 'Channel Builder & LAB correction fix',
+    sections: {
+      ADDED: [
+        'Channel Builder wizard for creating multi-ink .quad files from L* measurements. 4-tab guided workflow: Reference K → Add Channels → Preview → Apply. Define reference K from measurements or import from current .quad, then add secondary channels by entering their density profiles. Session state persists across page reloads.'
+      ],
+      CHANGED: [],
+      FIXED: [
+        'LAB correction now applies at correct input positions for non-linear .quad curves. Previously, gain sampling used output ink level instead of input position, causing spot markers and actual corrections to diverge for non-linear curves.'
+      ],
+      REMOVED: [],
+      DOCS: []
+    },
+    aboutDialog: [
+      {
+        label: 'Channel Builder wizard',
+        desc: 'New guided workflow for building multi-ink .quad files from L* measurements. Define a reference K channel, then add secondary channels with their density profiles.'
+      },
+      {
+        label: 'LAB correction domain fix',
+        desc: 'Spot markers and actual corrections now align for all curve shapes including S-curves, shoulders, and other non-linear .quad curves.'
+      }
+    ]
+  },
   '4.3.5': {
     date: '2025-01-19',
     title: 'Bell curve improvements & .quad parser fix',

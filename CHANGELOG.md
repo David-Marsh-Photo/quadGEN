@@ -12,6 +12,23 @@ This changelog follows a concise, user-facing format. Engineering details live i
 - _Nothing yet._
 
 ### Fixed
+- _Nothing yet._
+
+### Docs
+- _Nothing yet._
+
+## [5.0.0] — 2026-01-24
+### Added
+- Channel Builder wizard for creating multi-ink .quad files from L* measurements
+  - 4-tab guided workflow: Reference K → Add Channels → Preview → Apply
+  - Define reference K channel from measurements or import from current .quad
+  - Add secondary channels by entering their density profiles
+  - Session state persists across page reloads
+
+### Changed
+- _Nothing yet._
+
+### Fixed
 - LAB correction now applies at correct input positions for non-linear .quad curves
   - Previously, gain sampling used output ink level instead of input position
   - Spot markers and actual corrections now align for all curve shapes
