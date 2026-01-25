@@ -16,6 +16,25 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '5.0.1': {
+    date: '2026-01-24',
+    title: 'Smart Curve drag fix',
+    sections: {
+      ADDED: [],
+      CHANGED: [],
+      FIXED: [
+        'Smart Curve point markers now follow the cursor during drag operations instead of snapping back to the previous curve position.'
+      ],
+      REMOVED: [],
+      DOCS: []
+    },
+    aboutDialog: [
+      {
+        label: 'Smart Curve drag fix',
+        desc: 'Point markers now visually follow the cursor during drag, providing immediate feedback instead of snapping back.'
+      }
+    ]
+  },
   '5.0.0': {
     date: '2026-01-24',
     title: 'Channel Builder & LAB correction fix',

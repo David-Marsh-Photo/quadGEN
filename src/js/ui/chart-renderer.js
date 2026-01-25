@@ -300,7 +300,8 @@ export function drawSmartKeyPointOverlays(ctx, geom, colors, channelName, keyPoi
     const {
         drawMarkers = true,
         showLabels = true,
-        boxSize = 6
+        boxSize = 6,
+        isDragging = false
     } = options;
 
     console.log(`[RENDER DEBUG] drawSmartKeyPointOverlays called for ${channelName}: keyPoints=${keyPoints?.length}, selectedOrdinal=${selectedOrdinal}`);
@@ -334,7 +335,8 @@ export function drawSmartKeyPointOverlays(ctx, geom, colors, channelName, keyPoi
             // When we have the processed curve samples, use them only as a sanity check.
             // If the stored Smart point deviates wildly from the plotted curve (e.g. >10%),
             // clamp toward the curve so overlays stay in range without overriding intentional edits.
-            if (curveValues && curveValues.length > 0) {
+            // Skip this check during drag so the marker follows the cursor immediately.
+            if (!isDragging && curveValues && curveValues.length > 0) {
                 const curveIndex = Math.round(xNorm * (curveValues.length - 1));
                 const actualCurveValue = curveValues[curveIndex] || 0;
                 const curvePercent = Math.max(0, Math.min(100, (actualCurveValue / maxValue) * 100));

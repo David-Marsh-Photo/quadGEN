@@ -2642,7 +2642,8 @@ function drawChannelCurve(ctx, geom, colors, channelName, curveValues, endValue)
                         {
                             drawMarkers: true,
                             showLabels: elements.aiLabelToggle ? elements.aiLabelToggle.checked : true,
-                            boxSize: isDraggingThisChannel ? 9 : 6
+                            boxSize: isDraggingThisChannel ? 9 : 6,
+                            isDragging: isDraggingThisChannel
                         }
                     );
                 }
