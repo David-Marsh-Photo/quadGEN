@@ -17,6 +17,19 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Docs
 - _Nothing yet._
 
+## [5.0.2] — 2026-01-24
+### Added
+- _Nothing yet._
+
+### Changed
+- _Nothing yet._
+
+### Fixed
+- Smart Curve key point nodes now follow the smoothed curve when adjusting the Plot Smoothing slider in Edit Mode
+
+### Docs
+- _Nothing yet._
+
 ## [5.0.1] — 2026-01-24
 ### Added
 - _Nothing yet._

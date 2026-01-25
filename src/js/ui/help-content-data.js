@@ -16,6 +16,25 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '5.0.2': {
+    date: '2026-01-24',
+    title: 'Smart Curve key point sync fix',
+    sections: {
+      ADDED: [],
+      CHANGED: [],
+      FIXED: [
+        'Smart Curve key point nodes now follow the smoothed curve when adjusting the Plot Smoothing slider in Edit Mode.'
+      ],
+      REMOVED: [],
+      DOCS: []
+    },
+    aboutDialog: [
+      {
+        label: 'Key point sync fix',
+        desc: 'Smart Curve key point nodes now visually follow the smoothed curve when adjusting Plot Smoothing, instead of staying at their original positions.'
+      }
+    ]
+  },
   '5.0.1': {
     date: '2026-01-24',
     title: 'Smart Curve drag fix',

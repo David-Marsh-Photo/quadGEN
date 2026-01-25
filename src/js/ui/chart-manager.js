@@ -2614,16 +2614,9 @@ function drawChannelCurve(ctx, geom, colors, channelName, curveValues, endValue)
 
         // Draw Smart key point overlays if in edit mode and this is the selected channel
         try {
-            // Debug logging - always log for now to diagnose
-            console.log(`[OVERLAY DEBUG] ${channelName}: editMode=${isEditMode}, selectedChannel=${globalScope.EDIT?.selectedChannel}, isSelectedChannel=${isSelectedChannel}`);
-
             if (isSelectedChannel) {
                 // Get Smart key points for this channel
                 const smartPoints = ControlPoints.get(channelName);
-                console.log(`[OVERLAY DEBUG] ${channelName}: smartPoints exist=${!!smartPoints?.points}, count=${smartPoints?.points?.length || 0}`);
-                if (smartPoints?.points) {
-                    console.log(`[OVERLAY DEBUG] ${channelName}: points=`, smartPoints.points.slice(0, 3));
-                }
                 if (smartPoints && smartPoints.points && smartPoints.points.length > 0) {
                     const selectedOrdinal = globalScope.EDIT.selectedOrdinal || 1;
 

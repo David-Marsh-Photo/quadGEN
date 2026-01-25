@@ -304,10 +304,7 @@ export function drawSmartKeyPointOverlays(ctx, geom, colors, channelName, keyPoi
         isDragging = false
     } = options;
 
-    console.log(`[RENDER DEBUG] drawSmartKeyPointOverlays called for ${channelName}: keyPoints=${keyPoints?.length}, selectedOrdinal=${selectedOrdinal}`);
-
     if (!keyPoints || keyPoints.length === 0) {
-        console.log(`[RENDER DEBUG] No keyPoints for ${channelName}`);
         return;
     }
 
@@ -320,12 +317,9 @@ export function drawSmartKeyPointOverlays(ctx, geom, colors, channelName, keyPoi
         ctx.textAlign = 'center';
 
         const displayMax = normalizeDisplayMax(geom);
-        console.log(`[RENDER DEBUG] About to draw ${keyPoints.length} points for ${channelName}`);
-
         const debugPoints = [];
 
         keyPoints.forEach((pt, i) => {
-            console.log(`[RENDER DEBUG] Drawing point ${i+1}: input=${pt.input}, output=${pt.output}`);
             const xNorm = Math.max(0, Math.min(1, (pt.input || 0) / 100));
             const x = geom.leftPadding + xNorm * geom.chartWidth;
 
@@ -340,11 +334,9 @@ export function drawSmartKeyPointOverlays(ctx, geom, colors, channelName, keyPoi
                 const curveIndex = Math.round(xNorm * (curveValues.length - 1));
                 const actualCurveValue = curveValues[curveIndex] || 0;
                 const curvePercent = Math.max(0, Math.min(100, (actualCurveValue / maxValue) * 100));
-                
+
                 // Always sync overlay position to the actual curve
                 outputPercent = curvePercent;
-                
-                console.log(`[RENDER DEBUG] Point ${i + 1}: input=${pt.input}%, curveIndex=${curveIndex}, stored=${pt.output}, curve=${curvePercent.toFixed(1)}%, finalDisplay=${outputPercent.toFixed(1)}%`);
             }
 
             const chartPercent = Math.max(0, Math.min(displayMax, outputPercent));
@@ -367,10 +359,7 @@ export function drawSmartKeyPointOverlays(ctx, geom, colors, channelName, keyPoi
             const bx = Math.round(x - hx) + 0.5;
             const by = Math.round(y - hy) + 0.5;
 
-            console.log(`[RENDER DEBUG] Point ${i+1}: isSelected=${isSelected}, drawMarkers=${drawMarkers}, showLabels=${showLabels}`);
-
             if (drawMarkers) {
-                console.log(`[RENDER DEBUG] Drawing marker for point ${i+1} at (${bx}, ${by})`);
 
                 if (isSelected) {
                     ctx.save();

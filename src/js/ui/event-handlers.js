@@ -50,7 +50,7 @@ import {
 import { showStatus } from './status-service.js';
 import { initializeHelpSystem } from './help-system.js';
 import { setPrinter, registerChannelRowSetup, syncPrinterForQuadData } from './printer-manager.js';
-import { make256, beginCompositeLabRedistribution, finalizeCompositeLabRedistribution, replayCompositeDebugSessionFromCache, getCompositeCoverageSummary } from '../core/processing-pipeline.js';
+import { make256, invalidateMake256Cache, beginCompositeLabRedistribution, finalizeCompositeLabRedistribution, replayCompositeDebugSessionFromCache, getCompositeCoverageSummary } from '../core/processing-pipeline.js';
 import {
     getLabNormalizationMode,
     setLabNormalizationMode,
@@ -890,9 +890,9 @@ function applyPlotSmoothingToEntries(entries, percent, loadedData) {
             : null;
         if (numeric > 0) {
             const targetEnd = Math.max(...base);
-            const smoothed = clampCurveToSupport(applyPlotSmoothingToCurve(base, numeric), base);
+            const smoothed = applyPlotSmoothingToCurve(base, numeric);
             const rescaled = rescaleCurveToEnd(smoothed, targetEnd);
-            entry.curve = enforceSinglePeak(clampCurveToSupport(rescaled, base), peakIndex);
+            entry.curve = enforceSinglePeak(rescaled, peakIndex);
         } else if (peakIndex != null) {
             entry.curve = enforceSinglePeak(base, peakIndex);
         }
@@ -1065,7 +1065,7 @@ function applyPlotSmoothingToLoadedChannels(percent) {
             originalEnds[channelName] = targetEnd;
             return;
         }
-        const smoothedCurve = clampCurveToSupport(applyPlotSmoothingToCurve(base, numeric), base);
+        const smoothedCurve = applyPlotSmoothingToCurve(base, numeric);
         const guardedCurve = rescaleCurveTowardTarget(smoothedCurve, targetEnd);
         const headBlendedCurve = blendCurveHeadWithBaseline(guardedCurve, base, {
             windowSize: PLOT_SMOOTHING_HEAD_WINDOW
@@ -1073,8 +1073,7 @@ function applyPlotSmoothingToLoadedChannels(percent) {
         const blendedCurve = blendCurveTailWithBaseline(headBlendedCurve, base, targetEnd, {
             windowSize: PLOT_SMOOTHING_TAIL_WINDOW
         });
-        const clampedBlended = clampCurveToSupport(blendedCurve, base);
-        const finalCurve = enforceSinglePeak(clampedBlended, peakIndex);
+        const finalCurve = enforceSinglePeak(blendedCurve, peakIndex);
         loadedData.curves[channelName] = finalCurve.slice();
         if (!loadedData.rebasedCurves) loadedData.rebasedCurves = {};
         if (!loadedData.rebasedSources) loadedData.rebasedSources = {};
@@ -1168,6 +1167,15 @@ function applyPlotSmoothingToLoadedChannels(percent) {
             if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
                 console.warn('[PlotSmoothing] Failed to validate zero-smoothing snapshot during reset:', zeroErr);
             }
+        }
+    }
+    try {
+        if (typeof invalidateMake256Cache === 'function') {
+            invalidateMake256Cache();
+        }
+    } catch (cacheErr) {
+        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+            console.warn('[PlotSmoothing] Failed to invalidate make256 cache:', cacheErr);
         }
     }
     try { updateInkChart(); } catch (error) { console.warn(error); }
