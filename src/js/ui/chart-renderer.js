@@ -332,17 +332,18 @@ export function drawSmartKeyPointOverlays(ctx, geom, colors, channelName, keyPoi
             const absoluteOutput = toAbsoluteOutput(channelName, pt.output || 0);
             let outputPercent = Math.max(0, Math.min(100, absoluteOutput));
 
-            // When we have the processed curve samples, use them only as a sanity check.
-            // If the stored Smart point deviates wildly from the plotted curve (e.g. >10%),
-            // clamp toward the curve so overlays stay in range without overriding intentional edits.
+            // When we have the processed curve samples, ensure the overlay matches the curve exactly.
+            // This ensures that features like Plot Smoothing (which modifies the curve but not the points initially)
+            // are visually reflected in the key point positions.
             // Skip this check during drag so the marker follows the cursor immediately.
             if (!isDragging && curveValues && curveValues.length > 0) {
                 const curveIndex = Math.round(xNorm * (curveValues.length - 1));
                 const actualCurveValue = curveValues[curveIndex] || 0;
                 const curvePercent = Math.max(0, Math.min(100, (actualCurveValue / maxValue) * 100));
-                if (Math.abs(curvePercent - outputPercent) > 10) {
-                    outputPercent = curvePercent;
-                }
+                
+                // Always sync overlay position to the actual curve
+                outputPercent = curvePercent;
+                
                 console.log(`[RENDER DEBUG] Point ${i + 1}: input=${pt.input}%, curveIndex=${curveIndex}, stored=${pt.output}, curve=${curvePercent.toFixed(1)}%, finalDisplay=${outputPercent.toFixed(1)}%`);
             }
 
