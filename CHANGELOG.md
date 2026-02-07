@@ -17,6 +17,20 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Docs
 - _Nothing yet._
 
+## [5.1.0] — 2026-02-06
+### Added
+- Auto Endpoint Rolloff (White/Black) controls now visible in Global Corrections panel with localStorage persistence (defaults: White OFF, Black ON)
+
+### Changed
+- _Nothing yet._
+
+### Fixed
+- LAB corrections now use input-domain remapping (PCHIP composition) instead of gain multiplication, preventing non-monotonic results and flat plateaus on non-linear .quad curves
+- Edit Mode now seeds Smart points from the corrected curve when LAB/measurement corrections are active, preventing the plot from snapping back to the uncorrected baseline
+
+### Docs
+- _Nothing yet._
+
 ## [5.0.2] — 2026-01-24
 ### Added
 - _Nothing yet._

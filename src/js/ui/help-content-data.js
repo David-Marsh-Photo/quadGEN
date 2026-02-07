@@ -16,6 +16,36 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '5.1.0': {
+    date: '2026-02-06',
+    title: 'LAB correction remap & Edit Mode seeding fix',
+    sections: {
+      ADDED: [
+        'Auto Endpoint Rolloff (White/Black) controls now visible in Global Corrections panel with localStorage persistence (defaults: White OFF, Black ON).'
+      ],
+      CHANGED: [],
+      FIXED: [
+        'LAB corrections now use input-domain remapping (PCHIP composition) instead of gain multiplication, preventing non-monotonic results and flat plateaus on non-linear .quad curves.',
+        'Edit Mode now seeds Smart points from the corrected curve when LAB/measurement corrections are active, preventing the plot from snapping back to the uncorrected baseline.'
+      ],
+      REMOVED: [],
+      DOCS: []
+    },
+    aboutDialog: [
+      {
+        label: 'LAB correction remap',
+        desc: 'Measurement corrections use PCHIP-composed domain remapping instead of gain multiplication, eliminating non-monotonic results and flat plateaus on non-linear curves.'
+      },
+      {
+        label: 'Edit Mode seeding fix',
+        desc: 'Smart points are now seeded from the corrected curve when LAB corrections are active, so the plot stays corrected when entering Edit Mode.'
+      },
+      {
+        label: 'Auto Endpoint Rolloff UI',
+        desc: 'White/Black auto-limit checkboxes are now visible in the Global Corrections panel with persistent defaults.'
+      }
+    ]
+  },
   '5.0.2': {
     date: '2026-01-24',
     title: 'Smart Curve key point sync fix',
