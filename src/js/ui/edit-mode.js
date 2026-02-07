@@ -164,7 +164,7 @@ function resolveSeedingSamples(channelName, endValue, applyLinearization, contex
     const fallback = getFallbackCurveSamples(channelName);
     const fallbackValid = Array.isArray(fallback) && fallback.length === CURVE_RESOLUTION;
     const loadedData = typeof getLoadedQuadData === 'function' ? getLoadedQuadData() : null;
-    const ensureSeedContext = typeof contextLabel === 'string' && contextLabel.startsWith('ensure');
+    const measurementActive = !!(applyLinearization && LinearizationState?.hasAnyLinearization?.());
 
     if (typeof globalScope !== 'undefined') {
         globalScope.__EDIT_LAST_SAMPLES = {
@@ -181,24 +181,6 @@ function resolveSeedingSamples(channelName, endValue, applyLinearization, contex
             hasFallback: fallbackValid,
             preview: fallbackValid ? fallback.slice(0, 6) : []
         };
-    }
-
-    if (ensureSeedContext && fallbackValid) {
-        editModeDebugLog(`Ensure-seed using fallback samples for ${channelName}`, { context: contextLabel });
-        if (loadedData) {
-            loadedData.curves = loadedData.curves || {};
-            loadedData.curves[channelName] = fallback.slice();
-            if (loadedData.sources && loadedData.sources[channelName] === 'smart') {
-                loadedData.sources[channelName] = 'quad';
-            }
-        }
-        if (typeof globalScope !== 'undefined' && globalScope.__EDIT_LAST_SAMPLES) {
-            globalScope.__EDIT_LAST_SAMPLES.usedFallback = true;
-        }
-        if (typeof globalScope !== 'undefined' && globalScope.__EDIT_LAST_SAMPLES_LOG && globalScope.__EDIT_LAST_SAMPLES_LOG[channelName]) {
-            globalScope.__EDIT_LAST_SAMPLES_LOG[channelName].usedFallback = true;
-        }
-        return fallback.slice();
     }
 
     if (!Array.isArray(samples) || samples.length !== CURVE_RESOLUTION) {
@@ -223,7 +205,9 @@ function resolveSeedingSamples(channelName, endValue, applyLinearization, contex
         return null;
     }
 
-    if (fallbackValid && shouldPreferFallbackSamples(samples, fallback)) {
+    // When measurement corrections are active, the fallback (.quad) curve is expected to differ from make256().
+    // Don't override corrected samples with the fallback just because they don't match.
+    if (!measurementActive && fallbackValid && shouldPreferFallbackSamples(samples, fallback)) {
         editModeDebugLog(`Fallback samples preferred for ${channelName}`, { context: contextLabel, reason: 'mismatch' });
         if (loadedData) {
             loadedData.curves = loadedData.curves || {};
@@ -254,22 +238,13 @@ function seedChannelFromSamples(channelName, samples, contextLabel = 'default') 
     if (!Array.isArray(samples) || samples.length !== CURVE_RESOLUTION) {
         return false;
     }
-    const ensureContext = typeof contextLabel === 'string' && contextLabel.startsWith('ensure');
     const fallbackSamples = getFallbackCurveSamples(channelName);
-    if (ensureContext && Array.isArray(fallbackSamples) && fallbackSamples.length === CURVE_RESOLUTION) {
-        samples = fallbackSamples.slice();
-        if (typeof globalScope !== 'undefined' && globalScope.__EDIT_LAST_SAMPLES) {
-            globalScope.__EDIT_LAST_SAMPLES.usedFallback = true;
-        }
-        if (typeof globalScope !== 'undefined' && globalScope.__EDIT_LAST_SAMPLES_LOG && globalScope.__EDIT_LAST_SAMPLES_LOG[channelName]) {
-            globalScope.__EDIT_LAST_SAMPLES_LOG[channelName].usedFallback = true;
-        }
-    }
     const fallbackValid = Array.isArray(fallbackSamples) && fallbackSamples.length === CURVE_RESOLUTION;
     const verificationTarget = fallbackValid
         ? fallbackSamples
         : samples;
-    if (!ensureContext && Array.isArray(fallbackSamples) && fallbackSamples.length === CURVE_RESOLUTION && shouldPreferFallbackSamples(samples, fallbackSamples)) {
+    const measurementActive = !!(LinearizationState?.hasAnyLinearization?.());
+    if (!measurementActive && Array.isArray(fallbackSamples) && fallbackSamples.length === CURVE_RESOLUTION && shouldPreferFallbackSamples(samples, fallbackSamples)) {
         editModeDebugLog(`Seed samples overridden by fallback for ${channelName}`, { context: contextLabel });
         samples = fallbackSamples.slice();
         if (typeof globalScope !== 'undefined' && globalScope.__EDIT_LAST_SAMPLES) {
