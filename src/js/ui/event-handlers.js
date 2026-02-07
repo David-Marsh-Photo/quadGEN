@@ -2360,6 +2360,7 @@ export function initializeEventHandlers() {
     initializeEditModeHandlers();
     initializeHelpSystem();
     initializeLabNormalizationHandlers();
+    initializeAutoLimitHandlers();
     initializeCorrectionMethodOption();
     initializePlotSmoothingHandlers();
     initializeCorrectionGainOption();
@@ -4524,6 +4525,20 @@ function handleEndInput(input, options = {}) {
  * Initialize handlers for auto white/black limit toggles
  */
 export function initializeAutoLimitHandlers() {
+    // Initialize toggle state from storage (defaults: white OFF, black ON)
+    try {
+        if (elements.autoWhiteLimitToggle) {
+            const stored = localStorage.getItem('autoWhiteLimitV1');
+            elements.autoWhiteLimitToggle.checked = stored === null ? false : stored === '1';
+        }
+        if (elements.autoBlackLimitToggle) {
+            const stored = localStorage.getItem('autoBlackLimitV1');
+            elements.autoBlackLimitToggle.checked = stored === null ? true : stored === '1';
+        }
+    } catch (err) {
+        // Ignore storage read errors (private mode, etc.)
+    }
+
     // Auto white limit toggle
     if (elements.autoWhiteLimitToggle) {
         elements.autoWhiteLimitToggle.addEventListener('change', (e) => {
