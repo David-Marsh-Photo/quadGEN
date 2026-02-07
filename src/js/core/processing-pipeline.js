@@ -6267,7 +6267,9 @@ function prepareLUTInterpolation(lutOrData, domainMin, domainMax, interpolationT
             interpolationFunction,
             lutDomainMin,
             lutDomainMax,
-            domainSpan
+            domainSpan,
+            lutX,
+            processedSamples
         };
     } catch (error) {
         console.error('Error preparing LUT interpolation:', error);
@@ -6298,7 +6300,14 @@ export function apply1DLUTFixedDomain(values, lutOrData, domainMin = 0, domainMa
             return values.slice();
         }
 
-        const { interpolationFunction, lutDomainMin, domainSpan } = context;
+        const {
+            interpolationFunction,
+            lutDomainMin,
+            lutDomainMax: _lutDomainMax,
+            domainSpan,
+            lutX,
+            processedSamples
+        } = context;
 
         const maxOutput = Math.max(1, maxValue || TOTAL);
         const start = typeof lutDomainMin === 'number' ? lutDomainMin : 0;
@@ -6314,6 +6323,49 @@ export function apply1DLUTFixedDomain(values, lutOrData, domainMin = 0, domainMa
                 const lutValue = clamp01(interpolationFunction(t));
                 return Math.round(lutValue * maxOutput);
             });
+            return preserveLeadingInk(result);
+        }
+
+        // Measurement-based entries (LAB/CGATS/manual) represent an input-domain remap (target -> required input).
+        // Applying them as multiplicative gains can produce non-monotone results (and forced clamps create flat plateaus).
+        // Instead, compose the remap with the baseline curve: y(x) = baseline(y)(x'), where x' = LUT(x).
+        if (isLabLinearizationData(lutOrData) && Array.isArray(lutX) && Array.isArray(processedSamples)) {
+            // Always evaluate measurement LUTs with PCHIP to avoid cubic overshoot breaking monotonicity.
+            const lutFn = createPCHIPSpline(lutX, processedSamples);
+
+            const baseX = new Array(values.length);
+            const baseY = new Array(values.length);
+            for (let i = 0; i < values.length; i += 1) {
+                baseX[i] = i;
+                const v = Number(values[i]);
+                baseY[i] = Number.isFinite(v) ? v : 0;
+            }
+            const baseFn = createPCHIPSpline(baseX, baseY);
+
+            let baselinePeak = 0;
+            let correctedPeak = 0;
+            const result = values.map((value, index) => {
+                const baseValue = Number(value) || 0;
+                if (baseValue > baselinePeak) baselinePeak = baseValue;
+
+                const inputNorm = values.length > 1 ? index / (values.length - 1) : 0;
+                const t = start + clamp01(inputNorm) * span;
+                const inputPrime = clamp01(lutFn(t));
+                const basePos = inputPrime * (values.length - 1);
+                const mapped = baseFn(basePos);
+                const adjusted = Math.max(0, Math.min(TOTAL, Math.round(mapped)));
+                if (adjusted > correctedPeak) correctedPeak = adjusted;
+                return adjusted;
+            });
+
+            if (baselinePeak > 0 && correctedPeak > 0 && Math.abs(correctedPeak - baselinePeak) > 1) {
+                const scaleRatio = baselinePeak / correctedPeak;
+                for (let i = 0; i < result.length; i += 1) {
+                    const scaled = result[i] * scaleRatio;
+                    result[i] = Math.max(0, Math.min(TOTAL, Math.round(scaled)));
+                }
+            }
+
             return preserveLeadingInk(result);
         }
 
