@@ -167,8 +167,8 @@ Goal: validate the default-on kernel smoother reshapes steep roll-offs without v
 
 Document the measured deltas; if the kernel path exceeds 0.07 or flattens the transition, attach the debug payload with notes.
 
-## Auto-Raise × Smoothing Interoperability
-Goal: ensure auto-raising ink limits does not suppress density-solver smoothing windows.
+## Auto-Raise × Coverage Interoperability
+Goal: ensure auto-raising ink limits remains visible in coverage diagnostics without changing solver determinism.
 
 ### Manual Steps:
 1. Open `index.html`, click ⚙️ Options, and enable **Auto-raise ink limits after import**.
@@ -177,11 +177,10 @@ Goal: ensure auto-raising ink limits does not suppress density-solver smoothing 
 4. Inspect `window.getCompositeDebugState?.().summary` and confirm:
    - `autoRaisedEnds` lists the channels that were raised.
    - Each auto-raised entry reports a `reason` (`coverage-exhausted` when a raise occurred, `coverage-available`/`handoff-available` when it was skipped) so coverage-driven decisions are visible without digging through the status log.
-   - `summary.smoothingWindows` reports at least one entry covering the ~55–73 % input band, with `forced: true`.
-   - Snapshot 184 reports a smoothing window indicating the taper (K handing off to C/LK).
+   - `coverageSummary` reports the refreshed per-channel ceilings and usage after the raise.
 5. Reload the LAB file once more and confirm the summary is deterministic.
 
-Document pass/fail and attach the screenshots. If either array is missing, note the console output from `window.getCompositeDebugState()` in your test log.
+Document pass/fail and attach the screenshots. If the raised-channel entries, reasons, or refreshed coverage summary are missing, note the console output from `window.getCompositeDebugState()` in your test log.
 
 ## Edit Mode — XY Input Stability
 Goal: ensure editing the `X,Y` field does not rescale the entire curve when channel ink limits are below 100%.
@@ -275,7 +274,7 @@ Expect constants roughly `{ LK: 0.08, C: 0.15, K: 0.77 }`, 95 % shares dominat
 Goal: confirm coverage ceilings and usage metrics surface correctly for audits.
 
 ### Manual Steps:
-1. With `P800_K36C26LK25_V6.quad` and `P800_K36C26LK25_V6.txt` loaded under **Normalized** weighting (auto-raise and smoothing windows enabled), run `window.getCompositeCoverageSummary()` in the console.
+1. With `P800_K36C26LK25_V6.quad` and `P800_K36C26LK25_V6.txt` loaded under **Normalized** weighting, run `window.getCompositeCoverageSummary()` in the console.
 2. Verify each active channel reports `limit`, `buffer`, `bufferedLimit`, `used`, `remaining`, and `overflow`. Highlight inks should land near 0.20 with overflow ≤0.005; K should report a larger limit and similar overflow buffer.
 3. In the channel table, confirm every Density column now shows a coverage indicator (`Coverage 20.0% / 20.5%`, etc.). Entries that match the console `maxNormalized` should display the same percentages, and rows that are clamped (overflow > 0) should tint amber with a tooltip listing the clamped samples.
 4. Capture both the console output and a screenshot of the channel table indicators for the regression log.

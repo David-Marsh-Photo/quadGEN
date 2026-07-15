@@ -63,7 +63,7 @@ import {
 } from '../core/lab-settings.js';
 import { rebuildLabSamplesFromOriginal } from '../data/lab-parser.js';
 import { isLabLinearizationData } from '../data/lab-legacy-bypass.js';
-import { isSmartPointDragEnabled, setSmartPointDragEnabled, isRedistributionSmoothingWindowEnabled, setRedistributionSmoothingWindowEnabled, isAutoRaiseInkLimitsEnabled, setAutoRaiseInkLimitsEnabled } from '../core/feature-flags.js';
+import { isSmartPointDragEnabled, setSmartPointDragEnabled, isAutoRaiseInkLimitsEnabled, setAutoRaiseInkLimitsEnabled } from '../core/feature-flags.js';
 import {
     setManualChannelDensity,
    setSolverChannelDensity,
@@ -1978,28 +1978,6 @@ function initializeInkLoadThresholdOption() {
     });
 }
 
-function syncRedistributionSmoothingToggle() {
-    if (!elements.redistributionSmoothingToggle) {
-        return;
-    }
-    const enabled = isRedistributionSmoothingWindowEnabled();
-    elements.redistributionSmoothingToggle.checked = enabled;
-    elements.redistributionSmoothingToggle.setAttribute('aria-checked', String(enabled));
-}
-
-function initializeRedistributionSmoothingOption() {
-    syncRedistributionSmoothingToggle();
-    if (!elements.redistributionSmoothingToggle) {
-        return;
-    }
-    elements.redistributionSmoothingToggle.addEventListener('change', (event) => {
-        const next = !!event.target.checked;
-        setRedistributionSmoothingWindowEnabled(next);
-        syncRedistributionSmoothingToggle();
-        showStatus(next ? 'Redistribution smoothing window enabled.' : 'Redistribution smoothing window disabled.');
-    });
-}
-
 function syncAutoRaiseInkToggle() {
     if (!elements.autoRaiseInkToggle) {
         return;
@@ -2157,7 +2135,6 @@ export function initializeEventHandlers() {
     initializeLightBlockingOverlayOption();
     initializeInkLoadOverlayOption();
     initializeInkLoadThresholdOption();
-    initializeRedistributionSmoothingOption();
     initializeAutoRaiseInkOption();
 
     console.log('✅ UI event handlers initialized');

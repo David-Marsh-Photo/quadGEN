@@ -220,8 +220,6 @@ vi.mock('../../src/js/data/lab-legacy-bypass.js', () => ({
 vi.mock('../../src/js/core/feature-flags.js', () => ({
   isSmartPointDragEnabled: () => true,
   setSmartPointDragEnabled: vi.fn(),
-  isRedistributionSmoothingWindowEnabled: () => false,
-  setRedistributionSmoothingWindowEnabled: vi.fn(),
   isAutoRaiseInkLimitsEnabled: () => true,
   setAutoRaiseInkLimitsEnabled: vi.fn()
 }));

@@ -273,7 +273,6 @@ export const elements = {
     inkLoadOverlayToggle: null,
     inkLoadThresholdInput: null,
     autoRaiseInkToggle: null,
-    redistributionSmoothingToggle: null,
 
     // L* modal elements
     lstarModal: null,
@@ -485,7 +484,6 @@ export function initializeElements() {
     elements.inkLoadOverlayToggle = document.getElementById('inkLoadOverlayToggle');
     elements.inkLoadThresholdInput = document.getElementById('inkLoadThresholdInput');
     elements.autoRaiseInkToggle = document.getElementById('autoRaiseInkToggle');
-    elements.redistributionSmoothingToggle = document.getElementById('redistributionSmoothingToggle');
 
     // L* modal elements
     elements.lstarModal = document.getElementById('lstarModal');

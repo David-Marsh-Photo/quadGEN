@@ -111,21 +111,6 @@ function cloneSnapshot(snapshot) {
             perChannel[name] = entry && typeof entry === 'object' ? { ...entry } : {};
         });
     }
-    const smoothingWindows = Array.isArray(snapshot.smoothingWindows)
-        ? snapshot.smoothingWindows.map((entry) => {
-            if (!entry || typeof entry !== 'object') {
-                return null;
-            }
-            return {
-                id: entry.id ?? null,
-                outgoingChannel: entry.outgoingChannel ?? null,
-                incomingChannels: Array.isArray(entry.incomingChannels) ? entry.incomingChannels.slice() : [],
-                position: entry.position ?? entry.t ?? null,
-                outFactor: entry.outFactor ?? null,
-                forced: entry.forced === true
-            };
-        }).filter(Boolean)
-        : [];
     return {
         index: snapshot.index ?? null,
         inputPercent: snapshot.inputPercent ?? null,
@@ -136,7 +121,6 @@ function cloneSnapshot(snapshot) {
         correctedInk: snapshot.correctedInk ?? null,
         inkDelta: snapshot.inkDelta ?? null,
         perChannel,
-        smoothingWindows,
         ladderSelection: Array.isArray(snapshot.ladderSelection)
             ? snapshot.ladderSelection.map((entry) => ({
                 channel: typeof entry?.channel === 'string' ? entry.channel : null,
@@ -210,24 +194,6 @@ function cloneSummary(summary) {
         ladderOrderIndex: summary.ladderOrderIndex && typeof summary.ladderOrderIndex === 'object'
             ? { ...summary.ladderOrderIndex }
             : {},
-        smoothingWindows: Array.isArray(summary.smoothingWindows)
-            ? summary.smoothingWindows.map((entry) => {
-                if (!entry || typeof entry !== 'object') {
-                    return null;
-                }
-                return {
-                    id: entry.id ?? null,
-                    outgoingChannel: entry.outgoingChannel ?? null,
-                    incomingChannels: Array.isArray(entry.incomingChannels) ? entry.incomingChannels.slice() : [],
-                    startIndex: entry.startIndex ?? null,
-                    endIndex: entry.endIndex ?? null,
-                    inputStart: entry.inputStart ?? null,
-                    inputEnd: entry.inputEnd ?? null,
-                    forced: entry.forced === true
-                };
-            }).filter(Boolean)
-            : [],
-        smoothingConfig: summary.smoothingConfig ? { ...summary.smoothingConfig } : null,
         autoRaisedEnds: Array.isArray(summary.autoRaisedEnds)
             ? summary.autoRaisedEnds.map((entry) => {
                 if (!entry || typeof entry !== 'object') {

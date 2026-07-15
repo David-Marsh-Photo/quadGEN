@@ -33,26 +33,10 @@ function storeSmartPointDragToStorage(value) {
     }
 }
 
-const REDISTRIBUTION_SMOOTHING_DEFAULTS = Object.freeze({
-  targetSpan: 0.07,
-  minSamples: 3,
-  maxSamples: 9,
-  alpha: 1.5,
-  momentumBias: 0
-});
-
-const REDISTRIBUTION_SMOOTHING_LIMITS = Object.freeze({
-  targetSpan: { min: 0.03, max: 0.1 },
-  minSamples: { min: 3, max: 9 },
-  maxSamples: { min: 3, max: 12 },
-  alpha: { min: 0.5, max: 3 }
-});
-
 const DEFAULT_FLAGS = {
     activeRangeLinearization: false,
     cubeEndpointAnchoring: false,
     smartPointDrag: true,
-    redistributionSmoothingWindow: false,
     autoRaiseInkLimitsOnImport: false,
     slopeKernelSmoothing: true
 };
@@ -60,70 +44,6 @@ const DEFAULT_FLAGS = {
 const flagState = {
     ...DEFAULT_FLAGS
 };
-
-const redistributionSmoothingWindowConfig = {
-    targetSpan: REDISTRIBUTION_SMOOTHING_DEFAULTS.targetSpan,
-    minSamples: REDISTRIBUTION_SMOOTHING_DEFAULTS.minSamples,
-    maxSamples: REDISTRIBUTION_SMOOTHING_DEFAULTS.maxSamples,
-    alpha: REDISTRIBUTION_SMOOTHING_DEFAULTS.alpha,
-    momentumBias: REDISTRIBUTION_SMOOTHING_DEFAULTS.momentumBias
-};
-
-function clampValue(value, { min, max }, fallback) {
-    const numeric = Number(value);
-    if (!Number.isFinite(numeric)) {
-        return fallback;
-    }
-    if (typeof min === 'number' && numeric < min) {
-        return min;
-    }
-    if (typeof max === 'number' && numeric > max) {
-        return max;
-    }
-    return numeric;
-}
-
-function sanitizeRedistributionSmoothingConfig(partial = {}) {
-    const next = { ...redistributionSmoothingWindowConfig };
-    if (Object.prototype.hasOwnProperty.call(partial, 'targetSpan')) {
-        next.targetSpan = clampValue(
-            partial.targetSpan,
-            REDISTRIBUTION_SMOOTHING_LIMITS.targetSpan,
-            REDISTRIBUTION_SMOOTHING_DEFAULTS.targetSpan
-        );
-    }
-    if (Object.prototype.hasOwnProperty.call(partial, 'minSamples')) {
-        const min = clampValue(
-            partial.minSamples,
-            REDISTRIBUTION_SMOOTHING_LIMITS.minSamples,
-            REDISTRIBUTION_SMOOTHING_DEFAULTS.minSamples
-        );
-        next.minSamples = Math.round(min);
-    }
-    if (Object.prototype.hasOwnProperty.call(partial, 'maxSamples')) {
-        const max = clampValue(
-            partial.maxSamples,
-            REDISTRIBUTION_SMOOTHING_LIMITS.maxSamples,
-            REDISTRIBUTION_SMOOTHING_DEFAULTS.maxSamples
-        );
-        next.maxSamples = Math.round(max);
-    }
-    if (next.maxSamples < next.minSamples) {
-        next.maxSamples = next.minSamples;
-    }
-    if (Object.prototype.hasOwnProperty.call(partial, 'alpha')) {
-        next.alpha = clampValue(
-            partial.alpha,
-            REDISTRIBUTION_SMOOTHING_LIMITS.alpha,
-            REDISTRIBUTION_SMOOTHING_DEFAULTS.alpha
-        );
-    }
-    if (Object.prototype.hasOwnProperty.call(partial, 'momentumBias')) {
-        const numeric = Number(partial.momentumBias);
-        next.momentumBias = Number.isFinite(numeric) ? numeric : REDISTRIBUTION_SMOOTHING_DEFAULTS.momentumBias;
-    }
-    return next;
-}
 
 const storedSmartPointDrag = loadSmartPointDragFromStorage();
 if (storedSmartPointDrag !== null) {
@@ -172,15 +92,6 @@ export function setAutoRaiseInkLimitsEnabled(enabled) {
     return flagState.autoRaiseInkLimitsOnImport;
 }
 
-export function isRedistributionSmoothingWindowEnabled() {
-    return !!flagState.redistributionSmoothingWindow;
-}
-
-export function setRedistributionSmoothingWindowEnabled(enabled) {
-    flagState.redistributionSmoothingWindow = !!enabled;
-    return flagState.redistributionSmoothingWindow;
-}
-
 export function isSlopeKernelSmoothingEnabled() {
     return !!flagState.slopeKernelSmoothing;
 }
@@ -188,19 +99,6 @@ export function isSlopeKernelSmoothingEnabled() {
 export function setSlopeKernelSmoothingEnabled(enabled) {
     flagState.slopeKernelSmoothing = !!enabled;
     return flagState.slopeKernelSmoothing;
-}
-
-export function getRedistributionSmoothingWindowConfig() {
-    return { ...redistributionSmoothingWindowConfig };
-}
-
-export function configureRedistributionSmoothingWindow(overrides = {}) {
-    const next = sanitizeRedistributionSmoothingConfig(overrides || {});
-    Object.assign(redistributionSmoothingWindowConfig, next);
-    if (redistributionSmoothingWindowConfig.maxSamples < redistributionSmoothingWindowConfig.minSamples) {
-        redistributionSmoothingWindowConfig.maxSamples = redistributionSmoothingWindowConfig.minSamples;
-    }
-    return getRedistributionSmoothingWindowConfig();
 }
 
 function installWindowAdapters() {
@@ -240,18 +138,6 @@ function installWindowAdapters() {
         window.isAutoRaiseInkLimitsEnabled = () => isAutoRaiseInkLimitsEnabled();
     }
 
-    if (typeof window.setRedistributionSmoothingWindowEnabled !== 'function') {
-        window.setRedistributionSmoothingWindowEnabled = (enabled = true) => setRedistributionSmoothingWindowEnabled(enabled);
-    }
-
-    if (typeof window.configureRedistributionSmoothingWindow !== 'function') {
-        window.configureRedistributionSmoothingWindow = (options) => configureRedistributionSmoothingWindow(options);
-    }
-
-    if (typeof window.getRedistributionSmoothingWindowConfig !== 'function') {
-        window.getRedistributionSmoothingWindowConfig = () => getRedistributionSmoothingWindowConfig();
-    }
-
     if (typeof window.enableSlopeKernelSmoothing !== 'function') {
         window.enableSlopeKernelSmoothing = (enabled = true) => setSlopeKernelSmoothingEnabled(enabled);
     }
@@ -273,10 +159,6 @@ registerDebugNamespace('featureFlags', {
     isSmartPointDragEnabled,
     setAutoRaiseInkLimitsEnabled,
     isAutoRaiseInkLimitsEnabled,
-    setRedistributionSmoothingWindowEnabled,
-    isRedistributionSmoothingWindowEnabled,
-    configureRedistributionSmoothingWindow,
-    getRedistributionSmoothingWindowConfig,
     setSlopeKernelSmoothingEnabled,
     isSlopeKernelSmoothingEnabled
 }, {

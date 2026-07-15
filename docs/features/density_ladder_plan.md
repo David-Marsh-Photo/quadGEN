@@ -65,9 +65,9 @@ The supported solver mirrors the baseline channel mix, then lets ladder order, r
 
 ---
 
-## 8. Smoothing Interplay
-- Ladder promotions may inject `smoothingWindows` when clamps are synthetic or when the options toggle is active.  
-- Headless composite snapshots expose reserve, blend, and shadow metrics per channel for slope-kernel locking and focused diagnostics.
+## 8. Handoff and Slope Control
+- Ladder promotions expose reserve, blend, and shadow metrics per channel for focused diagnostics.
+- The default-on snapshot slope kernel and 7% limiter bound steep release deltas after redistribution; no optional window rewrites the allocated shares.
 
 ---
 

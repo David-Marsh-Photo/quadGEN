@@ -70,14 +70,9 @@ Manual overrides (fixed density entries, end-value constraints) supersede solved
 ### 5.1 Per-sample Ceiling Guard
 - Always active: every sample is clamped to the channel's buffered coverage ceiling while the solver tracks usage and overflow diagnostics.
 
-### 5.2 Redistribution Smoothing Windows
-- Window sizing constants: `REDISTRIBUTION_WINDOW_MIN = 3`, `REDISTRIBUTION_WINDOW_MAX = 9`, `REDISTRIBUTION_WINDOW_TARGET_SPAN = 0.07` (fraction of input domain).  
-- The solver captures a backwards-looking ring buffer per channel; when a rung would clamp but residual delta remains, it builds a window spanning up to the target span/max samples.  
-- Blend factors ease outgoing vs. incoming shares (power easing with α ≈ 1.5) while preserving per-sample delta sum.  
-- Windows originate either from explicit smoothing toggles or synthetic triggers; the payload exports `{ startIndex, endIndex, inputStart, inputEnd, outgoingChannel, incomingChannels[], synthetic }`.
-- Ladder promotions now trigger as soon as the outgoing rung’s remaining normalized headroom drops below 0.01 %, so darker inks only join once the lighter rung is essentially exhausted while highlights stay buffered ahead of the ceiling.
-
-### 5.3 Release Taper
+### 5.2 Release Taper
+- Handoffs are governed directly by ladder order, reserve state, blend caps, and the default-on snapshot slope kernel; there is no post-allocation share-rewriting window.
+- Ladder promotions trigger as soon as the outgoing rung’s remaining normalized headroom drops below 0.01 %, so darker inks only join once the lighter rung is essentially exhausted while highlights stay buffered ahead of the ceiling.
 - Once headroom approaches zero the solver scales contributions using the ladder reserve release slope (see ladder spec) to avoid step discontinuities.  
 - Exported via `reserveReleaseScale`, `blendCapNormalized`, and `blendAppliedNormalized`.
 

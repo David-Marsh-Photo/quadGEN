@@ -54,14 +54,13 @@ LAB delta / ink delta request
 | Front reserve | `frontReserveBase` (≈0.035) + `frontReserveApplied` | Hold highlight headroom to soften exits | When raw headroom < reserve, effective headroom hits zero even if raw > 0. |
 | Effective headroom | `headroomNormalized − active reserve` | Gate ladder promotion | Creates sudden “no capacity” state the moment reserve outweighs remaining headroom. |
 | Reserve release taper | Scale LK delta once effective headroom < ~9× reserve | Slow the fall-off after crest | Works only after ladder already saturated; doesn’t mitigate front-side surge. |
-| Release smoothing | Optional window (`isRedistributionSmoothingWindowEnabled`) | Even out sudden changes over ~3 samples | No effect when guard forces delta to zero (e.g., effective headroom = 0). |
 | Per-sample ceiling | Buffered coverage clamp | Enforce the measured ceiling on every sample | Combines with reserve and ladder capacity bookkeeping. |
 | Auto-raise / End limits | `scaleChannelEndsByPercent`, end guard | Ensure End isn’t exceeded | When global scale is active, can reduce available headroom before ladder runs. |
 
 ### Key overlaps
 
 1. **Front reserve vs. floating ceiling** – Reserve consumes the same headroom the floating ceiling is trying to manage, so the effective allowance can collapse even though cumulative coverage has not actually touched the buffered limit. Result: the ladder promotes the next rung in a single step (sharp rise for C at snapshots 17–18).
-2. **Reserve taper vs. idle samples** – Once effective headroom hits zero the redistribution loop no longer applies any delta, so smoothing/tapering has nothing to work with; the plotted curve simply inherits the baked baseline (snapshots 37+).
+2. **Reserve taper vs. idle samples** – Once effective headroom hits zero the redistribution loop no longer applies any delta, so the release taper has nothing to work with; the plotted curve simply inherits the baked baseline (snapshots 37+).
 3. **Negative delta logic vs. reserve state** – The moment deltas turn negative (snapshot 148) the guard swings to the darkest rung (K) because lighter rungs are blocked by “heavier usage.” The downstream curve sees another discontinuity even though K’s headroom changed only slightly.
 
 ## 3. Why Fixes Keep Surfacing New Cliffs
