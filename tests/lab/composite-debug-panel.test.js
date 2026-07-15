@@ -158,7 +158,7 @@ describe('Composite debug instrumentation', () => {
     }
   });
 
-  it('does not retain instrumentation when disabled', () => {
+  it('keeps the latest diagnostic session available while the panel is disabled', () => {
     const quad = parseQuadFile('data/TRIFORCE_V4.quad');
     const measurementText = fs.readFileSync(path.resolve('data/TRIFORCE_V4.txt'), 'utf8');
     const labEntry = parseLabData(measurementText, 'TRIFORCE_V4.txt');

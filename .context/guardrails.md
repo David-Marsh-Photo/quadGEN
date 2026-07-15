@@ -26,17 +26,26 @@ Safety rules, working codebase policy, and debugging strategy.
 - Search repository documentation (and embedded comments) before drawing conclusions about code purpose
 - Match assumptions to published guidance
 
+## Scope and Complexity Control
+
+- For non-trivial work, declare the intended behavior, allowed files, explicit non-goals, and verification before editing.
+- Default review tripwires are 3 production files or 150 net production LOC for a bug fix, and 6 production files or 400 net production LOC for a feature slice. These are prompts to pause and explain, not quality targets.
+- Do not add a dependency, abstraction layer, cache, feature flag, compatibility bridge, telemetry path, or persistent setting without a current measured need.
+- Prefer deletion and one canonical path. Every migration must have a promotion or removal criterion.
+- Keep unrelated discoveries out of the active diff; report them as follow-ups.
+- Stop when the requested behavior, required verification, and one diff review are complete.
+
 ## Debugging Strategy
 
 ### Test-Driven Bug Fixing
-1. **Always start by building a test** that replicates the bug before attempting any fix
-2. Use Playwright scripts to create reproducible test cases
-3. Write the test to fail initially (confirming the bug exists)
-4. After implementing the fix, verify the test passes
-5. This ensures: bug is real, fix works, regression protection exists
+1. Reproduce the bug with the smallest reliable existing test or focused command.
+2. Add a regression test only when the existing suite does not prove the behavior.
+3. Use the lowest stable layer: unit for math/state contracts, integration for module boundaries, and Playwright for real browser workflows.
+4. Confirm the reproduction fails for the expected reason, implement the smallest coherent fix, then run focused and required gates.
+5. Do not duplicate the same implementation detail across several layers unless each test addresses a distinct risk.
 
 ### Visual Bug Diagnosis
-- **For bugs with visible components**: include screenshots using Playwright's `page.screenshot()`
+- For bugs with visible components, capture screenshots when visual evidence materially helps diagnosis or review.
 - Trust user visual evidence first - screenshots often reveal real bugs that unit tests miss
 - Test complete user workflows, not isolated functions
 - Look for mathematical patterns in wrong outputs (e.g., 70% → 49% suggests double application)
@@ -100,7 +109,8 @@ Control points are stored as "relative" percentages but presented as "absolute":
 
 ## Assistant Behavior Guidelines
 
-- Walk through thought process step by step
-- Before starting a prompt, ask for any information needed to do a good job
-- When a major bug is fixed, ask if user wants it documented
+- Make reasonable, reversible assumptions when they preserve the requested scope; ask only when a choice would materially change behavior.
+- Communicate evidence, decisions, and trade-offs without exposing a private chain of thought.
+- Document durable behavior changes proportionately; do not create a document or log merely because a task had a plan.
+- Perform one focused self-review, then stop when the agreed acceptance criteria are met.
 - Minor UI-only tweaks (simple layout/style adjustments) don't require plan, doc updates, or tests unless explicitly asked

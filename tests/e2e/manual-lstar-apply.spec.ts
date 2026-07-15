@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { resolve } from 'path';
 import { pathToFileURL } from 'url';
+import { openGlobalCorrectionTab } from '../utils/history-helpers';
 
 const indexUrl = pathToFileURL(resolve('index.html')).href;
 const quadPath = resolve('data/TRIFORCE_V4.quad');
@@ -38,6 +39,7 @@ test.describe('Manual L* entry', () => {
     await page.waitForFunction(() => typeof window.getLoadedQuadData === 'function', null, { timeout: 10000 });
 
     await waitForQuadLoaded(page);
+    await openGlobalCorrectionTab(page);
     await openManualLstarModal(page);
 
     const measuredValues = [95, 75, 55, 35, 15];

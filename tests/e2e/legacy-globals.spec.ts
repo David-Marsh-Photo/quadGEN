@@ -7,7 +7,7 @@ test.describe('Legacy global exports', () => {
     const indexUrl = pathToFileURL(resolve('index.html')).href;
 
     await page.goto(indexUrl);
-    await page.waitForSelector('#globalLinearizationBtn', { timeout: 15000 });
+    await page.waitForSelector('#globalLinearizationBtn', { state: 'attached', timeout: 15000 });
 
     const legacyGlobals = await page.evaluate(() => ({
       quadGenDebug: typeof window.quadGenDebug,

@@ -1,24 +1,20 @@
 import { test, expect } from '@playwright/test';
 import { resolve } from 'path';
 import { pathToFileURL } from 'url';
+import { openGlobalCorrectionTab } from '../utils/history-helpers';
 
 test.describe('Auto-raise ink limits on import (flagged)', () => {
   test('global correction raises channel end when samples exceed limit', async ({ page }) => {
     const indexUrl = pathToFileURL(resolve('index.html')).href;
 
     await page.goto(indexUrl);
-
-    await page.waitForSelector('#optionsBtn', { timeout: 15000 });
-    await page.click('#optionsBtn');
+    await openGlobalCorrectionTab(page);
 
     const autoRaiseToggle = page.locator('#autoRaiseInkToggle');
     await autoRaiseToggle.waitFor({ state: 'visible', timeout: 15000 });
     if (!(await autoRaiseToggle.isChecked())) {
       await autoRaiseToggle.click();
     }
-    await page.click('#closeOptionsBtn');
-    await page.waitForSelector('#optionsModal', { state: 'hidden', timeout: 10000 });
-
     await page.waitForFunction(
       () => typeof window.quadGenActions !== 'undefined',
       null,
@@ -91,15 +87,12 @@ test.describe('Auto-raise ink limits on import (flagged)', () => {
     const EXPECTED_ACTIVE_CHANNELS = ['K', 'C', 'LK'];
 
     await page.goto(indexUrl);
-
-    await page.click('#optionsBtn');
+    await openGlobalCorrectionTab(page);
     const autoRaiseToggle = page.locator('#autoRaiseInkToggle');
     await autoRaiseToggle.waitFor({ state: 'visible', timeout: 15000 });
     if (!(await autoRaiseToggle.isChecked())) {
       await autoRaiseToggle.click();
     }
-    await page.click('#closeOptionsBtn');
-
     await page.waitForSelector('#quadFile', { state: 'attached', timeout: 15000 });
     await page.waitForSelector('#linearizationFile', { state: 'attached', timeout: 15000 });
     await page.waitForFunction(() => typeof window.getLoadedQuadData === 'function', null, { timeout: 20000 });

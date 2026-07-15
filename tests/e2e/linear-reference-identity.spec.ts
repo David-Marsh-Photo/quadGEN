@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { resolve } from 'path';
 import { existsSync } from 'fs';
 import { pathToFileURL } from 'url';
+import { openGlobalCorrectionTab } from '../utils/history-helpers';
 
 const indexUrl = pathToFileURL(resolve('index.html')).href;
 const quadPath = resolve('data/TRIFORCE_V4.quad');
@@ -27,8 +28,7 @@ async function loadLinearLab(page) {
 }
 
 async function setLabSmoothing(page, percent) {
-  await page.waitForSelector('#optionsBtn', { state: 'attached' });
-  await page.click('#optionsBtn');
+  await openGlobalCorrectionTab(page);
   const slider = page.locator('#labSmoothingPercentSlider');
   await slider.waitFor({ state: 'visible' });
   await slider.evaluate(
@@ -50,12 +50,6 @@ async function setLabSmoothing(page, percent) {
   await page.evaluate((value) => {
     window.labSettings?.setLabSmoothingPercent?.(value);
   }, percent);
-  await page.click('#closeOptionsBtn');
-  await page.waitForFunction(
-    () => document.getElementById('optionsModal')?.classList.contains('hidden'),
-    null,
-    { timeout: 5000 }
-  );
 }
 
 async function grabCurves(page) {

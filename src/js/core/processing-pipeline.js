@@ -5912,7 +5912,8 @@ function getMake256CacheKey(endValue, channelName, applyLinearization, options) 
     const smoothing = options?.smoothingPercent ?? 0;
     const forceSmartApplied = options?.forceSmartApplied ?? null;
     const smartState = isSmartCurve(channelName) ? 'smart' : 'linear';
-    return `v${make256CacheVersion}:${channelName}:${endValue}:${applyLinearization}:${smoothing}:${forceSmartApplied}:${smartState}`;
+    const correctionGain = getCorrectionGain();
+    return `v${make256CacheVersion}:${channelName}:${endValue}:${applyLinearization}:${smoothing}:${forceSmartApplied}:${smartState}:${correctionGain}`;
 }
 
 /**
@@ -5931,7 +5932,7 @@ export function make256(endValue, channelName, applyLinearization = false, optio
 
         // Check cache first
         const cacheKey = getMake256CacheKey(endValue, channelName, applyLinearization, options);
-        const cached = make256Cache.get(cacheKey);
+        const cached = compositeLabSession.active ? null : make256Cache.get(cacheKey);
         if (cached) {
             return cached.slice(); // Return copy to prevent mutation
         }

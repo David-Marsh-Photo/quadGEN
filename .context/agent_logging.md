@@ -1,54 +1,45 @@
-# Agent Logging Requirements
+# Agent Logging
 
-## When to Create a Log Entry
-- A plan-required task completes
-- A bug requires >1 iteration to resolve
-- Dependencies or build configs change
-- Significant feature implementation
+Agent logs are curated engineering records, not transcripts or a requirement for every planned task.
 
-## Log Path Structure
-```
+## Create or Update a Log When
+
+- a significant shipped feature or behavior change needs durable rationale
+- a difficult bug required several iterations and produced reusable findings
+- dependencies, build configuration, file formats, or architecture boundaries changed
+
+Do not create a log merely because a task had a plan, a test was repaired, or a minor edit completed. Continue the same-session log rather than creating another file.
+
+## Location
+
+```text
 ./agent-logs/<YYYY-MM-DD>/<HHMM>-<topic>.md
 ```
 
-## Log Template
-```markdown
-# Context
-1-2 sentences: what was done.
+## Contents
 
-# Changes Made
-- Key changes (files modified, features added)
+- context: one or two sentences
+- decisions and material changes
+- relevant commands and verified outcomes
+- durable findings and required follow-ups
 
-# Commands Run
-- Relevant commands only
+Keep entries under roughly 50 lines unless the subject genuinely requires more. Never include secrets, raw transcripts, full test output, screenshots, or generated comparison dumps.
 
-# Findings
-- Results / errors / lessons learned
+## Retention
 
-# Follow-ups
-- Next required actions (if any)
-```
+- Preserve concise logs that explain shipped behavior or architecture.
+- Raw diagnostics and comparison output are temporary artifacts and should be ignored or archived outside the repository after durable findings are extracted.
+- Do not delete or relocate existing user material without approval.
 
-## Logging Rules
-- **Relative paths only** in log content
-- **No secrets / tokens / passwords**
-- **Keep entries compact** but informative
-- **Review today's logs** before starting new work
-- **Update existing log** if continuing same task in same session
-- **Never delete agent logs** - these are permanent project history, not temporary files
+## Documentation Routing
 
-## When to Update Documentation
+| Change | Durable location |
+|---|---|
+| File format | `docs/File_Specs/` or `.context/core.md` |
+| Architecture boundary | `docs/architecture-map.md` |
+| Lab Tech contract | `.context/ai-integration.md` |
+| Major feature behavior | `docs/features/` and, when released, `CHANGELOG.md` |
+| Build or dependency | `.context/core.md` and `package.json` |
+| Safety rule | `.context/guardrails.md` |
 
-The following documentation should be updated when completing work that affects:
-
-| Change Type | Update Location |
-|-------------|-----------------|
-| New file format support | `docs/File_Specs/`, `.context/core.md` |
-| Architecture changes | `docs/architecture-map.md` (regenerate) |
-| New AI/Lab Tech functions | `.context/ai-integration.md` |
-| Major feature implementation | `docs/features/`, `CHANGELOG.md` |
-| Build system or dependency changes | `.context/core.md`, `package.json` |
-| New context modules | `.context/README.md` |
-| New safety rules or patterns | `.context/guardrails.md` |
-
-After updating documentation, add a note in your agent log: "Updated [doc]: [brief description]"
+Update only the documentation whose durable contract actually changed.

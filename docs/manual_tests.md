@@ -484,11 +484,11 @@ Goal: capture before/after artifacts that confirm the global scale batch history
 4. If the screenshots show mismatched toggle states or out-of-date filenames, re-run the regression suite; the undo stack may not be recording batch actions correctly.
 
 ## Automated Coverage: Global Scaling *(Phase 0 – Foundation)*
-Phase 0 Track 4 regression guards now cover the following flows via Playwright (run automatically by `npm run test:e2e`):
+Phase 0 Track 4 regression guards now cover the following flows via Playwright (run automatically by `npm run test:e2e:gate`):
 
 - `tests/e2e/global-scale-baseline-drift.spec.ts` – edits under non-100 % scale return to baseline without drifting cached ends.
 - `tests/e2e/global-scale-rapid-undo.spec.ts` – rapid slider scrub (100 %→50 %→100 %) retains history entries and undoes cleanly.
-- `tests/e2e/edit-mode-keypoint-scaling.spec.ts` (“adding a Smart point after global scale”) – confirms Smart insertions respect scaled absolute outputs.
+- `tests/e2e/edit-mode-scale.spec.ts` – confirms Smart points remain aligned when global correction is rescaled.
 - `tests/e2e/global-scale-measurement-revert.spec.ts` – verifies measurement loads survive revert + rescale cycles without baseline cache contamination.
 
 Phase 0 – Foundation tags in the regression matrix:

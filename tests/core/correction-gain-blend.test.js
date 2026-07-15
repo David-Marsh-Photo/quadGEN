@@ -1,6 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { applyGlobalLinearizationStep, make256 } from '../../src/js/core/processing-pipeline.js';
+import {
+  applyGlobalLinearizationStep,
+  invalidateMake256Cache,
+  make256
+} from '../../src/js/core/processing-pipeline.js';
 import { LinearizationState } from '../../src/js/data/linearization-utils.js';
 import { setCorrectionGain, appState, resetAppState } from '../../src/js/core/state.js';
 
@@ -24,13 +28,14 @@ function createIdentityEntry() {
 
 describe('applyGlobalLinearizationStep with correction gain', () => {
   beforeEach(() => {
+    resetAppState();
     LinearizationState.clear();
     LinearizationState.setGlobalData(createIdentityEntry(), true);
     LinearizationState.setGlobalBaselineCurves({
       K: BASE_VALUES.slice()
     });
     setCorrectionGain(1, { persist: false });
-    resetAppState();
+    invalidateMake256Cache();
   });
 
   it('returns fully corrected values when gain is 100%', () => {

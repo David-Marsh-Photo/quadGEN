@@ -7,7 +7,7 @@ test('global scale rescales Smart key points', async ({ page }) => {
   const indexUrl = pathToFileURL(resolve('index.html')).href;
   await page.goto(indexUrl);
 
-  await page.waitForSelector('#globalLinearizationBtn');
+  await page.waitForSelector('#globalLinearizationBtn', { state: 'attached' });
   await page.setInputFiles('input#linearizationFile', resolve('testdata/Manual-LAB-Data.txt'));
   await page.waitForFunction(
     () => document.getElementById('globalLinearizationFilename')?.textContent?.trim() === 'Manual-LAB-Data.txt',

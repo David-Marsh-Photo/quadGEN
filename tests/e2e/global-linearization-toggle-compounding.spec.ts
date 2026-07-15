@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { resolve } from 'path';
 import { pathToFileURL } from 'url';
 import { existsSync } from 'fs';
+import { openGlobalCorrectionTab } from '../utils/history-helpers';
 
 test.describe('Global correction toggle', () => {
   test('does not reapply scaling when toggled repeatedly', async ({ page }) => {
@@ -23,6 +24,7 @@ test.describe('Global correction toggle', () => {
     });
 
     await page.goto(indexUrl);
+    await openGlobalCorrectionTab(page);
 
     const fileInputOptions = { timeout: 15000, state: 'attached' } as const;
     await page.waitForSelector('#quadFile', fileInputOptions);
@@ -68,6 +70,7 @@ test.describe('Global correction toggle', () => {
     };
 
     await toggleOnce();
+    const stableState = await readState();
     await toggleOnce();
     await toggleOnce();
 
@@ -78,7 +81,7 @@ test.describe('Global correction toggle', () => {
     expect(finalState.kCurve?.length).toBe(256);
 
     expect(finalState.samples).toEqual(initialState.samples);
-    expect(finalState.kCurve).toEqual(initialState.kCurve);
+    expect(finalState.kCurve).toEqual(stableState.kCurve);
     expect(consoleErrors).toEqual([]);
   });
 });

@@ -7,7 +7,7 @@ test.describe('Channel end input editing', () => {
     const indexUrl = pathToFileURL(resolve('index.html')).href;
     await page.goto(indexUrl);
 
-    await page.waitForSelector('#globalLinearizationBtn', { timeout: 15000 });
+    await page.waitForSelector('#globalLinearizationBtn', { state: 'attached', timeout: 15000 });
 
     const quadPath = resolve('testdata/humped_shadow_dip.quad');
     await page.setInputFiles('input#quadFile', quadPath);

@@ -7,7 +7,7 @@ test.describe('Edit Mode delete button', () => {
     const indexUrl = pathToFileURL(resolve('index.html')).href;
     await page.goto(indexUrl);
 
-    await page.waitForSelector('#globalLinearizationBtn');
+    await page.waitForSelector('#globalLinearizationBtn', { state: 'attached' });
 
     const quadPath = resolve('testdata/humped_shadow_dip.quad');
     await page.setInputFiles('input#quadFile', quadPath);

@@ -185,7 +185,7 @@ export function generateFilename() {
                 // Skip the placeholder row
                 if (tr.id === 'noChannelsRow') return;
 
-                const nameElement = tr.querySelector('td span span:nth-child(2)');
+                const nameElement = tr.querySelector('.channel-name');
                 const endInput = tr.querySelector('.end-input');
 
                 if (nameElement && endInput) {
