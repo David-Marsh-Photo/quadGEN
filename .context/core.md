@@ -68,7 +68,6 @@ For full integration audit, see `.planning/codebase/INTEGRATIONS.md`.
 ### Feature Flags (Console Toggles)
 - `enableActiveRangeLinearization(true|false)` - Active-range LAB linearization
 - `setCubeEndpointAnchoringEnabled(true|false)` - 1D LUT endpoint clamp
-- `setLegacyLUTMappingEnabled(true|false)` - Toggle gain-based LUT correction (default: false)
 
 ### Debug Flags
 - `DEBUG_LOGS` (default: false) - General console logging

@@ -46,27 +46,6 @@ const GAIN_WINDOW_WIDTH = 0.2;    // Search window around target neutral
 const GAIN_MIN = 0.05;            // Minimum allowed gain (prevents divide-by-zero effects)
 const GAIN_MAX = 20;              // Maximum allowed gain (prevents extreme corrections)
 
-// Feature flag for legacy LUT mapping (direct interpolation without gain correction)
-let useLegacyLUTMapping = false;
-
-/**
- * Enable/disable legacy LUT mapping mode.
- * Legacy mode uses direct interpolation without gain-based correction.
- * @param {boolean} enabled - True to use legacy mode, false for gain-based mode
- */
-export function setLegacyLUTMappingEnabled(enabled) {
-    useLegacyLUTMapping = !!enabled;
-    console.log(`[LUT] Legacy mapping mode ${useLegacyLUTMapping ? 'enabled' : 'disabled'}`);
-}
-
-/**
- * Check if legacy LUT mapping mode is enabled
- * @returns {boolean}
- */
-export function isLegacyLUTMappingEnabled() {
-    return useLegacyLUTMapping;
-}
-
 function computeEffectiveHeadroom(info) {
     if (!info) {
         return 0;
@@ -5869,18 +5848,6 @@ export function apply1DLUTFixedDomain(values, lutOrData, domainMin = 0, domainMa
         const span = Math.abs(domainSpan) > 1e-9 ? domainSpan : 1;
         const epsilon = 1e-6;
 
-        // Legacy mode: direct LUT interpolation without gain-based correction
-        if (useLegacyLUTMapping) {
-            const result = values.map((value) => {
-                const baseValue = Number(value) || 0;
-                const normalized = maxOutput > 0 ? baseValue / maxOutput : 0;
-                const t = start + clamp01(normalized) * span;
-                const lutValue = clamp01(interpolationFunction(t));
-                return Math.round(lutValue * maxOutput);
-            });
-            return preserveLeadingInk(result);
-        }
-
         // Measurement-based entries (LAB/CGATS/manual) represent an input-domain remap (target -> required input).
         // Applying them as multiplicative gains can produce non-monotone results (and forced clamps create flat plateaus).
         // Instead, compose the remap with the baseline curve: y(x) = baseline(y)(x'), where x' = LUT(x).
@@ -6336,10 +6303,7 @@ registerDebugNamespace('processingPipeline', {
     applyPerChannelLinearizationStep,
     applyGlobalLinearizationStep,
     replayCompositeDebugSessionFromCache,
-    getCompositeDebugSessionCache,
-    // Feature flag controls
-    setLegacyLUTMappingEnabled,
-    isLegacyLUTMappingEnabled
+    getCompositeDebugSessionCache
 }, {
     exposeOnWindow: typeof window !== 'undefined',
     windowAliases: ['make256', 'apply1DLUT', 'buildFile', 'buildBaseCurve']
