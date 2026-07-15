@@ -4,7 +4,7 @@
  * Capture composite redistribution debug data headlessly.
  *
  * Usage:
- *   node scripts/capture-composite-debug.mjs --quad data/TRIFORCE_V4.quad --lab data/TRIFORCE_V4.txt --mode normalized --channels K,C,LK --output analysis/baseline_density_pre.json
+ *   node scripts/capture-composite-debug.mjs --quad data/TRIFORCE_V4.quad --lab data/TRIFORCE_V4.txt --channels K,C,LK --output analysis/baseline_density_pre.json
  *
  * Notes:
  * - Provides minimal DOM stubs so modular code can initialize safely.
@@ -77,12 +77,11 @@ for (let i = 2; i < process.argv.length; i += 1) {
 
 const quadPath = argMap.quad || argMap.q;
 const labPath = argMap.lab || argMap.l;
-const mode = argMap.mode || 'normalized';
 const channelList = (argMap.channels || argMap.ch || '').split(',').filter(Boolean);
 const outputPath = argMap.output || argMap.o;
 
 if (!quadPath || !labPath) {
-    console.error('Usage: node scripts/capture-composite-debug.mjs --quad <quadFile> --lab <labFile> [--mode normalized|isolated|momentum] [--channels K,C,LK] [--output file.json]');
+    console.error('Usage: node scripts/capture-composite-debug.mjs --quad <quadFile> --lab <labFile> [--channels K,C,LK] [--output file.json]');
     process.exit(1);
 }
 
@@ -122,12 +121,9 @@ quadContents.split(/\r?\n/).forEach((line) => {
 
 const { parseLabData } = await import('../src/js/data/lab-parser.js');
 const { beginCompositeLabRedistribution, registerCompositeLabBase, finalizeCompositeLabRedistribution } = await import('../src/js/core/processing-pipeline.js');
-const { COMPOSITE_WEIGHTING_MODES, setCompositeWeightingMode } = await import('../src/js/core/composite-settings.js');
 const { setCompositeDebugEnabled, getCompositeDebugState } = await import('../src/js/core/composite-debug.js');
 const { getSnapshotSlopeKernelStats } = await import('../src/js/core/snapshot-slope-kernel.js');
 
-const modeKey = Object.values(COMPOSITE_WEIGHTING_MODES).includes(mode) ? mode : COMPOSITE_WEIGHTING_MODES.NORMALIZED;
-setCompositeWeightingMode(modeKey);
 setCompositeDebugEnabled(true);
 
 const labEntry = parseLabData(labContents, path.basename(labFile));
@@ -148,8 +144,7 @@ channelNames.forEach((name) => {
 beginCompositeLabRedistribution({
     channelNames,
     endValues,
-    labEntry,
-    weightingMode: modeKey
+    labEntry
 });
 
 channelNames.forEach((name) => {
@@ -162,7 +157,6 @@ finalizeCompositeLabRedistribution();
 const state = getCompositeDebugState();
 
 const payload = {
-    mode: modeKey,
     channels: channelNames,
     summary: state.summary,
     snapshots: state.snapshots,

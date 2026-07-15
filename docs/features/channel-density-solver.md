@@ -13,7 +13,7 @@ The composite density solver transforms measured LAB data plus `.quad` channel d
 - each channel’s demonstrated darkening capacity (coverage ceiling + buffer),
 - sequential ladder handoffs from light inks to dark inks,
 - active feature guards (auto-raise, highlight protection, reserve taper, shadow easing),
-- user weighting modes (Normalized, Equal, Momentum, Isolated) without reintroducing “consumable density” behaviour.
+- normalized, baseline-proportional redistribution without reintroducing “consumable density” behaviour.
 
 This document is the single source of truth for the solver’s inputs, outputs, guard rails, and expected telemetry. Ladder‑specific behaviour is summarised here and detailed in the dedicated ladder spec. The solver runs when operators switch ⚙️ Options → **Correction method** to **Density Solver**; Simple Scaling remains the default pipeline for LAB corrections.
 
@@ -43,7 +43,7 @@ All normalised values live in printer space: 0 represents paper white, 1 represe
    - Store constants as both raw coverage limits and ladder cues.
 4. **Redistribution loop** (per sample):  
    - Evaluate target minus measurement to get required delta (`deltaDensity`).  
-   - Feed into weighting mode (Normalized, Equal, Momentum, Isolated) to produce provisional shares.  
+   - Produce provisional shares from the normalized baseline mix.
    - Apply ladder/guard logic (front reserve, blend caps, shadow easing).  
    - Clamp against available capacity / buffered ceilings, update coverage usage.  
    - Emit corrected per-channel curve deltas (converted back to 16‑bit ink steps).
@@ -96,14 +96,14 @@ Manual overrides (fixed density entries, end-value constraints) supersede solved
 ---
 
 ## 7. Debug & Telemetry
-- **Summary payload** exposes: weighting mode, density maxima, coverage summary map, ladder order, momentum windows, smoothing config, and auto-raise context.  
+- **Summary payload** exposes density maxima, coverage summary map, ladder order, smoothing config, and auto-raise context.
 - **Snapshot payload** exposes: per-channel normalized before/after, shares, delta contributions, coverage floors/layers/allowed, reserve and blend metrics, capacity, and ladder selection/blocked reasons.
-- Composite debug panel renders channel rows in `channelNames` order (see tests listed below).
+- Headless snapshots preserve `channelNames` order for slope-kernel locking and focused diagnostics.
 
 ---
 
 ## 8. Test Coverage
-Maintainers must update/extend the following when changing solver logic:
+Use the lowest relevant existing check when its contract changes:
 - Unit:  
   - `tests/lab/composite-density-ladder.test.js`  
   - `tests/lab/composite-available-capacity.test.js`  
@@ -111,7 +111,7 @@ Maintainers must update/extend the following when changing solver logic:
   - `tests/lab/composite-ladder-release.test.js`  
   - `tests/lab/composite-redistribution-scaling.test.js`
 - Playwright:  
-  - `tests/e2e/composite-density-ceiling-monotonic.spec.ts`
+  - `tests/e2e/channel-density-ceiling-monotonic.spec.ts`
 
 Any new guard or toggle must land alongside targeted coverage.
 
@@ -189,7 +189,7 @@ These constants act as hard ceilings when redistributing LAB corrections: an ink
 - Manual edits while global scale is active refresh scaling baselines so downstream End adjustments remain accurate.
 - Undo/redo and “Revert to measurement” flows capture density input changes alongside curve history; clearing a `.quad` or loading a new measurement resets unspecified fields to blank.
 - Diagnostics: `getCompositeDensityProfile(inputPercent)` reports the resolved constants and per-channel shares.
-- Automated coverage: Vitest suite `tests/core/composite-density-inputs.test.ts` exercises manual overrides and compute behavior; Playwright spec `tests/e2e/channel-density-auto-compute.spec.ts` verifies the UI flow.
+- Automated coverage: `tests/e2e/channel-density-auto-compute.spec.ts` verifies the density-input UI flow.
 
 ## Integration Hooks
 - Feed the resulting per-channel weights into `finalizeCompositeLabRedistribution` (or equivalent) instead of equal-share or pure-density heuristics.
@@ -202,22 +202,22 @@ These constants act as hard ceilings when redistributing LAB corrections: an ink
 ### Delivered to date
 - Unified `availableCapacity` accounting threaded through redistribution diagnostics.
 - Floating ceilings, reserve-aware headroom, front-reserve release taper, and blend caps for ladder promotions/shadow easing.
-- Weighting modes (Normalized, Equal, Momentum, Isolated) consolidated on the same ladder/reserve infrastructure.
+- The hidden persisted weighting modes were removed; all redistribution now uses the normalized ladder/reserve path.
 - Headless composite diagnostics expose capacity, reserve, and blend decisions for focused solver checks.
 
 ### Outstanding items
-1. **Guard precedence cleanup** — enforce clamp order `availableCapacity → release taper → momentum → end limit`, delete legacy guard code paths, and assert the precedence via unit tests and updated diagrams.
+1. **Guard precedence cleanup** — enforce one documented clamp order across available capacity, release taper, and End limits; delete redundant guard code only where fixture output proves it safe.
 2. **Shadow reserve deep dive** — probe aggressive negative-delta datasets to confirm reserve easing never overcompensates; add fixtures if real workloads expose gaps.
 3. **Documentation touch-ups** — keep the manual regression matrix, Help → Version History, and this spec aligned; remove any lingering references to the retired consumable-density model.
 4. **Validation cadence** — continue periodic headful verification on `P800_K36C26LK25_V6` and TRIFORCE fixtures after significant solver tweaks, and ensure `scripts/headful-capture-normalized-ladder.mjs` matches the snapshot ranges referenced in tests.
-5. **Exploratory tooling** — extend `scripts/analyze_composite_weighting.cjs` and companion analysis scripts to cover new datasets, highlight dominance thresholds, and surface per-channel ceilings before enabling optional UI affordances.
+5. **Exploratory tooling** — use `scripts/analyze_composite_weighting.cjs` only when a concrete dataset needs amplitude or ceiling diagnosis; do not expand it speculatively.
 
 ### Change control
 When tackling an outstanding item:
 1. Update this spec (and `docs/features/density_ladder_plan.md` or `docs/features/solver_diagram.md` when applicable).
-2. Extend or adjust automated coverage (Vitest + Playwright) so regressions stay caught.
-  3. Capture results in AGENTS.md (solver section) and note milestone completion in the relevant engineering log.
-4. Run the solver release gate: `npm run build:agent`, `npm run test`, `npm run test:e2e`, and `npm run test:smoke`.
+2. Adjust the lowest existing test that proves the changed contract; do not add a test merely to mirror implementation branches.
+3. Record the durable result in this specification or the remediation roadmap, not in agent instructions.
+4. Run the proportionate solver gate, expanding to the full release gate for production behavior changes.
 5. Refresh headful captures and composite debug artifacts for studio review.
 
 Once the outstanding items are resolved, the roadmap folds entirely into this canonical spec.

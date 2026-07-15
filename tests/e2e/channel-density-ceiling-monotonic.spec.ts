@@ -61,7 +61,6 @@ test.describe('Composite density ceilings', () => {
       resolve('scripts/capture-composite-debug.mjs'),
       '--quad', QUAD_PATH,
       '--lab', GLOBAL_PATH,
-      '--mode', 'equal',
       '--output', outputPath
     ], { cwd: resolve('.') });
 

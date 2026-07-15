@@ -168,7 +168,7 @@ Goal: validate the default-on kernel smoother reshapes steep roll-offs without v
 Document the measured deltas; if the kernel path exceeds 0.07 or flattens the transition, attach the debug payload with notes.
 
 ## Auto-Raise × Smoothing Interoperability
-Goal: ensure auto-raising ink limits does not suppress redistribution smoothing windows when Normalized weighting is active.
+Goal: ensure auto-raising ink limits does not suppress density-solver smoothing windows.
 
 ### Manual Steps:
 1. Open `index.html`, click ⚙️ Options, and enable **Auto-raise ink limits after import**.
@@ -181,7 +181,7 @@ Goal: ensure auto-raising ink limits does not suppress redistribution smoothing 
    - Snapshot 184 reports a smoothing window indicating the taper (K handing off to C/LK).
 5. Reload the LAB file once more and confirm the summary is deterministic.
 
-Document pass/fail and attach the screenshots. If either array is missing under Normalized weighting, note the console output from `window.getCompositeDebugState()` in your test log.
+Document pass/fail and attach the screenshots. If either array is missing, note the console output from `window.getCompositeDebugState()` in your test log.
 
 ## Edit Mode — XY Input Stability
 Goal: ensure editing the `X,Y` field does not rescale the entire curve when channel ink limits are below 100%.
@@ -328,8 +328,8 @@ Capture screenshots when the card fails to hide/show as expected, the link toggl
 ### Optional Automation
 - `npx playwright test tests/e2e/bell-curve-apex-shift.spec.ts` drives the control on C, verifies metadata updates, and saves `test-screenshots/bell-apex-shift-control.png`.
 
-## Density Ladder Sequencing (Normalized weighting)
-Goal: confirm Normalized weighting exhausts highlight inks in density order (LK → C → K) and records ladder decisions in composite debug.
+## Density Ladder Sequencing
+Goal: confirm the density solver exhausts highlight inks in density order (LK → C → K) and records ladder decisions in composite debug.
 
 ### Manual Steps:
 1. Launch `index.html` with default flags (auto-raise off, composite per-sample ceiling on). Enable auto-raise if the scenario calls for it.

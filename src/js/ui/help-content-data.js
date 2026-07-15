@@ -523,7 +523,7 @@ export const VERSION_HISTORY = {
       CHANGED: [
         'Simple Scaling is the primary correction method with automatic density solver integration when needed.',
         'Light mode loads by default, LAB smoothing starts at 0 %, and overlays scale to the active ink ceiling for clearer comparisons.',
-        'Composite solver reuses normalized coverage ceilings, momentum weighting, and ladder tapers to hand off corrections smoothly while retaining guardrails.'
+        'Composite solver reuses normalized coverage ceilings, baseline-proportional shares, and ladder tapers to hand off corrections smoothly while retaining guardrails.'
       ],
       FIXED: [
         'Global .cube and .acv imports now stay monotone and correctly oriented, so baseline ramps reflect the intended shape.',

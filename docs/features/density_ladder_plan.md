@@ -8,7 +8,7 @@ This document defines how the composite density solver walks the ladder, manages
 
 ## 1. Ladder Overview
 - **Ordering** — derived from solved density constants (lightest → darkest). Example: P800 uses `LK → C → K`. Ladder indices ship through `ladderOrderIndex`.
-- **Modes** — Normalized weighting (default) follows the ladder automatically; Equal, Momentum, and Isolated weighting reuse the same ladder/reserve infrastructure so behaviour stays consistent.
+- **Shares** — the single normalized path starts from the baseline `.quad` mix, then follows the density ladder automatically as channels exhaust capacity.
 - **Terminology**  
   - *Rung*: a single channel in ladder order.  
   - *Front reserve*: headroom buffer the outgoing rung keeps so highlights remain stable.  
@@ -18,7 +18,7 @@ This document defines how the composite density solver walks the ladder, manages
 
 ## 2. Positive-Delta Promotions
 1. While `effectiveHeadroom > reserveAllowanceRemaining`, keep the current rung active.  
-2. When headroom falls below the reserve allowance trigger (`FRONT_RESERVE_RELEASE_TRIGGER`, default 1.0 × reserve), activate the next rung.  
+2. When the lighter rung reaches its reserve/capacity threshold, activate the next rung.
 3. Limit the newcomer with a per-sample cap (`BLEND_CAP_NORMALIZED = 0.0008`) and track progress via `blendProgress/blendWindow` so its share grows smoothly.  
 4. Outgoing rung decays using the release taper (section 4) rather than a hard cut, preventing LK cliffs.
 5. Promotion now also kicks in once the lighter rung’s available capacity ≤ 0.0001 normalized (≈0.01 % of its density ceiling), keeping ladder hand-offs ahead of the hard ceiling.
@@ -26,14 +26,14 @@ This document defines how the composite density solver walks the ladder, manages
 ---
 
 ## 3. Negative-Delta Behaviour
-- Shares remain proportional to baseline plus momentum bias until reserve debt is repaid.  
+- Shares remain proportional to the baseline mix until reserve debt is repaid.
 - Once `reserveAllowanceRemaining <= 0`, darker rungs can assist in lightening via shadow blends (section 5).  
 - When a rung regains headroom it resumes with the same blend cap, keeping the curve continuous.
 
 ---
 
 ## 4. Reserve Handling
-- Base reserve (`frontReserveBase = 0.0125` normalized) sits ahead of the current sample.  
+- Dynamic base reserve (`frontReserveBase`, capped at `0.035` normalized) sits ahead of the current sample.
 - Reserve state per channel: `approaching`, `within`, `exhausted`.  
 - `reserveAllowanceRemaining` and `reserveAllowanceNormalized` record outstanding reserve.  
 - `effectiveHeadroomNormalized` subtracts the reserve before the solver evaluates promotions.
@@ -43,34 +43,31 @@ Tests: `tests/lab/composite-reserve-state.test.js`, `tests/lab/composite-availab
 ---
 
 ## 5. Release Taper
-- Outgoing rung decays over `RELEASE_WINDOW = 9` samples with geometric falloff (`RELEASE_DECAY = 0.85`).  
+- Reserve release tapers between roughly 9× and 1× the dynamic base reserve; reserve history decays by `0.9` when headroom contracts.
 - Applied amount is exported via `blendAppliedNormalized`; active cap via `blendCapNormalized`.  
 - Ensures the hand-off between LK and C (and subsequent rungs) is a glide, not a drop.
 
-Tests: `tests/lab/composite-ladder-release.test.js`, `tests/e2e/composite-normalized-density-ladder.spec.ts`.
+Test: `tests/lab/composite-ladder-release.test.js`.
 
 ---
 
 ## 6. Shadow Ease-In
-- When a darker rung joins, a secondary cap (`shadowBlendCapNormalized`) with window (`SHADOW_BLEND_WINDOW = 11`) limits its initial share.  
+- When a darker rung joins during negative redistribution, a secondary cap (`shadowBlendCapNormalized`) grows over a six-sample window and limits its initial share.
 - `shadowBlendFromChannel` identifies which rung is lending density.  
 - Prevents spikes when dense inks (e.g., K) first appear.
 
-Tests: `tests/lab/composite-negative-ease.test.js`, `tests/e2e/composite-negative-ease.spec.ts`.
+Test: `tests/lab/composite-negative-ease.test.js`.
 
 ---
 
-## 7. Weighting Modes
-- **Normalized** — default; relies entirely on ladder order, reserves, and blend caps.  
-- **Equal** — ladder guards remain active, so lighter inks stay engaged until their reserve plus headroom is exhausted (`tests/e2e/composite-equal-activation.spec.ts`).  
-- **Momentum** — momentum bias layers on top of ladder caps; does not bypass reserve allowance (`tests/e2e/composite-momentum-weighting.spec.ts`, `tests/lab/composite-density-profile.test.js`).  
-- **Isolated** — bypasses ladder sequencing intentionally; use only for diagnostics.
+## 7. Normalized Shares
+The supported solver mirrors the baseline channel mix, then lets ladder order, reserves, capacity, and blend caps determine handoffs. There is no user-selectable or persisted weighting mode.
 
 ---
 
 ## 8. Smoothing Interplay
 - Ladder promotions may inject `smoothingWindows` when clamps are synthetic or when the options toggle is active.  
-- Composite debug panel displays reserve, blend, and shadow metrics per channel; rows follow the base channel order to maintain readability.
+- Headless composite snapshots expose reserve, blend, and shadow metrics per channel for slope-kernel locking and focused diagnostics.
 
 ---
 
@@ -86,9 +83,8 @@ Tests: `tests/lab/composite-negative-ease.test.js`, `tests/e2e/composite-negativ
 Whenever ladder behaviour changes:
 1. Update this spec (affected sections).  
 2. Update `channel-density-solver.md` if coverage/headroom maths shift.  
-3. Refresh targeted unit + Playwright tests listed in sections above.  
-4. Record the change in AGENTS.md (solver section) alongside any engineering log entries.  
-5. Update the Maintenance & Open Work section in `docs/features/channel-density-solver.md` if new follow-up work is required.
+3. Adjust the lowest existing test only when the behavior contract changes.
+4. Update the Maintenance & Open Work section in `docs/features/channel-density-solver.md` if a concrete follow-up remains.
 
 ---
 

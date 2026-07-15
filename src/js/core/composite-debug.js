@@ -136,7 +136,6 @@ function cloneSnapshot(snapshot) {
         correctedInk: snapshot.correctedInk ?? null,
         inkDelta: snapshot.inkDelta ?? null,
         perChannel,
-        weightingMode: snapshot.weightingMode ?? null,
         smoothingWindows,
         ladderSelection: Array.isArray(snapshot.ladderSelection)
             ? snapshot.ladderSelection.map((entry) => ({
@@ -207,14 +206,10 @@ function cloneSummary(summary) {
         coverageBuffers: summary.coverageBuffers ? { ...summary.coverageBuffers } : {},
         warnings: Array.isArray(summary.warnings) ? summary.warnings.slice() : [],
         peakIndices: summary.peakIndices ? { ...summary.peakIndices } : null,
-        weightingMode: summary.weightingMode || null,
         densityLadder: Array.isArray(summary.densityLadder) ? summary.densityLadder.slice() : [],
         ladderOrderIndex: summary.ladderOrderIndex && typeof summary.ladderOrderIndex === 'object'
             ? { ...summary.ladderOrderIndex }
             : {},
-        momentumPeaks: summary.momentumPeaks ? { ...summary.momentumPeaks } : null,
-        momentumWindow: Number.isFinite(summary.momentumWindow) ? summary.momentumWindow : null,
-        momentumSigma: Number.isFinite(summary.momentumSigma) ? summary.momentumSigma : null,
         smoothingWindows: Array.isArray(summary.smoothingWindows)
             ? summary.smoothingWindows.map((entry) => {
                 if (!entry || typeof entry !== 'object') {

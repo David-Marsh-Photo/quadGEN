@@ -128,7 +128,7 @@ Multi-ink `.quad` files frequently stagger ink usage—highlight grays, cyan mid
 
 1. **Gather measured density** – Sample the imported LAB ramp (perceptual or log-density) into incremental deltas (`ΔDensity`) between successive inputs.
 2. **Read channel shares** – For each LUT sample, compute how much of the total draw each channel supplied (`draw_channel / Σ draw_all`). Zero-output spans stay untouched.
-3. **Calibrate density constants** – Scan the ramp in the order channels appear. Whenever a channel is effectively solo (≥90 % share, or ≥70 % support), record how much darkening it achieved; that becomes the channel’s density ceiling. Mixed intervals subtract the portions already explained by earlier channels so late-arriving inks only inherit the residual density. The end result is a per-channel constant expressing how strong that ink is when given free rein.
+3. **Calibrate density constants** – Attribute each positive measured-density increment to active channels in proportion to their baseline `.quad` share, ignoring contributions at or below 1%. Sum those increments per channel, then apply fixed density values, manual overrides, and End limits. The result is a per-channel ceiling used for capacity and ladder ordering.
 4. **Compute the correction delta** – For each sample quadGEN now evaluates `Δ = targetDensity − measuredDensity`. The linearized target is the law; baseline densities no longer dictate the sign. When the LAB smoothing slider sits at 0, the measurement evaluator echoes the raw ramp so an already linear dataset produces Δ = 0 everywhere.
 5. **Distribute the delta** – Use the per-channel density weights as a **funnel** only. They describe how to split the requested change across active inks while clamps, headroom, and density ceilings keep each channel in range. If the correction asks for zero change, every channel receives zero regardless of weight magnitude.
 6. **Guard amplitude** – After distribution the solver verifies the composite still matches the LAB request within the guard band (±10 % by default) and restores the original end samples so the curve keeps its exact anchors.
@@ -142,8 +142,7 @@ Multi-ink `.quad` files frequently stagger ink usage—highlight grays, cyan mid
 
 When composite redistribution is active, it runs with the behaviours above. You can toggle it off for diagnostics via `window.enableCompositeLabRedistribution(false)` if you need to compare against the legacy per-channel application. Additional implementation notes and troubleshooting tips live in `MULTICHANNEL_CORRECTION.md`, while the solver math is broken down in `docs/features/channel-density-solver.md`.
 
-The solver uses **normalized weighting** by default, mirroring the ink mix from the loaded `.quad` and blending corrections so the updated curve stays proportional to the baseline composition unless a channel runs out of headroom.
-- **Momentum weighting** biases redistribution toward channels whose curves are already climbing or dropping fastest, using a Gaussian momentum window.
+The solver uses one normalized path: it mirrors the ink mix from the loaded `.quad` and keeps corrections proportional to the baseline composition unless a channel runs out of headroom.
 
 ## Python example
 Reads a CSV with columns: `input_percent,Lstar`. Produces a 256‑sample correction LUT (`x_adj[0..255]`) mapping nominal input 0..100 to adjusted input 0..100.

@@ -228,13 +228,6 @@ vi.mock('../../src/js/core/feature-flags.js', () => ({
   setAutoRaiseInkLimitsEnabled: vi.fn()
 }));
 
-vi.mock('../../src/js/core/composite-settings.js', () => ({
-  setCompositeWeightingMode: vi.fn(),
-  getCompositeWeightingMode: () => 'normalized',
-  subscribeCompositeWeightingMode: () => () => {},
-  COMPOSITE_WEIGHTING_MODES: { normalized: 'normalized' }
-}));
-
 vi.mock('../../src/js/core/composite-debug.js', () => ({
   setCompositeDebugEnabled: vi.fn(),
   isCompositeDebugEnabled: () => false,

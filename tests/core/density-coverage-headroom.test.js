@@ -108,8 +108,7 @@ describe('density coverage ceilings', () => {
     beginCompositeLabRedistribution({
       channelNames: quadData.channels,
       endValues: quadData.baselineEnd,
-      labEntry,
-      weightingMode: 'normalized'
+      labEntry
     });
 
     quadData.channels.forEach((channel) => {

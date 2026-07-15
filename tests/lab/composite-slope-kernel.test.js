@@ -53,7 +53,6 @@ describe('composite slope kernel integration', () => {
       resolve('scripts/capture-composite-debug.mjs'),
       '--quad', QUAD_PATH,
       '--lab', LAB_PATH,
-      '--mode', 'normalized',
       '--output', outputPath,
     ], {
       cwd: resolve('.'),

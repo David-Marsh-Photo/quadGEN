@@ -42,14 +42,6 @@ async function main() {
       // ignore if toggle not present
     }
 
-    const weightingSelect = page.locator('#compositeWeightingSelect');
-    try {
-      await weightingSelect.waitFor({ state: 'visible', timeout: 5000 });
-      await weightingSelect.selectOption('normalized');
-    } catch {
-      // selector may not be present if options modal differs; that's fine
-    }
-
     await page.click('#closeOptionsBtn');
     await page.waitForSelector('#optionsModal', { state: 'hidden', timeout: 5000 });
 

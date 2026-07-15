@@ -11,9 +11,6 @@ import {
   finalizeCompositeLabRedistribution
 } from '../../src/js/core/processing-pipeline.js';
 import {
-  setCompositeWeightingMode
-} from '../../src/js/core/composite-settings.js';
-import {
   setCompositeDebugEnabled,
   getCompositeDebugState
 } from '../../src/js/core/composite-debug.js';
@@ -23,7 +20,6 @@ const LAB_PATH = path.resolve('data/P800_K36C26LK25_V6.txt');
 
 beforeEach(() => {
   setCompositeDebugEnabled(true);
-  setCompositeWeightingMode('normalized');
 });
 
 describe('Composite capacity accounting [solver-overhaul-available-capacity]', () => {
@@ -48,8 +44,7 @@ describe('Composite capacity accounting [solver-overhaul-available-capacity]', (
     const active = beginCompositeLabRedistribution({
       channelNames,
       endValues,
-      labEntry,
-      weightingMode: 'normalized'
+      labEntry
     });
     expect(active).toBe(true);
 

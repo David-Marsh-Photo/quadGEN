@@ -12,7 +12,7 @@ This changelog follows a concise, user-facing format. Engineering details live i
 - _Nothing yet._
 
 ### Fixed
-- _Nothing yet._
+- Density Solver no longer honors obsolete hidden weighting values from browser storage; LAB redistribution always uses the documented normalized path.
 
 ### Docs
 - _Nothing yet._
