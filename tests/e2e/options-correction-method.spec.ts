@@ -5,11 +5,14 @@ import { pathToFileURL } from 'url';
 const INDEX_URL = pathToFileURL(resolve('index.html')).href;
 const STORAGE_KEY = 'quadgen.correctionMethod.v1';
 
-async function contrastRatio(locator: Locator) {
-  return locator.evaluate((element) => {
+async function contrastRatio(locator: Locator, property: 'color' | 'borderColor' = 'color') {
+  return locator.evaluate((element, property) => {
     const parseColor = (value: string) => {
       const channels = value.match(/[\d.]+/g)?.map(Number) ?? [];
-      return { rgb: channels.slice(0, 3), alpha: channels[3] ?? 1 };
+      const rgb = value.startsWith('color(srgb')
+        ? channels.slice(0, 3).map((channel) => channel * 255)
+        : channels.slice(0, 3);
+      return { rgb, alpha: channels[3] ?? 1 };
     };
     const luminance = (rgb: number[]) => rgb
       .map((channel) => channel / 255)
@@ -18,7 +21,7 @@ async function contrastRatio(locator: Locator) {
         : ((channel + 0.055) / 1.055) ** 2.4)
       .reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
 
-    const foreground = parseColor(getComputedStyle(element).color).rgb;
+    const foreground = parseColor(getComputedStyle(element)[property]).rgb;
     let background = [255, 255, 255];
     for (let current: Element | null = element; current; current = current.parentElement) {
       const candidate = parseColor(getComputedStyle(current).backgroundColor);
@@ -31,7 +34,7 @@ async function contrastRatio(locator: Locator) {
     const [lighter, darker] = [luminance(foreground), luminance(background)]
       .sort((a, b) => b - a);
     return (lighter + 0.05) / (darker + 0.05);
-  });
+  }, property);
 }
 
 test.describe('Options correction method', () => {
@@ -76,4 +79,27 @@ test.describe('Options correction method', () => {
     expect(await contrastRatio(title), 'Options title contrast').toBeGreaterThanOrEqual(4.5);
     expect(await contrastRatio(optionLabel), 'Options label contrast').toBeGreaterThanOrEqual(4.5);
   });
+
+  for (const theme of ['light', 'dark'] as const) {
+    test(`keeps Options help controls distinguishable in ${theme} mode`, async ({ page }) => {
+      await page.addInitScript((selectedTheme) => {
+        window.localStorage.setItem('quadgen.theme', selectedTheme);
+      }, theme);
+      await page.goto(INDEX_URL);
+      await page.locator('#optionsBtn').click();
+
+      const helpButton = page.getByRole('button', { name: 'What does the correction method control?' });
+      await expect(helpButton).toBeVisible();
+      expect(await contrastRatio(helpButton), `${theme} help glyph contrast`)
+        .toBeGreaterThanOrEqual(4.5);
+      expect(await contrastRatio(helpButton, 'borderColor'), `${theme} help boundary contrast`)
+        .toBeGreaterThanOrEqual(3);
+
+      await helpButton.hover();
+      expect(await contrastRatio(helpButton), `${theme} hovered help glyph contrast`)
+        .toBeGreaterThanOrEqual(4.5);
+      expect(await contrastRatio(helpButton, 'borderColor'), `${theme} hovered help boundary contrast`)
+        .toBeGreaterThanOrEqual(3);
+    });
+  }
 });
