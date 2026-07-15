@@ -53,7 +53,6 @@ const DEFAULT_FLAGS = {
     cubeEndpointAnchoring: false,
     smartPointDrag: true,
     compositeLabRedistribution: true,
-    compositeHighlightGuard: false,
     labBaselineSmoothing: true,
     redistributionSmoothingWindow: false,
     autoRaiseInkLimitsOnImport: false,
@@ -176,15 +175,6 @@ export function setCompositeLabRedistributionEnabled(enabled) {
     return flagState.compositeLabRedistribution;
 }
 
-export function isCompositeHighlightGuardEnabled() {
-    return !!flagState.compositeHighlightGuard;
-}
-
-export function setCompositeHighlightGuardEnabled(enabled) {
-    flagState.compositeHighlightGuard = !!enabled;
-    return flagState.compositeHighlightGuard;
-}
-
 export function isLabBaselineSmoothingEnabled() {
     return !!flagState.labBaselineSmoothing;
 }
@@ -280,14 +270,6 @@ function installWindowAdapters() {
         window.isCompositeLabRedistributionEnabled = () => isCompositeLabRedistributionEnabled();
     }
 
-    if (typeof window.enableCompositeHighlightGuard !== 'function') {
-        window.enableCompositeHighlightGuard = (enabled = true) => setCompositeHighlightGuardEnabled(enabled);
-    }
-
-    if (typeof window.isCompositeHighlightGuardEnabled !== 'function') {
-        window.isCompositeHighlightGuardEnabled = () => isCompositeHighlightGuardEnabled();
-    }
-
     if (typeof window.enableLabBaselineSmoothing !== 'function') {
         window.enableLabBaselineSmoothing = (enabled = true) => setLabBaselineSmoothingEnabled(enabled);
     }
@@ -345,8 +327,6 @@ registerDebugNamespace('featureFlags', {
     isSmartPointDragEnabled,
     setCompositeLabRedistributionEnabled,
     isCompositeLabRedistributionEnabled,
-    setCompositeHighlightGuardEnabled,
-    isCompositeHighlightGuardEnabled,
     setLabBaselineSmoothingEnabled,
     isLabBaselineSmoothingEnabled,
     setAutoRaiseInkLimitsEnabled,
@@ -380,10 +360,6 @@ export function resetFeatureFlags(overrides = {}) {
         Object.prototype.hasOwnProperty.call(overrides, 'compositeLabRedistribution')
             ? !!overrides.compositeLabRedistribution
             : DEFAULT_FLAGS.compositeLabRedistribution;
-    flagState.compositeHighlightGuard =
-        Object.prototype.hasOwnProperty.call(overrides, 'compositeHighlightGuard')
-            ? !!overrides.compositeHighlightGuard
-            : DEFAULT_FLAGS.compositeHighlightGuard;
     flagState.labBaselineSmoothing =
         Object.prototype.hasOwnProperty.call(overrides, 'labBaselineSmoothing')
             ? !!overrides.labBaselineSmoothing

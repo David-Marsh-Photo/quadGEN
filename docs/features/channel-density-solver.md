@@ -12,7 +12,7 @@ Companion material:
 The composite density solver transforms measured LAB data plus `.quad` channel draws into an ink redistribution that respects:
 - each channel’s demonstrated darkening capacity (coverage ceiling + buffer),
 - sequential ladder handoffs from light inks to dark inks,
-- active feature guards (auto-raise, highlight protection, reserve taper, shadow easing),
+- active guards (auto-raise, reserve taper, shadow easing),
 - normalized, baseline-proportional redistribution without reintroducing “consumable density” behaviour.
 
 This document is the single source of truth for the solver’s inputs, outputs, guard rails, and expected telemetry. Ladder‑specific behaviour is summarised here and detailed in the dedicated ladder spec. The solver runs when operators switch ⚙️ Options → **Correction method** to **Density Solver**; Simple Scaling remains the default pipeline for LAB corrections.
@@ -173,7 +173,6 @@ These constants act as hard ceilings when redistributing LAB corrections: an ink
 - **Measurement noise** – Apply smoothing or hysteresis to `ΔDensity` so small L* fluctuations do not imply phantom density.
 - **Late-arriving channels** – If a channel never dominates, use its highest share interval as a proxy ceiling, but keep weight minimal.
 - **Black anchor** – When the shadow channel (e.g., K) dominates near 100 % input, it legitimately absorbs nearly all remaining density—this is the reference for full black.
-- **Highlight guard toggle** – A legacy safeguard that fell back to live ink shares when a channel’s normalized draw was ≤ 12 % is now optional. Use `enableCompositeHighlightGuard(true|false)` (default `false`) if you need the original guard behaviour for extremely sparse highlight ramps.
 - **Identity guard** – When operators set the LAB smoothing slider to 0 %, the parser skips Gaussian blending so perfectly linear references stay linear (`ΔDensity_target = 0`), making it easy to confirm the redistribution leaves neutral fixtures untouched.
 
 ## Coverage Tracking & Telemetry
@@ -203,6 +202,7 @@ These constants act as hard ceilings when redistributing LAB corrections: an ink
 - Unified `availableCapacity` accounting threaded through redistribution diagnostics.
 - Floating ceilings, reserve-aware headroom, front-reserve release taper, and blend caps for ladder promotions/shadow easing.
 - The hidden persisted weighting modes were removed; all redistribution now uses the normalized ladder/reserve path.
+- The default-off legacy highlight-share fallback was removed; normalized density shares are canonical across the full ramp.
 - Headless composite diagnostics expose capacity, reserve, and blend decisions for focused solver checks.
 
 ### Outstanding items

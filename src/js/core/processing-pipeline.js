@@ -18,7 +18,6 @@ import { getLegacyLinearizationBridge } from '../legacy/linearization-bridge.js'
 import {
     isActiveRangeLinearizationEnabled,
     isCompositeLabRedistributionEnabled,
-    isCompositeHighlightGuardEnabled,
     isCubeEndpointAnchoringEnabled,
     isRedistributionSmoothingWindowEnabled,
     getRedistributionSmoothingWindowConfig,
@@ -2684,7 +2683,6 @@ export function finalizeCompositeLabRedistribution() {
             });
         }
 
-        const highlightGuardEnabled = isCompositeHighlightGuardEnabled();
         const getPreferredShare = (info) => {
             const value = info?.weightingShare;
             if (Number.isFinite(value) && value > DENSITY_EPSILON) {
@@ -2701,12 +2699,8 @@ export function finalizeCompositeLabRedistribution() {
                     ? clamp01(densityShareMap[name])
                     : 0;
                 const fallbackShare = info.share || 0;
-                const useHighlightFallback = highlightGuardEnabled &&
-                    info.normalized <= HIGHLIGHT_DENSITY_NORMALIZED_THRESHOLD;
                 const preferredShare = getPreferredShare(info);
-                if (useHighlightFallback) {
-                    shareWeight = fallbackShare > 0 ? fallbackShare : preferredShare;
-                } else if (shareWeight <= DENSITY_EPSILON) {
+                if (shareWeight <= DENSITY_EPSILON) {
                     shareWeight = preferredShare > DENSITY_EPSILON ? preferredShare : fallbackShare;
                 }
                 shareInputs.set(name, shareWeight);
