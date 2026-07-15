@@ -111,10 +111,7 @@ Maintainers must update/extend the following when changing solver logic:
   - `tests/lab/composite-ladder-release.test.js`  
   - `tests/lab/composite-redistribution-scaling.test.js`
 - Playwright:  
-  - `tests/e2e/composite-normalized-density-ladder.spec.ts`  
-  - `tests/e2e/composite-density-ceiling-monotonic.spec.ts`  
-  - `tests/e2e/channel-density-baked-ceiling.spec.ts`  
-  - `tests/e2e/composite-debug-panel.spec.ts`
+  - `tests/e2e/composite-density-ceiling-monotonic.spec.ts`
 
 Any new guard or toggle must land alongside targeted coverage.
 
@@ -191,7 +188,7 @@ These constants act as hard ceilings when redistributing LAB corrections: an ink
 - The **Compute** button runs the density-constant solver for any channels whose field is blank or zero, writing back the inferred value and tagging `source = 'solver'`.
 - Manual edits while global scale is active refresh scaling baselines so downstream End adjustments remain accurate.
 - Undo/redo and “Revert to measurement” flows capture density input changes alongside curve history; clearing a `.quad` or loading a new measurement resets unspecified fields to blank.
-- Telemetry: `compositeLabSession.densityCoverage.manualSources` and the composite debug panel annotate which channels used manual vs solver constants so QA screenshots capture context.
+- Diagnostics: `getCompositeDensityProfile(inputPercent)` reports the resolved constants and per-channel shares.
 - Automated coverage: Vitest suite `tests/core/composite-density-inputs.test.ts` exercises manual overrides and compute behavior; Playwright spec `tests/e2e/channel-density-auto-compute.spec.ts` verifies the UI flow.
 
 ## Integration Hooks
@@ -203,10 +200,10 @@ These constants act as hard ceilings when redistributing LAB corrections: an ink
 ## Maintenance & Open Work
 
 ### Delivered to date
-- Unified `availableCapacity` telemetry threaded through redistribution and the composite debug panel.
+- Unified `availableCapacity` accounting threaded through redistribution diagnostics.
 - Floating ceilings, reserve-aware headroom, front-reserve release taper, and blend caps for ladder promotions/shadow easing.
 - Weighting modes (Normalized, Equal, Momentum, Isolated) consolidated on the same ladder/reserve infrastructure.
-- Composite debug panel upgraded with capacity/reserve/blend telemetry and stable channel ordering, plus expanded Vitest + Playwright coverage.
+- Headless composite diagnostics expose capacity, reserve, and blend decisions for focused solver checks.
 
 ### Outstanding items
 1. **Guard precedence cleanup** — enforce clamp order `availableCapacity → release taper → momentum → end limit`, delete legacy guard code paths, and assert the precedence via unit tests and updated diagrams.

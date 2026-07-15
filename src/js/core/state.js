@@ -75,7 +75,6 @@ export const elements = {
     chartCursorTooltip: null,
     chartZoomInBtn: null,
     chartZoomOutBtn: null,
-    snapshotFlagOverlay: null,
 
     // File and input controls
     filenameInput: null,
@@ -283,8 +282,6 @@ export const elements = {
     lightBlockingOverlayToggle: null,
     inkLoadOverlayToggle: null,
     inkLoadThresholdInput: null,
-    compositeWeightingSelect: null,
-    compositeDebugToggle: null,
     autoRaiseInkToggle: null,
     redistributionSmoothingToggle: null,
 
@@ -325,7 +322,6 @@ export function initializeElements() {
 
     // Chart elements
     elements.inkChart = document.getElementById('inkChart');
-    elements.snapshotFlagOverlay = document.getElementById('snapshotFlagOverlay');
     elements.chartCursorTooltip = document.getElementById('chartCursorTooltip');
     elements.chartZoomInBtn = document.getElementById('chartZoomInBtn');
     elements.chartZoomOutBtn = document.getElementById('chartZoomOutBtn');
@@ -498,8 +494,6 @@ export function initializeElements() {
     elements.lightBlockingOverlayToggle = document.getElementById('lightBlockingOverlayToggle');
     elements.inkLoadOverlayToggle = document.getElementById('inkLoadOverlayToggle');
     elements.inkLoadThresholdInput = document.getElementById('inkLoadThresholdInput');
-    elements.compositeWeightingSelect = document.getElementById('compositeWeightingSelect');
-    elements.compositeDebugToggle = document.getElementById('compositeDebugToggle');
     elements.autoRaiseInkToggle = document.getElementById('autoRaiseInkToggle');
     elements.redistributionSmoothingToggle = document.getElementById('redistributionSmoothingToggle');
 

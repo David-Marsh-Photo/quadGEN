@@ -50,7 +50,6 @@ import {
 import { normalizeDragOutputToAbsolute } from './drag-utils.js';
 import { updateProcessingDetail, updateAllProcessingDetails } from './processing-status.js';
 import { registerDebugNamespace } from '../utils/debug-registry.js';
-import { subscribeCompositeDebugState, getCompositeDebugState } from '../core/composite-debug.js';
 import {
     computeLightBlockingCurve,
     isLightBlockingOverlayEnabled as coreIsLightBlockingOverlayEnabled,
@@ -106,8 +105,6 @@ const LAB_SPOT_LABEL_TEXT = '#111827';
 const LIGHT_BLOCKING_OVERLAY_COLOR = '#7c3aed';
 const LIGHT_BLOCKING_LABEL_COLOR = '#6d28d9';
 const LIGHT_BLOCKING_REFERENCE_COLOR = '#c084fc';
-const FLAG_MARKER_EMOJI = '🚩';
-const FLAG_MARKER_FALLBACK = '⚑';
 const INK_LOAD_SAFE_COLOR = '#94A3B8';
 const INK_LOAD_OVER_COLOR = '#EF4444';
 const INK_LOAD_LABEL_COLOR = '#1f2937';
@@ -122,7 +119,6 @@ const chartDebugSettings = {
     showInkLoadOverlay: !!initialAppStateSnapshot.showInkLoadOverlay,
     lastInkLoadOverlay: null,
     lastOriginalOverlays: {},
-    flaggedSnapshots: [],
     lastSelectionProbe: null,
     restoreLabSpotMarkerPreference: storedLabSpotMarkerPreference
 };
@@ -472,7 +468,6 @@ if (isBrowser) {
             : null),
         syncLabSpotMarkerToggleAvailability,
         getLastOriginalOverlays: () => ({ ...chartDebugSettings.lastOriginalOverlays }),
-        getFlaggedSnapshots: () => chartDebugSettings.flaggedSnapshots.slice(),
         setLightBlockingOverlayEnabled: setChartLightBlockingOverlayEnabled,
         isLightBlockingOverlayEnabled: isChartLightBlockingOverlayEnabled,
         getLastLightBlockingCurve: () => chartDebugSettings.lastLightBlockingCurve,
@@ -537,212 +532,6 @@ if (isBrowser) {
             }
         });
     }
-}
-
-let compositeDebugSelection = { index: null, percent: null };
-let unsubscribeCompositeDebug = null;
-let flaggedSnapshotIndicators = [];
-let flaggedSnapshotSignature = '';
-
-function cloneFlagForDebug(entry) {
-    if (!entry || typeof entry !== 'object') {
-        return null;
-    }
-    return {
-        index: entry.index,
-        percent: entry.percent,
-        kind: entry.flag?.kind || null,
-        magnitude: entry.flag?.magnitude ?? null,
-        channels: Array.isArray(entry.flag?.channels) ? entry.flag.channels.slice() : []
-    };
-}
-
-function updateFlaggedSnapshotIndicators(state) {
-    const flags = state?.flags && typeof state.flags === 'object' ? state.flags : {};
-    const snapshots = Array.isArray(state?.snapshots) ? state.snapshots : [];
-    const next = [];
-
-    Object.entries(flags).forEach(([key, info]) => {
-        const index = Number.parseInt(key, 10);
-        if (!Number.isInteger(index) || !info || typeof info !== 'object') {
-            return;
-        }
-        const snapshot = snapshots[index] && snapshots[index]?.index === index
-            ? snapshots[index]
-            : snapshots.find((entry) => entry && entry.index === index) || null;
-        const percent = Number.isFinite(info.inputPercent)
-            ? info.inputPercent
-            : (snapshot && Number.isFinite(snapshot.inputPercent) ? snapshot.inputPercent : null);
-        if (!Number.isFinite(percent)) {
-            return;
-        }
-        const flag = {
-            kind: info.kind === 'drop' ? 'drop' : 'rise',
-            magnitude: Number.isFinite(info.magnitude) ? info.magnitude : null,
-            channels: Array.isArray(info.channels) ? info.channels.slice() : [],
-            details: Array.isArray(info.details) ? info.details.map((detail) => ({ ...detail })) : []
-        };
-        next.push({ index, percent, flag });
-    });
-
-    next.sort((a, b) => a.index - b.index);
-    const signature = JSON.stringify(next.map((entry) => ({
-        i: entry.index,
-        p: Math.round(entry.percent * 1000) / 1000,
-        k: entry.flag.kind,
-        m: entry.flag.magnitude != null ? Math.round(entry.flag.magnitude * 1000) / 1000 : null,
-        c: entry.flag.channels
-    })));
-    const changed = signature !== flaggedSnapshotSignature;
-    if (changed) {
-        flaggedSnapshotIndicators = next;
-        flaggedSnapshotSignature = signature;
-        chartDebugSettings.flaggedSnapshots = next.map(cloneFlagForDebug).filter(Boolean);
-        if (isBrowser && globalScope.__quadDebug?.chartDebug) {
-            globalScope.__quadDebug.chartDebug.flaggedSnapshots = chartDebugSettings.flaggedSnapshots;
-        }
-    }
-    if (!next.length && chartDebugSettings.flaggedSnapshots.length) {
-        chartDebugSettings.flaggedSnapshots = [];
-        if (isBrowser && globalScope.__quadDebug?.chartDebug) {
-            globalScope.__quadDebug.chartDebug.flaggedSnapshots = [];
-        }
-    }
-    return changed;
-}
-
-function setCompositeDebugSelectionState(state) {
-    const nextPercent = Number.isFinite(state?.selection?.percent) ? state.selection.percent : null;
-    const nextIndex = Number.isInteger(state?.selection?.index) ? state.selection.index : null;
-    const changed = compositeDebugSelection.percent !== nextPercent || compositeDebugSelection.index !== nextIndex;
-    compositeDebugSelection = { index: nextIndex, percent: nextPercent };
-    const flagsChanged = updateFlaggedSnapshotIndicators(state);
-    return changed || flagsChanged;
-}
-
-function initializeCompositeDebugChartSubscription() {
-    if (!isBrowser) {
-        return;
-    }
-    if (unsubscribeCompositeDebug) {
-        return;
-    }
-    setCompositeDebugSelectionState(getCompositeDebugState());
-    unsubscribeCompositeDebug = subscribeCompositeDebugState((nextState) => {
-        if (setCompositeDebugSelectionState(nextState)) {
-            try {
-                updateInkChart();
-            } catch (error) {
-                console.warn('[CHART] composite debug refresh failed:', error);
-            }
-        }
-    });
-}
-
-function getCompositeDebugMarkerPercent() {
-    return Number.isFinite(compositeDebugSelection.percent) ? compositeDebugSelection.percent : null;
-}
-
-function drawFlaggedSnapshotMarkers(ctx, geom, fontScale) {
-    if (!Array.isArray(flaggedSnapshotIndicators) || !flaggedSnapshotIndicators.length) {
-        return;
-    }
-    ctx.save();
-    const fontSize = Math.max(12, Math.round(14 * Math.max(1, fontScale)));
-    ctx.font = `${fontSize}px "Segoe UI Emoji","Apple Color Emoji","Noto Color Emoji","Twemoji Mozilla",sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
-    ctx.fillStyle = '#ef4444';
-    const markerY = Math.max(Number(geom?.padding) || 0, 0) + fontSize + 4;
-    flaggedSnapshotIndicators.forEach((entry) => {
-        const percent = Math.max(0, Math.min(100, Number(entry?.percent) || 0));
-        const x = mapPercentToX(percent, geom);
-        ctx.fillText(FLAG_MARKER_EMOJI, x, markerY);
-    });
-    ctx.restore();
-}
-
-function formatFlagTooltip(flag, percent, index) {
-    const lines = [];
-    if (Number.isInteger(index)) {
-        lines.push(`Snapshot #${index}`);
-    }
-    if (Number.isFinite(percent)) {
-        lines.push(`Input ${percent.toFixed(1)}%`);
-    }
-    if (flag && Array.isArray(flag.channels) && flag.channels.length) {
-        if (Array.isArray(flag.details) && flag.details.length) {
-            const detailParts = flag.details
-                .map((detail) => {
-                    if (!detail || typeof detail.channel !== 'string' || !detail.channel) {
-                        return null;
-                    }
-                    if (Number.isFinite(detail.delta)) {
-                        const deltaValue = Math.abs(detail.delta).toFixed(1);
-                        const sign = detail.delta >= 0 ? '+' : '−';
-                        return `${detail.channel}: ${sign}${deltaValue}%`;
-                    }
-                    if (Number.isFinite(detail.magnitude)) {
-                        const deltaValue = Math.abs(detail.magnitude).toFixed(1);
-                        const sign = detail.direction === 'drop' ? '−' : '+';
-                        return `${detail.channel}: ${sign}${deltaValue}%`;
-                    }
-                    return detail.channel;
-                })
-                .filter(Boolean);
-            if (detailParts.length) {
-                lines.push(`Channels: ${detailParts.join(', ')}`);
-            } else {
-                lines.push(`Channels: ${flag.channels.join(', ')}`);
-            }
-        } else {
-            lines.push(`Channels: ${flag.channels.join(', ')}`);
-        }
-    }
-    if (flag && Number.isFinite(flag.threshold)) {
-        lines.push(`Threshold ≥ ${flag.threshold.toFixed(1)}%`);
-    }
-    return lines.join('\n');
-}
-
-function updateSnapshotFlagOverlay(geom, deviceScale = 1) {
-    const overlay = elements.snapshotFlagOverlay;
-    const canvas = elements.inkChart;
-    if (!overlay || !canvas) {
-        return;
-    }
-    overlay.innerHTML = '';
-    if (!Array.isArray(flaggedSnapshotIndicators) || !flaggedSnapshotIndicators.length) {
-        overlay.classList.add('hidden');
-        return;
-    }
-    overlay.classList.remove('hidden');
-    const width = canvas.width || 1;
-    const height = canvas.height || 1;
-    const markerYOffset = Math.max(Number(geom?.padding) || 0, 0) + Math.max(12, 14 * Math.max(1, deviceScale)) + 4;
-    flaggedSnapshotIndicators.forEach((entry) => {
-        const marker = document.createElement('span');
-        marker.textContent = FLAG_MARKER_EMOJI;
-        marker.className = 'absolute pointer-events-auto select-none text-base font-semibold drop-shadow-sm';
-        marker.style.color = '#ef4444';
-        marker.style.cursor = 'help';
-        marker.dataset.flaggedSnapshot = String(entry.index);
-        marker.dataset.flagKind = entry.flag?.kind || 'rise';
-        const percent = Math.max(0, Math.min(100, Number(entry?.percent) || 0));
-        const x = mapPercentToX(percent, geom);
-        const top = markerYOffset;
-        marker.style.left = `${(x / width) * 100}%`;
-        marker.style.top = `${(top / height) * 100}%`;
-        marker.style.transform = 'translate(-50%, -60%)';
-        const tooltip = formatFlagTooltip(entry.flag, percent, entry.index);
-        if (tooltip) {
-            marker.title = tooltip;
-            marker.setAttribute('aria-label', tooltip.replace(/\n/g, ', '));
-        } else {
-            marker.setAttribute('aria-hidden', 'true');
-        }
-        overlay.appendChild(marker);
-    });
 }
 
 const smartDragState = {
@@ -1578,26 +1367,6 @@ export function updateInkChart() {
         }
     }
 
-    drawFlaggedSnapshotMarkers(ctx, geom, fontScale);
-    updateSnapshotFlagOverlay(geom, deviceScale);
-
-    const debugMarkerPercent = getCompositeDebugMarkerPercent();
-    if (debugMarkerPercent != null) {
-        const clamped = Math.max(0, Math.min(100, debugMarkerPercent));
-        const markerX = mapPercentToX(clamped, geom);
-        const top = geom.padding;
-        const bottom = geom.height - (geom.bottomPadding || geom.padding);
-        ctx.save();
-        ctx.strokeStyle = '#16a34a';
-        ctx.lineWidth = 2;
-        ctx.setLineDash([4, 4]);
-        ctx.beginPath();
-        ctx.moveTo(markerX, top);
-        ctx.lineTo(markerX, bottom);
-        ctx.stroke();
-        ctx.restore();
-    }
-
     // Setup chart cursor tooltip interaction
     setupChartCursorTooltip(geom);
 
@@ -1617,8 +1386,6 @@ export function initializeChart() {
     console.log('📊 Initializing chart system...');
 
     configureChartScalingStateSubscription();
-    initializeCompositeDebugChartSubscription();
-
     if (elements.inkChart) {
         const wrapper = getChartWrapper();
         if (wrapper) {

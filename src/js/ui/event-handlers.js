@@ -50,7 +50,7 @@ import {
 import { showStatus } from './status-service.js';
 import { initializeHelpSystem } from './help-system.js';
 import { setPrinter, registerChannelRowSetup, syncPrinterForQuadData } from './printer-manager.js';
-import { make256, beginCompositeLabRedistribution, finalizeCompositeLabRedistribution, replayCompositeDebugSessionFromCache, getCompositeCoverageSummary } from '../core/processing-pipeline.js';
+import { make256, beginCompositeLabRedistribution, finalizeCompositeLabRedistribution, getCompositeCoverageSummary } from '../core/processing-pipeline.js';
 import {
     getLabNormalizationMode,
     setLabNormalizationMode,
@@ -65,13 +65,6 @@ import {
 import { rebuildLabSamplesFromOriginal } from '../data/lab-parser.js';
 import { isLabLinearizationData } from '../data/lab-legacy-bypass.js';
 import { isSmartPointDragEnabled, setSmartPointDragEnabled, isRedistributionSmoothingWindowEnabled, setRedistributionSmoothingWindowEnabled, isAutoRaiseInkLimitsEnabled, setAutoRaiseInkLimitsEnabled } from '../core/feature-flags.js';
-import {
-    setCompositeWeightingMode,
-    getCompositeWeightingMode,
-    subscribeCompositeWeightingMode,
-    COMPOSITE_WEIGHTING_MODES
-} from '../core/composite-settings.js';
-import { setCompositeDebugEnabled, isCompositeDebugEnabled, subscribeCompositeDebugState } from '../core/composite-debug.js';
 import {
     setManualChannelDensity,
    setSolverChannelDensity,
@@ -195,8 +188,6 @@ function isBakedMeasurement(entry) {
 let unsubscribeScalingStateInput = null;
 let unsubscribeLabNormalizationMode = null;
 let unsubscribeLabSmoothingPercent = null;
-let unsubscribeCompositeDebugState = null;
-let unsubscribeCompositeWeightingMode = null;
 let unsubscribeChannelDensityStore = null;
 let unsubscribeCorrectionMethod = null;
 let scalingStateFlagListenerAttached = false;
@@ -1189,31 +1180,6 @@ const schedulePlotSmoothingRefresh = debounce(() => {
     applyPlotSmoothingToLoadedChannels(getPlotSmoothingPercent());
 }, 250);
 
-const scheduleCompositeWeightingRefresh = debounce(() => {
-    try {
-        if (!LinearizationState?.isGlobalEnabled?.()) {
-            return;
-        }
-        const globalData = LinearizationState.getGlobalData?.();
-        if (!globalData || !isLabLinearizationData(globalData)) {
-            return;
-        }
-        const printer = getCurrentPrinter();
-        const channelNames = Array.isArray(printer?.channels) ? printer.channels.slice() : [];
-        if (!channelNames.length) {
-            return;
-        }
-        rebaseChannelsToCorrectedCurves(channelNames, {
-            source: 'compositeWeightingChange',
-            useOriginalBaseline: true
-        });
-    } catch (error) {
-        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-            console.warn('[CompositeWeighting] Failed to refresh after weighting change:', error);
-        }
-    }
-}, 200);
-
 function resetPlotSmoothingCaches() {
     const loadedData = getLoadedQuadData?.();
     if (!loadedData) {
@@ -2100,42 +2066,6 @@ function initializeInkLoadThresholdOption() {
     });
 }
 
-function syncCompositeDebugToggle() {
-    if (!elements.compositeDebugToggle) {
-        return;
-    }
-    const enabled = isCompositeDebugEnabled();
-    elements.compositeDebugToggle.checked = enabled;
-    elements.compositeDebugToggle.setAttribute('aria-checked', String(enabled));
-}
-
-function initializeCompositeDebugOption() {
-    syncCompositeDebugToggle();
-    if (!elements.compositeDebugToggle) {
-        return;
-    }
-    if (unsubscribeCompositeDebugState) {
-        unsubscribeCompositeDebugState();
-        unsubscribeCompositeDebugState = null;
-    }
-    unsubscribeCompositeDebugState = subscribeCompositeDebugState(() => {
-        syncCompositeDebugToggle();
-    });
-    elements.compositeDebugToggle.addEventListener('change', (event) => {
-        const next = !!event.target.checked;
-        setCompositeDebugEnabled(next);
-        syncCompositeDebugToggle();
-        if (next) {
-            try {
-                replayCompositeDebugSessionFromCache();
-            } catch (error) {
-                console.warn('[CompositeDebug] Failed to replay cached session:', error);
-            }
-        }
-        showStatus(next ? 'Composite debug overlay enabled.' : 'Composite debug overlay disabled.');
-    });
-}
-
 function syncRedistributionSmoothingToggle() {
     if (!elements.redistributionSmoothingToggle) {
         return;
@@ -2177,48 +2107,6 @@ function initializeAutoRaiseInkOption() {
         setAutoRaiseInkLimitsEnabled(next);
         syncAutoRaiseInkToggle();
         showStatus(next ? 'Auto-raise ink limits enabled.' : 'Auto-raise ink limits disabled.');
-    });
-}
-
-function syncCompositeWeightingSelect() {
-    if (!elements.compositeWeightingSelect) {
-        return;
-    }
-    const mode = getCompositeWeightingMode();
-    elements.compositeWeightingSelect.value = mode;
-}
-
-function initializeCompositeWeightingOption() {
-    syncCompositeWeightingSelect();
-    if (!elements.compositeWeightingSelect) {
-        return;
-    }
-    if (unsubscribeCompositeWeightingMode) {
-        unsubscribeCompositeWeightingMode();
-        unsubscribeCompositeWeightingMode = null;
-    }
-    unsubscribeCompositeWeightingMode = subscribeCompositeWeightingMode(() => {
-        syncCompositeWeightingSelect();
-        resetPlotSmoothingCaches();
-        schedulePlotSmoothingRefresh();
-        scheduleCompositeWeightingRefresh();
-    });
-
-    elements.compositeWeightingSelect.addEventListener('change', (event) => {
-        const selection = typeof event.target?.value === 'string' ? event.target.value : '';
-        const applied = setCompositeWeightingMode(selection);
-        syncCompositeWeightingSelect();
-        resetPlotSmoothingCaches();
-        schedulePlotSmoothingRefresh();
-        scheduleCompositeWeightingRefresh();
-        const labelMap = {
-            [COMPOSITE_WEIGHTING_MODES.ISOLATED]: 'Isolated',
-            [COMPOSITE_WEIGHTING_MODES.NORMALIZED]: 'Normalized',
-            [COMPOSITE_WEIGHTING_MODES.MOMENTUM]: 'Momentum',
-            [COMPOSITE_WEIGHTING_MODES.EQUAL]: 'Equal'
-        };
-        const label = labelMap[applied] || 'Isolated';
-        showStatus(`Composite weighting set to ${label}.`);
     });
 }
 
@@ -2361,10 +2249,8 @@ export function initializeEventHandlers() {
     initializeLightBlockingOverlayOption();
     initializeInkLoadOverlayOption();
     initializeInkLoadThresholdOption();
-    initializeCompositeWeightingOption();
     initializeRedistributionSmoothingOption();
     initializeAutoRaiseInkOption();
-    initializeCompositeDebugOption();
 
     console.log('✅ UI event handlers initialized');
 }
