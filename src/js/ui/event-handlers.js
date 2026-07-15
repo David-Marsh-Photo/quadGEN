@@ -50,7 +50,7 @@ import {
 import { showStatus } from './status-service.js';
 import { initializeHelpSystem } from './help-system.js';
 import { setPrinter, registerChannelRowSetup, syncPrinterForQuadData } from './printer-manager.js';
-import { make256, invalidateMake256Cache, beginCompositeLabRedistribution, finalizeCompositeLabRedistribution, replayCompositeDebugSessionFromCache, getCompositeCoverageSummary } from '../core/processing-pipeline.js';
+import { make256, beginCompositeLabRedistribution, finalizeCompositeLabRedistribution, replayCompositeDebugSessionFromCache, getCompositeCoverageSummary } from '../core/processing-pipeline.js';
 import {
     getLabNormalizationMode,
     setLabNormalizationMode,
@@ -1167,15 +1167,6 @@ function applyPlotSmoothingToLoadedChannels(percent) {
             if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
                 console.warn('[PlotSmoothing] Failed to validate zero-smoothing snapshot during reset:', zeroErr);
             }
-        }
-    }
-    try {
-        if (typeof invalidateMake256Cache === 'function') {
-            invalidateMake256Cache();
-        }
-    } catch (cacheErr) {
-        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-            console.warn('[PlotSmoothing] Failed to invalidate make256 cache:', cacheErr);
         }
     }
     try { updateInkChart(); } catch (error) { console.warn(error); }

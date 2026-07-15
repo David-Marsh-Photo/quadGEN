@@ -1071,16 +1071,6 @@ export function resetAppState() {
         // Silently ignore if not available
     }
 
-    // Invalidate curve cache (if available)
-    try {
-        const globalScope = typeof globalThis !== 'undefined' ? globalThis : {};
-        if (typeof globalScope.invalidateMake256Cache === 'function') {
-            globalScope.invalidateMake256Cache();
-        }
-    } catch (err) {
-        // Silently ignore if not available
-    }
-
     // Clear history (if available)
     try {
         const globalScope = typeof globalThis !== 'undefined' ? globalThis : {};

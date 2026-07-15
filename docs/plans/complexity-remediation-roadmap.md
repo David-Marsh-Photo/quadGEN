@@ -74,7 +74,7 @@ Result (2026-07-14): `test:e2e` now runs the full retained Playwright suite and 
 
 ## Checkpoint 3 — Canonical Production Paths
 
-Status: next
+Status: active
 
 Work:
 
@@ -88,6 +88,8 @@ Exit check:
 - no migration flag without a concrete removal criterion
 - behavior and export contracts remain green
 - net production and test LOC do not increase
+
+Slice 3A result (2026-07-14): complete. The `make256` memoization cache and its invalidation bridge were removed after an uncached LAB benchmark measured 1.74 ms for the real three-channel workload and 2.09 ms for a synthetic ten-channel pass. The cache-free bundle measured 0.90 ms and 2.38 ms respectively, kept deterministic output, and removed 61 net production lines plus two test lines. Focused tests (19/19), Vitest (334/334), smoke (1/1), focused E2E (3/3), full E2E (108/108), and the production build passed. Slice 3B will assess dormant composite modes and debug capture without changing the supported solver behavior.
 
 ## Checkpoint 4 — Workspace Hygiene and Review
 

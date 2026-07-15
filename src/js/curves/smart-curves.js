@@ -7,7 +7,7 @@ import { getLoadedQuadData, ensureLoadedQuadData, TOTAL, elements, getPlotSmooth
 import { LinearizationState, markLinearizationEdited } from '../data/linearization-utils.js';
 import { InputValidator } from '../core/validation.js';
 import { triggerInkChartUpdate, triggerProcessingDetail, triggerRevertButtonsUpdate, triggerPreviewUpdate } from '../ui/ui-hooks.js';
-import { make256, invalidateMake256Cache } from '../core/processing-pipeline.js';
+import { make256 } from '../core/processing-pipeline.js';
 import { isChannelNormalizedToEnd } from '../core/state.js';
 import { isActiveRangeLinearizationEnabled } from '../core/feature-flags.js';
 import { isEditModeEnabled } from '../ui/edit-mode.js';
@@ -1141,9 +1141,6 @@ export function adjustSmartKeyPointByIndex(channelName, ordinal, params = {}) {
         });
     }
 
-    // Invalidate make256 cache to ensure next render reflects changes
-    invalidateMake256Cache();
-
     const resultPayload = {
         success: true,
         message: `Adjusted key point ${ordinal} for ${channelName}`,
@@ -1786,9 +1783,6 @@ function applySmartKeyPointsInternal(channelName, keyPoints, interpolationType =
             console.warn('[SMART CURVES] UI refresh failed:', err);
         }
     }
-
-    // Invalidate make256 cache since smart curve changed
-    globalScope.invalidateMake256Cache?.();
 
     return {
         success: true,

@@ -5891,31 +5891,6 @@ export function applyAutoEndpointAdjustments(values, endValue, channelName, smar
     });
 }
 
-// Memoization cache for make256 to avoid redundant curve generation
-const make256Cache = new Map();
-let make256CacheVersion = 0;
-
-/**
- * Invalidate the make256 cache - call when any state affecting curves changes:
- * - LAB data loaded/cleared
- * - Smart curve edited
- * - Feature flag changed
- * - End values changed
- */
-export function invalidateMake256Cache() {
-    make256Cache.clear();
-    make256CacheVersion += 1;
-}
-
-function getMake256CacheKey(endValue, channelName, applyLinearization, options) {
-    // Include version to auto-invalidate on state changes
-    const smoothing = options?.smoothingPercent ?? 0;
-    const forceSmartApplied = options?.forceSmartApplied ?? null;
-    const smartState = isSmartCurve(channelName) ? 'smart' : 'linear';
-    const correctionGain = getCorrectionGain();
-    return `v${make256CacheVersion}:${channelName}:${endValue}:${applyLinearization}:${smoothing}:${forceSmartApplied}:${smartState}:${correctionGain}`;
-}
-
 /**
  * Main curve generation function - make256
  * Generates a 256-point curve for a channel with all corrections applied
@@ -5928,13 +5903,6 @@ export function make256(endValue, channelName, applyLinearization = false, optio
     try {
         if (endValue === 0) {
             return new Array(CURVE_RESOLUTION).fill(0);
-        }
-
-        // Check cache first
-        const cacheKey = getMake256CacheKey(endValue, channelName, applyLinearization, options);
-        const cached = compositeLabSession.active ? null : make256Cache.get(cacheKey);
-        if (cached) {
-            return cached.slice(); // Return copy to prevent mutation
         }
 
         const debugEnabled = typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS;
@@ -6096,9 +6064,6 @@ export function make256(endValue, channelName, applyLinearization = false, optio
                 }
             }
         }
-
-        // Store in cache before returning
-        make256Cache.set(cacheKey, arr.slice()); // Store copy
 
         return arr;
 
@@ -6770,7 +6735,6 @@ export function buildFile() {
  */
 registerDebugNamespace('processingPipeline', {
     make256,
-    invalidateMake256Cache,
     apply1DLUT,
     apply1DLUTFixedDomain,
     apply1DLUTActiveRange,
@@ -6789,5 +6753,5 @@ registerDebugNamespace('processingPipeline', {
     isLegacyLUTMappingEnabled
 }, {
     exposeOnWindow: typeof window !== 'undefined',
-    windowAliases: ['make256', 'invalidateMake256Cache', 'apply1DLUT', 'buildFile', 'buildBaseCurve']
+    windowAliases: ['make256', 'apply1DLUT', 'buildFile', 'buildBaseCurve']
 });

@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import {
   applyGlobalLinearizationStep,
-  invalidateMake256Cache,
   make256
 } from '../../src/js/core/processing-pipeline.js';
 import { LinearizationState } from '../../src/js/data/linearization-utils.js';
@@ -35,7 +34,6 @@ describe('applyGlobalLinearizationStep with correction gain', () => {
       K: BASE_VALUES.slice()
     });
     setCorrectionGain(1, { persist: false });
-    invalidateMake256Cache();
   });
 
   it('returns fully corrected values when gain is 100%', () => {
