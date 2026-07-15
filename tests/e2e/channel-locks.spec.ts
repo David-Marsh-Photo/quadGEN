@@ -207,7 +207,7 @@ test.describe('Channel lock controls', () => {
 
         const coordinatorResult = await page.evaluate(async () => {
             try {
-                await window.scalingCoordinator.scale(120, 'test-lock-check', { priority: 'high' });
+                await window.scalingCoordinator.scale(120);
                 return { success: true };
             } catch (error) {
                 return { success: false, message: error?.message || String(error) };

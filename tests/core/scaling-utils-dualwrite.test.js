@@ -147,10 +147,6 @@ async function loadScalingUtils() {
     rescaleSmartCurveForInkLimit: vi.fn(),
   }));
 
-  vi.doMock('../../src/js/core/scaling-coordinator.js', () => ({
-    default: { scale: vi.fn() },
-  }));
-
   const module = await import('../../src/js/core/scaling-utils.js');
 
   return {

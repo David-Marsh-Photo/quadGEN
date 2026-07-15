@@ -8,14 +8,10 @@ import { getStateManager } from './state-manager.js';
 import { getHistoryManager } from './history-manager.js';
 import { InputValidator } from './validation.js';
 import { formatScalePercent } from '../ui/ui-utils.js';
-import { setChartStatusMessage } from '../ui/chart-manager.js';
-import { triggerInkChartUpdate, triggerPreviewUpdate, triggerSessionStatusUpdate } from '../ui/ui-hooks.js';
-import { showStatus } from '../ui/status-service.js';
 import { registerDebugNamespace } from '../utils/debug-registry.js';
 import { getChannelRow } from '../ui/channel-registry.js';
 import { rescaleSmartCurveForInkLimit } from '../curves/smart-curves.js';
 import { isChannelLocked, updateChannelLockBounds, getChannelLockInfo, getLockedChannels, getGlobalScaleLockMessage } from './channel-locks.js';
-import scalingCoordinator from './scaling-coordinator.js';
 import { SCALING_STATE_FLAG_EVENT, SCALING_STATE_AUDIT_EVENT } from './scaling-constants.js';
 
 export { SCALING_STATE_FLAG_EVENT, SCALING_STATE_AUDIT_EVENT } from './scaling-constants.js';
@@ -898,74 +894,6 @@ export function scaleChannelEndsByPercent(percent, options = {}) {
 }
 
 /**
- * Apply global scale with validation and UI updates
- * @param {number} rawPercent - Raw percentage input
- */
-export function applyGlobalScale(rawPercent) {
-    console.log(`🔍 [APPLY DEBUG] applyGlobalScale called:`, {
-        rawPercent,
-        timestamp: Date.now(),
-        callStack: new Error().stack.split('\n').slice(1, 4)
-    });
-
-    const MIN_SCALE = 1;
-    const MAX_SCALE = 1000;
-
-    if (!elements.scaleAllInput) {
-        console.log(`🔍 [APPLY DEBUG] No scaleAllInput element found`);
-        return;
-    }
-
-    let parsed = parseFloat(rawPercent);
-    console.log(`🔍 [APPLY DEBUG] Parsed value:`, { rawPercent, parsed });
-
-    if (!Number.isFinite(parsed)) {
-        console.warn('🔍 [APPLY DEBUG] Invalid scale value:', rawPercent);
-        elements.scaleAllInput.value = formatScalePercent(scaleAllPercent);
-        return;
-    }
-
-    const beforeClamp = parsed;
-    parsed = Math.max(MIN_SCALE, Math.min(MAX_SCALE, parsed));
-    console.log(`🔍 [APPLY DEBUG] After clamping:`, { beforeClamp, afterClamp: parsed });
-
-    console.log(`🔍 [APPLY DEBUG] Calling scaleChannelEndsByPercent(${parsed})`);
-    const result = scaleChannelEndsByPercent(parsed);
-    console.log(`🔍 [APPLY DEBUG] scaleChannelEndsByPercent result:`, result);
-
-    if (!result.success) {
-        elements.scaleAllInput.value = formatScalePercent(scaleAllPercent);
-        console.error('Scaling failed:', result.message);
-        showStatus(result.message || 'Unable to scale channel ends');
-        return;
-    }
-
-    const applied = result.details?.scalePercent ?? parsed;
-    scaleAllPercent = applied;
-    elements.scaleAllInput.value = formatScalePercent(scaleAllPercent);
-
-    if (result.message) {
-        showStatus(result.message);
-    }
-
-    // Show "Preview updated" message on the chart canvas (like quadgen.html)
-    setChartStatusMessage('Preview updated', 2000);
-
-    // Trigger chart update if available
-    triggerInkChartUpdate();
-
-    // Trigger preview update to show status messages
-    console.log('📊 Calling updatePreview after scaling');
-    triggerPreviewUpdate();
-
-    // Update session status after scaling
-    console.log('📊 Calling updateSessionStatus after scaling');
-    triggerSessionStatusUpdate();
-
-    console.log(`✅ Global scale applied: ${formatScalePercent(applied)}%`);
-}
-
-/**
  * Reset global scaling to 100%
  */
 export function resetGlobalScale() {
@@ -1022,38 +950,12 @@ export function reapplyCurrentGlobalScale(options = {}) {
     });
 }
 
-function queueCoordinatorScale(rawPercent, requestedBy, options = {}) {
-    const opts = (options && typeof options === 'object') ? options : {};
-    const { priority: requestedPriority, ...optionMetadata } = opts;
-    const priority = typeof requestedPriority === 'string' ? requestedPriority : 'normal';
-
-    return scalingCoordinator.scale(rawPercent, 'compat-window', {
-        priority,
-        metadata: {
-            requestedBy,
-            bridge: 'scaling-utils-window',
-            options: optionMetadata
-        }
-    });
-}
-
-function applyGlobalScaleBridge(rawPercent, options) {
-    return queueCoordinatorScale(rawPercent, 'window.applyGlobalScale', options);
-}
-
-function scaleChannelEndsByPercentBridge(rawPercent, options) {
-    return queueCoordinatorScale(rawPercent, 'window.scaleChannelEndsByPercent', options);
-}
-
 registerDebugNamespace('scalingUtils', {
-    applyGlobalScale: applyGlobalScaleBridge,
-    scaleChannelEndsByPercent: scaleChannelEndsByPercentBridge,
+    scaleChannelEndsByPercent,
     reapplyCurrentGlobalScale,
     updateScaleBaselineForChannel,
     resetGlobalScale,
     getCurrentScale,
-    legacyApplyGlobalScale: applyGlobalScale,
-    legacyScaleChannelEndsByPercent: scaleChannelEndsByPercent,
     setScalingStateEnabled,
     validateScalingStateSync,
     getScalingStateAudit,
@@ -1064,14 +966,10 @@ registerDebugNamespace('scalingUtils', {
 }, {
     exposeOnWindow: typeof window !== 'undefined',
     windowAliases: [
-        'applyGlobalScale',
-        'scaleChannelEndsByPercent',
         'reapplyCurrentGlobalScale',
         'updateScaleBaselineForChannel',
         'resetGlobalScale',
         'getCurrentScale',
-        'legacyApplyGlobalScale',
-        'legacyScaleChannelEndsByPercent',
         'setScalingStateEnabled',
         'validateScalingStateSync',
         'getScalingStateAudit',

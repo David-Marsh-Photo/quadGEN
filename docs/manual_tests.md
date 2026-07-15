@@ -440,6 +440,7 @@ Phase 0 Track 4 regression guards now cover the following flows via Playwrig
 
 - `tests/e2e/global-scale-baseline-drift.spec.ts` – edits under non-100 % scale return to baseline without drifting cached ends.
 - `tests/e2e/global-scale-rapid-undo.spec.ts` – rapid slider scrub (100 %→50 %→100 %) retains history entries and undoes cleanly.
+- `tests/e2e/global-scale-ui.spec.ts` – the Scale field commits through the canonical path and per-channel edits retain the active multiplier.
 - `tests/e2e/edit-mode-scale.spec.ts` – confirms Smart points remain aligned when global correction is rescaled.
 - `tests/e2e/global-scale-measurement-revert.spec.ts` – verifies measurement loads survive revert + rescale cycles without baseline cache contamination.
 
@@ -447,14 +448,6 @@ Phase 0 – Foundation tags in the regression matrix:
 - **Baseline cache** coverage — recorded against the three Vitest scenarios in `tests/core/scaling-utils-baseline.test.js`.
 - **Smart rescaling** coverage — mapped to the audit-mode assisted Playwright scenarios above.
 - **Undo/Revert** coverage — tied to `global-scale-rapid-undo.spec.ts` and `global-scale-measurement-revert.spec.ts`.
-
-### Coordinator Parity Checks *(Phase 1)*
-- `scripts/diagnostics/compare-coordinator-legacy.js` compares legacy vs. feature-flagged coordinator scaling across randomized command streams (default 10 runs × 200 steps; optional extended run of 10 × 1000 for deeper coverage). Artifacts drop under `artifacts/scaling-coordinator-parity/` with per-seed snapshots and a top-level `summary.json`. Use this before widening the coordinator rollout or after significant scaling logic changes.
-- `scripts/diagnostics/compare-coordinator-smart.js` validates coordinator behaviour against legacy while a Smart curve is active (`P700-P900_MK50.quad`, Edit Mode ON). Artifacts land in `artifacts/scaling-coordinator-smart/`.
-- `scripts/diagnostics/compare-coordinator-lab.js` loads `cgats17_21step_lab.txt`, applies the measurement globally, and drives a five-step sequence (90→110→70→125→95) to confirm parity under LAB corrections. Results are stored in `artifacts/scaling-coordinator-lab/`.
-- `scripts/diagnostics/compare-coordinator-ai.js` invokes `scale_channel_ends_by_percent` via the Lab Tech interface (90→110→70→95) and verifies coordinator parity; artifacts live under `artifacts/scaling-coordinator-ai/`.
-
-Manual spot checks are only required if one of these specs fails or a new scenario is introduced.
 
 ## Scaling State – Manual Acceptance (Single Operator)
 Use this quick pass whenever the scaling-state flag defaults to ON or after making related changes. It complements the automated harness by confirming the UI, history, and telemetry behave as expected in a real session.

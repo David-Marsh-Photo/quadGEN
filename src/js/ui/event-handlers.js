@@ -2221,10 +2221,6 @@ function initializeCorrectionMethodOption() {
 export function initializeEventHandlers() {
     console.log('🎛️ Initializing UI event handlers...');
 
-    if (typeof window !== 'undefined') {
-        scalingCoordinator.setEnabled(!!window.__USE_SCALING_COORDINATOR);
-    }
-
     // Core UI handlers
     initializeUndoRedoHandlers();
     initializeDownloadHandlers();
@@ -2528,29 +2524,29 @@ function initializeScaleHandlers() {
         elements.scaleAllInput.value = parsed.toString();
         console.log(`🔍 [SCALE DEBUG] Input value updated to:`, parsed.toString());
 
-        const handleCoordinatorError = (error) => {
-            console.error('Scaling coordinator error:', error);
+        const handleScaleError = (error) => {
+            console.error('Global scaling error:', error);
             if (elements.scaleAllInput) {
                 elements.scaleAllInput.value = formatScalePercent(getCurrentScale());
             }
         };
 
         if (immediate) {
-            console.log(`🔍 [SCALE DEBUG] Executing immediate scaling via coordinator (${parsed})`);
+            console.log(`🔍 [SCALE DEBUG] Executing immediate scaling (${parsed})`);
             scalingCoordinator
-                .scale(parsed, 'ui', { priority: 'high', metadata: { trigger: 'commitScaleAllImmediate' } })
+                .scale(parsed)
                 .then(() => refreshEffectiveInkDisplays())
-                .catch(handleCoordinatorError);
+                .catch(handleScaleError);
         } else {
-            console.log(`🔍 [SCALE DEBUG] Setting up debounced coordinator scaling for:`, parsed);
+            console.log(`🔍 [SCALE DEBUG] Setting up debounced scaling for:`, parsed);
             scaleDebounceTimeout = setTimeout(() => {
-                console.log(`🔍 [SCALE DEBUG] Executing debounced coordinator scaling (${parsed})`);
+                console.log(`🔍 [SCALE DEBUG] Executing debounced scaling (${parsed})`);
                 scalingCoordinator
-                    .scale(parsed, 'ui', { metadata: { trigger: 'commitScaleAllDebounce' } })
+                    .scale(parsed)
                     .then(() => refreshEffectiveInkDisplays())
-                    .catch(handleCoordinatorError);
+                    .catch(handleScaleError);
             }, 100);
-            console.log(`🔍 [SCALE DEBUG] Coordinator debounce timeout set:`, scaleDebounceTimeout);
+            console.log(`🔍 [SCALE DEBUG] Debounce timeout set:`, scaleDebounceTimeout);
         }
     };
 
@@ -2651,9 +2647,9 @@ function initializeScaleHandlers() {
                 console.log(`🔍 [EVENT DEBUG] Debounced input scaling - value:`, value);
 
                 scalingCoordinator
-                    .scale(value, 'ui-input', { metadata: { trigger: 'inputDebounce' } })
+                    .scale(value)
                     .catch((error) => {
-                        console.error('Scaling coordinator input error:', error);
+                        console.error('Global scaling input error:', error);
                         if (elements.scaleAllInput) {
                             elements.scaleAllInput.value = formatScalePercent(getCurrentScale());
                         }
@@ -4120,14 +4116,9 @@ function handlePercentInput(input, options = {}) {
     const currentScalePercent = Number(currentScalePercentRaw);
     if (Number.isFinite(currentScalePercent) && Math.abs(currentScalePercent - 100) > 1e-6) {
         scalingCoordinator
-            .scale(currentScalePercent, 'ui-resync', {
-                metadata: {
-                    trigger: 'percentInputResync',
-                    skipHistory: true
-                }
-            })
+            .scale(currentScalePercent, { skipHistory: true })
             .catch((err) => {
-                console.warn('[SCALE] Coordinator resync after percent edit failed:', err);
+                console.warn('[SCALE] Resync after percent edit failed:', err);
             });
     }
 
@@ -4366,14 +4357,9 @@ function handleEndInput(input, options = {}) {
     const currentScalePercent = Number(currentScalePercentRaw);
     if (Number.isFinite(currentScalePercent) && Math.abs(currentScalePercent - 100) > 1e-6) {
         scalingCoordinator
-            .scale(currentScalePercent, 'ui-resync', {
-                metadata: {
-                    trigger: 'endInputResync',
-                    skipHistory: true
-                }
-            })
+            .scale(currentScalePercent, { skipHistory: true })
             .catch((err) => {
-                console.warn('[SCALE] Coordinator resync after end edit failed:', err);
+                console.warn('[SCALE] Resync after end edit failed:', err);
             });
     }
 

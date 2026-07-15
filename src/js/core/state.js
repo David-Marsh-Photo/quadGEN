@@ -10,10 +10,6 @@ import { ensureBellShiftContainer, syncBellShiftFromMeta, clearBellShiftEntry } 
 const legacyBridge = getLegacyStateBridge();
 
 if (typeof window !== 'undefined') {
-    if (typeof window.__USE_SCALING_COORDINATOR === 'undefined') {
-        window.__USE_SCALING_COORDINATOR = false;
-    }
-
     if (typeof window.__USE_SCALING_STATE === 'undefined') {
         window.__USE_SCALING_STATE = true;
     }

@@ -113,17 +113,14 @@ describe('QuadGenActions.scaleChannelEndsByPercent', () => {
     vi.restoreAllMocks();
   });
 
-  it('routes scaling requests through the coordinator with high priority and metadata', async () => {
+  it('routes scaling requests through the canonical global scaler', async () => {
     scaleMock.mockResolvedValue({ success: true, message: 'ok' });
     const actions = new QuadGenActions();
     vi.spyOn(actions, '_updateGraphStatus').mockImplementation(() => {});
 
     const result = await actions.scaleChannelEndsByPercent(125);
 
-    expect(scaleMock).toHaveBeenCalledWith(125, 'ai', expect.objectContaining({
-      priority: 'high',
-      metadata: expect.objectContaining({ trigger: 'ai-scale_command' }),
-    }));
+    expect(scaleMock).toHaveBeenCalledWith(125);
     expect(result).toEqual({ success: true, message: 'ok', details: undefined });
   });
 

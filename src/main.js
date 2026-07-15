@@ -203,7 +203,6 @@ import {
 
 // Import scaling utilities
 import {
-    applyGlobalScale,
     scaleChannelEndsByPercent,
     reapplyCurrentGlobalScale,
     updateScaleBaselineForChannel,
@@ -303,8 +302,6 @@ import {
     redo,
     clearHistory
 } from './js/core/history-manager.js';
-
-import scalingCoordinator from './js/core/scaling-coordinator.js';
 
 // Import file operations
 import {
@@ -1060,7 +1057,6 @@ function initializeApplication() {
     };
 
     const scalingUtilsCompat = {
-        applyGlobalScale,
         scaleChannelEndsByPercent,
         reapplyCurrentGlobalScale,
         updateScaleBaselineForChannel,
@@ -1194,7 +1190,6 @@ function initializeApplication() {
         getPresetDefaults,
         stateManager: stateManagerCompat,
         historyManager: historyManagerCompat,
-        scalingCoordinator,
         scalingUtils: scalingUtilsCompat,
         eventHandlers: eventHandlersCompat,
     chartManager: chartManagerCompat,

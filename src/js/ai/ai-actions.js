@@ -625,10 +625,7 @@ export class QuadGenActions {
                 };
             }
 
-            const result = await scalingCoordinator.scale(numeric, 'ai', {
-                priority: 'high',
-                metadata: { trigger: 'ai-scale_command' }
-            });
+            const result = await scalingCoordinator.scale(numeric);
 
             // Update processing details and session status after scaling
             this._updateGraphStatus();
