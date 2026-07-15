@@ -109,11 +109,6 @@ vi.mock('../../src/js/ui/processing-status.js', () => ({
   updateAllProcessingDetails: () => {}
 }));
 
-vi.mock('../../src/js/core/composite-debug.js', () => ({
-  subscribeCompositeDebugState: () => () => {},
-  getCompositeDebugState: () => null
-}));
-
 vi.mock('../../src/js/core/light-blocking.js', () => ({
   computeLightBlockingCurve: () => ({ curve: [0, 0], maxValue: 0, contributingChannels: [] }),
   isLightBlockingOverlayEnabled: () => false,

@@ -1,60 +1,18 @@
-// Composite LAB redistribution debug state
-// Tracks per-snapshot diagnostics for the composite solver so the UI can surface them.
+// Composite LAB redistribution diagnostics
+// Tracks per-snapshot solver data for tests and console inspection.
 
 import { registerDebugNamespace } from '../utils/debug-registry.js';
 import { sanitizeSnapshotFlags, cloneSnapshotFlags } from './snapshot-flags.js';
 
-const STORAGE_KEY = 'quadgen.compositeDebugEnabled';
-
-function readStorageEnabled() {
-    if (typeof window === 'undefined' || !window.localStorage) {
-        return null;
-    }
-    try {
-        const raw = window.localStorage.getItem(STORAGE_KEY);
-        if (raw === null) return null;
-        return raw === 'true';
-    } catch (error) {
-        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-            console.warn('[CompositeDebug] Failed to read storage flag:', error);
-        }
-        return null;
-    }
-}
-
-function writeStorageEnabled(enabled) {
-    if (typeof window === 'undefined' || !window.localStorage) {
-        return;
-    }
-    try {
-        window.localStorage.setItem(STORAGE_KEY, enabled ? 'true' : 'false');
-    } catch (error) {
-        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-            console.warn('[CompositeDebug] Failed to persist storage flag:', error);
-        }
-    }
-}
-
 const state = {
-    enabled: false,
     summary: null,
     snapshots: [],
     flags: {},
-    selection: { index: null, percent: null },
     sessionId: 0,
     lastUpdated: 0
 };
 
-const listeners = new Set();
 let pendingAutoRaise = null;
-let cachedSession = null;
-
-function shallowClone(obj) {
-    if (!obj || typeof obj !== 'object') {
-        return obj;
-    }
-    return { ...obj };
-}
 
 function sanitizeAutoRaiseEntries(entries = []) {
     if (!Array.isArray(entries)) {
@@ -97,7 +55,6 @@ export function setCompositeAutoRaiseSummary(entries, metadata = {}) {
     };
     applyPendingAutoRaiseToState();
     state.lastUpdated = Date.now();
-    notifyListeners();
     return getCompositeDebugState();
 }
 
@@ -229,42 +186,16 @@ function clearData() {
     state.summary = null;
     state.snapshots = [];
     state.flags = {};
-    state.selection = { index: null, percent: null };
     state.sessionId += 1;
     state.lastUpdated = Date.now();
     pendingAutoRaise = null;
-    cachedSession = null;
-}
-
-function notifyListeners() {
-    if (!listeners.size) {
-        return;
-    }
-    const snapshot = getCompositeDebugState();
-    listeners.forEach((listener) => {
-        try {
-            listener(snapshot);
-        } catch (error) {
-            console.warn('[CompositeDebug] listener failed:', error);
-        }
-    });
 }
 
 export function getCompositeDebugState() {
-    const globalCache = typeof window !== 'undefined' && window ? window.__COMPOSITE_DEBUG_CACHE__ : null;
-    const summarySource = state.summary || (cachedSession ? cachedSession.summary : null) || (globalCache ? globalCache.summary : null);
-    const snapshotsSource = state.snapshots.length
-        ? state.snapshots
-        : (cachedSession ? cachedSession.snapshots : (globalCache ? globalCache.snapshots : []));
-    const flagsSource = Object.keys(state.flags || {}).length
-        ? state.flags
-        : (cachedSession && cachedSession.flags ? cachedSession.flags : (globalCache ? globalCache.snapshotFlags : {}));
     return {
-        enabled: state.enabled,
-        summary: cloneSummary(summarySource),
-        snapshots: snapshotsSource.map((entry) => (entry ? cloneSnapshot(entry) : null)),
-        flags: cloneSnapshotFlags(flagsSource),
-        selection: shallowClone(state.selection),
+        summary: cloneSummary(state.summary),
+        snapshots: state.snapshots.map((entry) => (entry ? cloneSnapshot(entry) : null)),
+        flags: cloneSnapshotFlags(state.flags),
         sessionId: state.sessionId,
         lastUpdated: state.lastUpdated
     };
@@ -278,93 +209,8 @@ export function getCompositeDebugSnapshot(index) {
     return entry ? cloneSnapshot(entry) : null;
 }
 
-export function subscribeCompositeDebugState(listener) {
-    if (typeof listener !== 'function') {
-        return () => {};
-    }
-    listeners.add(listener);
-    return () => {
-        listeners.delete(listener);
-    };
-}
-
-export function isCompositeDebugEnabled() {
-    return !!state.enabled;
-}
-
-export function setCompositeDebugEnabled(enabled) {
-    const next = !!enabled;
-    if (state.enabled === next) {
-        return state.enabled;
-    }
-    state.enabled = next;
-    writeStorageEnabled(state.enabled);
+export function resetCompositeDebugState() {
     clearData();
-    notifyListeners();
-    return state.enabled;
-}
-
-export function resetCompositeDebugState({ keepEnabled = false } = {}) {
-    if (!keepEnabled) {
-        state.enabled = false;
-        writeStorageEnabled(false);
-    }
-    clearData();
-    notifyListeners();
-}
-
-function findFirstSnapshotIndex(entries) {
-    if (!Array.isArray(entries)) {
-        return null;
-    }
-    for (let index = 0; index < entries.length; index += 1) {
-        if (entries[index]) {
-            return index;
-        }
-    }
-    return null;
-}
-
-function updateSelection(index) {
-    if (!Number.isInteger(index) || index < 0 || index >= state.snapshots.length || !state.snapshots[index]) {
-        state.selection = { index: null, percent: null };
-        return;
-    }
-    const entry = state.snapshots[index];
-    const percent = typeof entry?.inputPercent === 'number' ? entry.inputPercent : null;
-    state.selection = { index, percent };
-}
-
-export function selectCompositeDebugSnapshot(index) {
-    if (!state.enabled) {
-        return null;
-    }
-    const prev = state.selection.index;
-    updateSelection(index);
-    if (prev !== state.selection.index) {
-        state.lastUpdated = Date.now();
-        notifyListeners();
-    }
-    return state.selection.index;
-}
-
-export function stepCompositeDebugSelection(delta) {
-    if (!state.enabled || !Number.isInteger(delta)) {
-        return state.selection.index;
-    }
-    const start = Number.isInteger(state.selection.index) ? state.selection.index : findFirstSnapshotIndex(state.snapshots);
-    if (!Number.isInteger(start)) {
-        return state.selection.index;
-    }
-    let candidate = start + delta;
-    while (candidate >= 0 && candidate < state.snapshots.length) {
-        if (state.snapshots[candidate]) {
-            selectCompositeDebugSnapshot(candidate);
-            break;
-        }
-        candidate += delta > 0 ? 1 : -1;
-    }
-    return state.selection.index;
 }
 
 function assignSessionData(payload) {
@@ -384,86 +230,23 @@ function assignSessionData(payload) {
         ? payload.snapshotFlags
         : payload.flags;
     state.flags = sanitizeSnapshotFlags(rawFlags);
-    const explicitSelection = Number.isInteger(payload.selectionIndex) ? payload.selectionIndex : null;
-    if (Number.isInteger(explicitSelection) && state.snapshots[explicitSelection]) {
-        updateSelection(explicitSelection);
-    } else {
-        const first = findFirstSnapshotIndex(state.snapshots);
-        if (Number.isInteger(first)) {
-            updateSelection(first);
-        } else {
-            state.selection = { index: null, percent: null };
-        }
-    }
     state.lastUpdated = Date.now();
     state.sessionId += 1;
 }
 
 export function storeCompositeDebugSession(payload) {
-    if (!payload || typeof payload !== 'object') {
-        cachedSession = null;
-        if (state.enabled) {
-            clearData();
-            notifyListeners();
-        }
-        return;
-    }
-    cachedSession = {
-        summary: cloneSummary(payload.summary),
-        snapshots: Array.isArray(payload.snapshots)
-            ? payload.snapshots.map((entry) => (entry ? cloneSnapshot(entry) : null))
-            : [],
-        selectionIndex: Number.isInteger(payload.selectionIndex) ? payload.selectionIndex : null,
-        flags: sanitizeSnapshotFlags(Object.prototype.hasOwnProperty.call(payload, 'snapshotFlags') ? payload.snapshotFlags : payload.flags)
-    };
-    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-        console.log('[COMPOSITE DEBUG] stored session cache', {
-            summaryKeys: Object.keys(cachedSession.summary || {}),
-            snapshotCount: cachedSession.snapshots.filter((entry) => !!entry).length
-        });
-    }
-    if (state.enabled) {
-        assignSessionData(cachedSession);
-        notifyListeners();
-    }
-}
-
-export function getCompositeDebugSessionCache() {
-    if (!cachedSession) {
-        return null;
-    }
-    return {
-        summary: cloneSummary(cachedSession.summary),
-        snapshots: cachedSession.snapshots.map((entry) => (entry ? cloneSnapshot(entry) : null)),
-        selectionIndex: cachedSession.selectionIndex,
-        snapshotFlags: cloneSnapshotFlags(cachedSession.flags)
-    };
-}
-
-export function commitCompositeDebugSession(payload) {
-    storeCompositeDebugSession(payload);
-}
-
-const storedEnabled = readStorageEnabled();
-if (storedEnabled !== null) {
-    state.enabled = !!storedEnabled;
+    assignSessionData(payload);
 }
 
 registerDebugNamespace('compositeDebug', {
     getCompositeDebugState,
     getCompositeDebugSnapshot,
-    selectCompositeDebugSnapshot,
-    stepCompositeDebugSelection,
-    setCompositeDebugEnabled,
-    isCompositeDebugEnabled,
     resetCompositeDebugState,
-    commitCompositeDebugSession,
     setCompositeAutoRaiseSummary,
     storeCompositeDebugSession,
-    getCompositeDebugSessionCache,
     getFlaggedSnapshots: () => cloneSnapshotFlags(state.flags),
     sanitizeSnapshotFlags
 }, {
     exposeOnWindow: typeof window !== 'undefined',
-    windowAliases: ['getCompositeDebugState', 'getCompositeDebugSnapshot', 'selectCompositeDebugSnapshot', 'stepCompositeDebugSelection', 'setCompositeDebugEnabled', 'isCompositeDebugEnabled', 'getCompositeDebugFlaggedSnapshots']
+    windowAliases: ['getCompositeDebugState', 'getCompositeDebugSnapshot']
 });

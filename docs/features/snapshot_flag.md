@@ -10,20 +10,20 @@ Detect snapshots where ink levels exhibit abrupt, visually unsmooth changes so s
 - **Future tuning**: Keep room to add derivative/second-derivative checks or multi-sample windows if noisy datasets create false positives.
 
 ## Data Model
-- Extend composite snapshot state (see `src/js/core/composite-debug.js`) with a `flags` map keyed by snapshot index.  
+- Composite diagnostic state (see `src/js/core/composite-debug.js`) includes a `flags` map keyed by snapshot index.
 - Each flag entry stores `{ channels: string[], magnitude: number, kind: 'rise' | 'drop' }` to describe the trigger.  
-- Persist flags through history captures (`CurveHistory.captureState`), undo/redo, and composite reseeds.
+- A completed composite redistribution replaces the in-memory summary, snapshots, and flags together.
 
 ## Processing Pipeline
 1. Hook into the composite snapshot generation path after per-channel ink values are finalized.  
 2. For each snapshot/index pair, compare ink levels with the previous snapshot.  
 3. Record a `drop` or `rise` flag when the absolute delta ≥7 % and stash the metadata.  
-4. Expose helper selectors (`getSnapshotFlags()`, `isSnapshotFlagged(index)`) for UI layers and tests.
+4. Expose the latest state through `window.getCompositeDebugState()`, `window.getCompositeDebugSnapshot(index)`, and the `compositeDebug` debug namespace.
 
 ## Implementation Notes
 - Detection remains an internal solver diagnostic; the dormant chart marker and composite debug panel were removed in July 2026.
-- `compositeDebug.getFlaggedSnapshots()` exposes the latest internal flag metadata for focused diagnostics.
-- Snapshot metadata bundles store `snapshotFlags` alongside snapshots; undo/redo/history playback reuse the same payload so flags survive navigation.
+- Diagnostics are captured for every composite run. There is no user setting, persisted enable switch, panel selection state, or replay cache.
+- `compositeDebug.getFlaggedSnapshots()` exposes the latest internal flag metadata for focused diagnostics; the next composite run replaces it.
 
 ## Testing Strategy
 - **Unit tests**: Feed synthetic channel data through the detection helper to ensure flags fire at ≥7 % deltas and remain quiet for smooth curves.  

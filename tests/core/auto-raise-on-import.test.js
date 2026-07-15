@@ -1,6 +1,6 @@
 import { describe, expect, test, beforeEach, afterEach, vi } from 'vitest';
 import { computeAutoRaiseTargetPercent, maybeAutoRaiseInkLimits, clearAutoRaiseAuditState } from '../../src/js/core/auto-raise-on-import.js';
-import { setCompositeAutoRaiseSummary, getCompositeDebugState, resetCompositeDebugState, setCompositeDebugEnabled, commitCompositeDebugSession } from '../../src/js/core/composite-debug.js';
+import { setCompositeAutoRaiseSummary, getCompositeDebugState, resetCompositeDebugState, storeCompositeDebugSession } from '../../src/js/core/composite-debug.js';
 import { setAutoRaiseInkLimitsEnabled } from '../../src/js/core/feature-flags.js';
 import * as SmartCurves from '../../src/js/curves/smart-curves.js';
 import * as State from '../../src/js/core/state.js';
@@ -176,7 +176,6 @@ describe('maybeAutoRaiseInkLimits coverage alignment', () => {
 describe('composite debug auto-raise summary integration', () => {
   beforeEach(() => {
     resetCompositeDebugState();
-    setCompositeDebugEnabled(true);
   });
 
   test('stores auto-raise entries in summary', () => {
@@ -195,10 +194,9 @@ describe('composite debug auto-raise summary integration', () => {
       { channel: 'C', previousPercent: 40, newPercent: 65, desiredPercent: 65 }
     ], { label: 'pre-commit', source: 'unit' });
 
-    commitCompositeDebugSession({
+    storeCompositeDebugSession({
       summary: { channelNames: ['C'] },
-      snapshots: [],
-      selectionIndex: null
+      snapshots: []
     });
 
     const state = getCompositeDebugState();

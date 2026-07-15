@@ -121,10 +121,8 @@ quadContents.split(/\r?\n/).forEach((line) => {
 
 const { parseLabData } = await import('../src/js/data/lab-parser.js');
 const { beginCompositeLabRedistribution, registerCompositeLabBase, finalizeCompositeLabRedistribution } = await import('../src/js/core/processing-pipeline.js');
-const { setCompositeDebugEnabled, getCompositeDebugState } = await import('../src/js/core/composite-debug.js');
+const { getCompositeDebugState } = await import('../src/js/core/composite-debug.js');
 const { getSnapshotSlopeKernelStats } = await import('../src/js/core/snapshot-slope-kernel.js');
-
-setCompositeDebugEnabled(true);
 
 const labEntry = parseLabData(labContents, path.basename(labFile));
 if (!labEntry || !labEntry.valid) {

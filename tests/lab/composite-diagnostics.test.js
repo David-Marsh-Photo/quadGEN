@@ -12,7 +12,6 @@ import {
 import { setLoadedQuadData, ensureLoadedQuadData } from '../../src/js/core/state.js';
 import {
   resetCompositeDebugState,
-  setCompositeDebugEnabled,
   getCompositeDebugState,
   getCompositeDebugSnapshot
 } from '../../src/js/core/composite-debug.js';
@@ -72,16 +71,15 @@ function parseQuadFile(relativePath) {
   return { channels, curves };
 }
 
-describe('Composite debug instrumentation', () => {
+describe('Composite diagnostics', () => {
   beforeEach(() => {
     resetCompositeDebugState();
-    setCompositeDebugEnabled(false);
     LinearizationState.clear();
     setLoadedQuadData(null);
     ensureLoadedQuadData();
   });
 
-  it('captures summary data and per-sample deltas when enabled', () => {
+  it('captures summary data and per-sample deltas', () => {
     const quad = parseQuadFile('data/TRIFORCE_V4.quad');
     const measurementText = fs.readFileSync(path.resolve('data/TRIFORCE_V4.txt'), 'utf8');
     const labEntry = parseLabData(measurementText, 'TRIFORCE_V4.txt');
@@ -103,8 +101,6 @@ describe('Composite debug instrumentation', () => {
       normalizeToEndChannels: {}
     });
     const loadedData = ensureLoadedQuadData();
-
-    setCompositeDebugEnabled(true);
 
     const sessionStarted = beginCompositeLabRedistribution({
       channelNames,
@@ -126,7 +122,6 @@ describe('Composite debug instrumentation', () => {
     expect(compositeResult?.curves).toBeTruthy();
 
     const debugState = getCompositeDebugState();
-    expect(debugState.enabled).toBe(true);
     expect(debugState.summary).toBeTruthy();
     expect(Object.keys(debugState.summary.channelMaxima || {})).toContain('K');
     expect(Object.keys(debugState.summary.densityWeights || {})).toContain('LK');
@@ -148,7 +143,6 @@ describe('Composite debug instrumentation', () => {
         if (ladderSelections > 0) {
           expect(hasContribution).toBe(true);
         }
-        const contributionSum = contributionDeltas.reduce((acc, delta) => acc + delta, 0);
         const valueDeltaSum = perChannelEntries.reduce(
           (acc, entry) => acc + (typeof entry?.valueDelta === 'number' ? entry.valueDelta : 0),
           0
@@ -156,53 +150,5 @@ describe('Composite debug instrumentation', () => {
         expect(Math.abs(valueDeltaSum - snapshot.inkDelta)).toBeLessThan(1);
       }
     }
-  });
-
-  it('keeps the latest diagnostic session available while the panel is disabled', () => {
-    const quad = parseQuadFile('data/TRIFORCE_V4.quad');
-    const measurementText = fs.readFileSync(path.resolve('data/TRIFORCE_V4.txt'), 'utf8');
-    const labEntry = parseLabData(measurementText, 'TRIFORCE_V4.txt');
-
-    LinearizationState.setGlobalData(labEntry, true);
-
-    const channelNames = ['K', 'LK', 'C'];
-    const endValues = {};
-    channelNames.forEach((channelName) => {
-      const curve = quad.curves[channelName];
-      expect(Array.isArray(curve)).toBe(true);
-      endValues[channelName] = Math.max(...curve);
-    });
-
-    setLoadedQuadData({
-      curves: quad.curves,
-      baselineEnd: { ...endValues },
-      sources: {},
-      normalizeToEndChannels: {}
-    });
-    const loadedData = ensureLoadedQuadData();
-
-    const sessionStarted = beginCompositeLabRedistribution({
-      channelNames,
-      endValues,
-      labEntry,
-      interpolationType: 'cubic',
-      smoothingPercent: 0
-    });
-    expect(sessionStarted).toBe(true);
-
-    channelNames.forEach((channelName) => {
-      const endValue = endValues[channelName];
-      const base = make256(endValue, channelName, true);
-      expect(Array.isArray(base)).toBe(true);
-      loadedData.plotBaseCurves[channelName] = base.slice();
-    });
-
-    finalizeCompositeLabRedistribution();
-
-    const debugState = getCompositeDebugState();
-    expect(debugState.enabled).toBe(false);
-    expect(debugState.summary).toBeTruthy();
-    expect(Array.isArray(debugState.snapshots)).toBe(true);
-    expect(debugState.snapshots.length).toBeGreaterThan(0);
   });
 });

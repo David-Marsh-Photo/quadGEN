@@ -197,7 +197,6 @@ vi.mock('../../src/js/core/processing-pipeline.js', () => ({
   beginCompositeLabRedistribution: vi.fn(),
   finalizeCompositeLabRedistribution: vi.fn(() => ({})),
   replayCompositeLabRedistribution: vi.fn(),
-  replayCompositeDebugSessionFromCache: vi.fn(),
   getCompositeCoverageSummary: vi.fn()
 }));
 
@@ -222,12 +221,6 @@ vi.mock('../../src/js/core/feature-flags.js', () => ({
   setSmartPointDragEnabled: vi.fn(),
   isAutoRaiseInkLimitsEnabled: () => true,
   setAutoRaiseInkLimitsEnabled: vi.fn()
-}));
-
-vi.mock('../../src/js/core/composite-debug.js', () => ({
-  setCompositeDebugEnabled: vi.fn(),
-  isCompositeDebugEnabled: () => false,
-  subscribeCompositeDebugState: () => () => {}
 }));
 
 vi.mock('../../src/js/core/channel-densities.js', () => ({

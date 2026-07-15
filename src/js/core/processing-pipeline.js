@@ -20,10 +20,7 @@ import {
     isCubeEndpointAnchoringEnabled,
     isSlopeKernelSmoothingEnabled
 } from './feature-flags.js';
-import {
-    isCompositeDebugEnabled,
-    storeCompositeDebugSession
-} from './composite-debug.js';
+import { storeCompositeDebugSession } from './composite-debug.js';
 import { getAutoRaiseAuditState } from './auto-raise-on-import.js';
 import { getLabSmoothingPercent, mapSmoothingPercentToWiden } from './lab-settings.js';
 import { DEFAULT_CHANNEL_DENSITIES } from './channel-densities.js';
@@ -434,7 +431,6 @@ const compositeLabSession = {
     smoothingPercent: 0,
     warnings: [],
     preparedContext: null,
-    lastDebugSession: null,
     autoComputeDensity: true,
     autoRaiseContext: null,
     densityLadder: [],
@@ -467,7 +463,6 @@ export function beginCompositeLabRedistribution(config = {}) {
         compositeLabSession.densitySources = new Map();
         compositeLabSession.preparedContext = null;
         compositeLabSession.warnings = [];
-        compositeLabSession.lastDebugSession = null;
         compositeLabSession.autoComputeDensity = true;
         compositeLabSession.autoRaiseContext = null;
         compositeLabSession.analysisOnly = false;
@@ -503,7 +498,6 @@ export function beginCompositeLabRedistribution(config = {}) {
         compositeLabSession.densitySources = new Map();
         compositeLabSession.preparedContext = null;
         compositeLabSession.warnings = [];
-        compositeLabSession.lastDebugSession = null;
         compositeLabSession.autoComputeDensity = true;
         compositeLabSession.autoRaiseContext = null;
         compositeLabSession.analysisOnly = false;
@@ -540,7 +534,6 @@ export function beginCompositeLabRedistribution(config = {}) {
     compositeLabSession.smoothingPercent = Number.isFinite(config.smoothingPercent) ? Number(config.smoothingPercent) : 0;
     compositeLabSession.warnings = [];
     compositeLabSession.preparedContext = null;
-    compositeLabSession.lastDebugSession = null;
     compositeLabSession.densityLadder = [];
     compositeLabSession.densityLadderIndex = new Map();
     compositeLabSession.ladderBlendTracker = new Map();
@@ -1281,8 +1274,7 @@ export function finalizeCompositeLabRedistribution() {
     if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
         console.log('[COMPOSITE] finalize redistribution', {
             activeChannels: channels?.length || 0,
-            autoCompute: compositeLabSession.autoComputeDensity,
-            debugEnabled: isCompositeDebugEnabled()
+            autoCompute: compositeLabSession.autoComputeDensity
         });
     }
 
@@ -1542,14 +1534,9 @@ export function finalizeCompositeLabRedistribution() {
             };
             const sessionPayload = {
                 summary: summaryPayload,
-                snapshots: debugSnapshots,
-                selectionIndex: null
+                snapshots: debugSnapshots
             };
-            compositeLabSession.lastDebugSession = sessionPayload;
             storeCompositeDebugSession(sessionPayload);
-            if (typeof globalScope === 'object' && globalScope) {
-                globalScope.__COMPOSITE_DEBUG_CACHE__ = sessionPayload;
-            }
 
         compositeLabSession.warnings = summaryWarnings;
         compositeLabSession.peakIndices = {};
@@ -1585,56 +1572,47 @@ export function finalizeCompositeLabRedistribution() {
         };
     }
 
-    const debugEnabled = isCompositeDebugEnabled();
-    const captureDebug = true;
-    let debugSnapshots = captureDebug ? new Array(CURVE_RESOLUTION).fill(null) : null;
-    let debugSummary = null;
-    let debugSelectionIndex = null;
-    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-        console.log('[COMPOSITE] debug capture state', { captureDebug, debugEnabled });
+    const debugSnapshots = new Array(CURVE_RESOLUTION).fill(null);
+    const maxima = {};
+    if (Array.isArray(channels)) {
+        channels.forEach((name) => {
+            const raw = Number(endValues?.[name]);
+            maxima[name] = Number.isFinite(raw) ? raw : 0;
+        });
     }
-    if (captureDebug) {
-        const maxima = {};
-        if (Array.isArray(channels)) {
-            channels.forEach((name) => {
-                const raw = Number(endValues?.[name]);
-                maxima[name] = Number.isFinite(raw) ? raw : 0;
+    const debugSummary = {
+        channelNames: Array.isArray(channels) ? channels.slice() : [],
+        channelMaxima: maxima,
+        densityWeights: mapToPlainObject(densityWeights),
+        densityConstants: mapToPlainObject(compositeLabSession.densityConstants),
+        cumulativeDensity: mapToPlainObject(compositeLabSession.densityCumulative),
+        totalDensity: Number.isFinite(densityWeightsInfo.totalDensity) ? densityWeightsInfo.totalDensity : null,
+        measurementSamples: Array.isArray(compositeLabSession.measurementSamples) ? compositeLabSession.measurementSamples.slice() : null,
+        measurementDeltas: Array.isArray(compositeLabSession.measurementDeltas) ? compositeLabSession.measurementDeltas.slice() : null,
+        densityInputs: Array.isArray(compositeLabSession.densityInputs) ? compositeLabSession.densityInputs.slice() : null,
+        densitySources: mapToPlainObject(compositeLabSession.densitySources),
+        warnings: [],
+        peakIndices: null,
+        coverageSummary: cloneCoverageSummary(densityWeightsInfo.coverageSummary || {}),
+        coverageLimits: mapToPlainObject(densityWeightsInfo.coverageLimits),
+        coverageBuffers: mapToPlainObject(densityWeightsInfo.coverageBuffers),
+        coverageClampEvents: (() => {
+            if (!(densityWeightsInfo.coverageClampEvents instanceof Map)) {
+                return {};
+            }
+            const out = {};
+            densityWeightsInfo.coverageClampEvents.forEach((events, channel) => {
+                out[channel] = Array.isArray(events)
+                    ? events.map((entry) => ({ ...entry }))
+                    : [];
             });
-        }
-        debugSummary = {
-            channelNames: Array.isArray(channels) ? channels.slice() : [],
-            channelMaxima: maxima,
-            densityWeights: mapToPlainObject(densityWeights),
-            densityConstants: mapToPlainObject(compositeLabSession.densityConstants),
-            cumulativeDensity: mapToPlainObject(compositeLabSession.densityCumulative),
-            totalDensity: Number.isFinite(densityWeightsInfo.totalDensity) ? densityWeightsInfo.totalDensity : null,
-            measurementSamples: Array.isArray(compositeLabSession.measurementSamples) ? compositeLabSession.measurementSamples.slice() : null,
-            measurementDeltas: Array.isArray(compositeLabSession.measurementDeltas) ? compositeLabSession.measurementDeltas.slice() : null,
-            densityInputs: Array.isArray(compositeLabSession.densityInputs) ? compositeLabSession.densityInputs.slice() : null,
-            densitySources: mapToPlainObject(compositeLabSession.densitySources),
-            warnings: [],
-            peakIndices: null,
-            coverageSummary: cloneCoverageSummary(densityWeightsInfo.coverageSummary || {}),
-            coverageLimits: mapToPlainObject(densityWeightsInfo.coverageLimits),
-            coverageBuffers: mapToPlainObject(densityWeightsInfo.coverageBuffers),
-            coverageClampEvents: (() => {
-                if (!(densityWeightsInfo.coverageClampEvents instanceof Map)) {
-                    return {};
-                }
-                const out = {};
-                densityWeightsInfo.coverageClampEvents.forEach((events, channel) => {
-                    out[channel] = Array.isArray(events)
-                        ? events.map((entry) => ({ ...entry }))
-                        : [];
-                });
-                return out;
-            })()
-        };
-        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-            console.log('[COMPOSITE] debug summary seeded', {
-                channelCount: debugSummary.channelNames.length
-            });
-        }
+            return out;
+        })()
+    };
+    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+        console.log('[COMPOSITE] debug summary seeded', {
+            channelCount: debugSummary.channelNames.length
+        });
     }
 
     const normalizedBaselineByChannel = new Map();
@@ -2039,11 +2017,9 @@ export function finalizeCompositeLabRedistribution() {
         });
 
         let baselineInkTotal = 0;
-        if (captureDebug && debugSnapshots) {
-            channelInfo.forEach((info) => {
-                baselineInkTotal += info.baselineValue || 0;
-            });
-        }
+        channelInfo.forEach((info) => {
+            baselineInkTotal += info.baselineValue || 0;
+        });
 
         const getPreferredShare = (info) => {
             const value = info?.weightingShare;
@@ -2974,14 +2950,12 @@ export function finalizeCompositeLabRedistribution() {
                                 }
                             }
                             if (lighterBlocking) {
-                                if (captureDebug) {
-                                    localTrace.blocked.push({
-                                        channel: name,
-                                        reason: 'lighter-headroom',
-                                        blockedBy: lighterBlocking.lighterName,
-                                        headroom: lighterBlocking.lighterHeadroom
-                                    });
-                                }
+                                localTrace.blocked.push({
+                                    channel: name,
+                                    reason: 'lighter-headroom',
+                                    blockedBy: lighterBlocking.lighterName,
+                                    headroom: lighterBlocking.lighterHeadroom
+                                });
                                 return;
                             }
                         } else if (!positive && ladderIndex != null && ladderIndex < densityLadder.length - 1) {
@@ -2998,14 +2972,12 @@ export function finalizeCompositeLabRedistribution() {
                                 }
                             }
                             if (heavierBlocking) {
-                                if (captureDebug) {
-                                    localTrace.blocked.push({
-                                        channel: name,
-                                        reason: 'heavier-usage',
-                                        blockedBy: heavierBlocking.heavierName,
-                                        usage: heavierBlocking.heavierUsage
-                                    });
-                                }
+                                localTrace.blocked.push({
+                                    channel: name,
+                                    reason: 'heavier-usage',
+                                    blockedBy: heavierBlocking.heavierName,
+                                    usage: heavierBlocking.heavierUsage
+                                });
                                 return;
                             }
                         }
@@ -3092,15 +3064,13 @@ export function finalizeCompositeLabRedistribution() {
                         contributions[name] = (contributions[name] || 0) + normalizedApplied;
                         remaining -= contribution;
                         appliedThisRound += Math.abs(contribution);
-                        if (captureDebug) {
-                            localTrace.sequence.push({
-                                channel: name,
-                                ladderIndex: Number.isFinite(entry.ladderIndex) ? entry.ladderIndex : null,
-                                normalizedApplied,
-                                iteration: iter,
-                                weight
-                            });
-                        }
+                        localTrace.sequence.push({
+                            channel: name,
+                            ladderIndex: Number.isFinite(entry.ladderIndex) ? entry.ladderIndex : null,
+                            normalizedApplied,
+                            iteration: iter,
+                            weight
+                        });
                     }
                 });
 
@@ -3112,10 +3082,8 @@ export function finalizeCompositeLabRedistribution() {
                 }
             }
 
-            if (captureDebug) {
-                localTrace.remaining = remaining;
-            }
-            ladderTraceSnapshot = captureDebug ? localTrace : null;
+            localTrace.remaining = remaining;
+            ladderTraceSnapshot = localTrace;
             return contributions;
         };
 
@@ -3256,7 +3224,7 @@ export function finalizeCompositeLabRedistribution() {
             });
         }
 
-        if (captureDebug && debugSnapshots) {
+        if (debugSnapshots) {
             const ladderSelection = [];
             if (contributions && typeof contributions === 'object') {
                 Object.entries(contributions).forEach(([name, normalized]) => {
@@ -3419,9 +3387,6 @@ export function finalizeCompositeLabRedistribution() {
                         : []
                 };
             }
-            if (debugSelectionIndex == null && Math.abs(deltaDensity || 0) > 1e-4) {
-                debugSelectionIndex = i;
-            }
         }
 
         channelInfo.forEach((info, name) => {
@@ -3511,7 +3476,7 @@ export function finalizeCompositeLabRedistribution() {
             channelNames: channels,
             endValues,
             thresholdPercent: SNAPSHOT_FLAG_THRESHOLD_PERCENT,
-            debugSnapshots: captureDebug ? debugSnapshots : null
+            debugSnapshots
         });
         if (slopeKernelResult && slopeKernelResult.normalizedSeriesByChannel) {
             Object.assign(normalizedAggregate, slopeKernelResult.normalizedSeriesByChannel);
@@ -3535,7 +3500,7 @@ export function finalizeCompositeLabRedistribution() {
             Object.assign(normalizedAggregate, slopeLimiterNormalized);
         }
     }
-    if (captureDebug && debugSnapshots && Object.keys(normalizedAggregate).length) {
+    if (Object.keys(normalizedAggregate).length) {
         syncSnapshotsWithSlopeLimiter(debugSnapshots, {
             channelNames: channels,
             normalizedSeriesByChannel: normalizedAggregate,
@@ -3666,7 +3631,7 @@ export function finalizeCompositeLabRedistribution() {
         debugSummary.coverageClampEvents = clampSnapshot;
     }
 
-    if (captureDebug) {
+    {
         const summaryPayload = debugSummary ? { ...debugSummary } : {};
         if (summaryPayload.channelMaxima && typeof summaryPayload.channelMaxima === 'object') {
             Object.keys(summaryPayload.channelMaxima).forEach((name) => {
@@ -3704,26 +3669,15 @@ export function finalizeCompositeLabRedistribution() {
         const sessionPayload = {
             summary: summaryPayload,
             snapshots: snapshotsPayload,
-            selectionIndex: debugSelectionIndex,
             snapshotFlags,
             flags: snapshotFlags
         };
-        compositeLabSession.lastDebugSession = sessionPayload;
         storeCompositeDebugSession(sessionPayload);
-        if (typeof globalScope === 'object' && globalScope) {
-            globalScope.__COMPOSITE_DEBUG_CACHE__ = sessionPayload;
-        }
         if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
             console.log('[COMPOSITE] debug payload ready', {
                 summaryKeys: Object.keys(summaryPayload),
                 snapshotCount: snapshotsPayload.filter((entry) => !!entry).length
             });
-        }
-    } else {
-        compositeLabSession.lastDebugSession = null;
-        storeCompositeDebugSession(null);
-        if (typeof globalScope === 'object' && globalScope && Object.prototype.hasOwnProperty.call(globalScope, '__COMPOSITE_DEBUG_CACHE__')) {
-            globalScope.__COMPOSITE_DEBUG_CACHE__ = null;
         }
     }
 
@@ -3792,30 +3746,6 @@ export function finalizeCompositeLabRedistribution() {
         measurementSamples: Array.isArray(compositeLabSession.measurementSamples)
             ? compositeLabSession.measurementSamples.slice()
             : []
-    };
-}
-
-export function replayCompositeDebugSessionFromCache() {
-    if (!isCompositeDebugEnabled()) {
-        return false;
-    }
-    const payload = compositeLabSession.lastDebugSession;
-    if (!payload || !payload.summary || !Array.isArray(payload.snapshots)) {
-        return false;
-    }
-    storeCompositeDebugSession(payload);
-    return true;
-}
-
-export function getCompositeDebugSessionCache() {
-    const payload = compositeLabSession.lastDebugSession;
-    if (!payload || !payload.summary || !Array.isArray(payload.snapshots)) {
-        return null;
-    }
-    return {
-        summary: payload.summary,
-        snapshotCount: payload.snapshots.filter((entry) => !!entry).length,
-        selectionIndex: payload.selectionIndex ?? null
     };
 }
 
@@ -5620,9 +5550,7 @@ registerDebugNamespace('processingPipeline', {
     buildFile,
     buildBaseCurve,
     applyPerChannelLinearizationStep,
-    applyGlobalLinearizationStep,
-    replayCompositeDebugSessionFromCache,
-    getCompositeDebugSessionCache
+    applyGlobalLinearizationStep
 }, {
     exposeOnWindow: typeof window !== 'undefined',
     windowAliases: ['make256', 'apply1DLUT', 'buildFile', 'buildBaseCurve']
