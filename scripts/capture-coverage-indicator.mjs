@@ -6,6 +6,7 @@ const INDEX_URL = pathToFileURL(resolve('index.html')).href;
 const QUAD_PATH = resolve('data/P800_K36C26LK25_V6.quad');
 const LAB_PATH = resolve('data/P800_K36C26LK25_V6.txt');
 const OUTPUT_PATH = resolve('artifacts/channel-coverage-indicator.png');
+const CORRECTION_METHOD_STORAGE_KEY = 'quadgen.correctionMethod.v1';
 
 async function waitForAppReady(page) {
   await Promise.all([
@@ -20,14 +21,11 @@ async function main() {
   const page = await browser.newPage();
 
   try {
+    await page.addInitScript((storageKey) => {
+      localStorage.setItem(storageKey, 'densitySolver');
+    }, CORRECTION_METHOD_STORAGE_KEY);
     await page.goto(INDEX_URL);
     await waitForAppReady(page);
-
-    await page.evaluate(() => {
-      if (typeof window.enableCompositeLabRedistribution === 'function') {
-        window.enableCompositeLabRedistribution(true);
-      }
-    });
 
     await page.click('#optionsBtn');
     await page.waitForSelector('#optionsModal:not(.hidden)');

@@ -197,13 +197,13 @@ These constants act as hard ceilings when redistributing LAB corrections: an ink
 - The hidden persisted weighting modes were removed; all redistribution now uses the normalized ladder/reserve path.
 - The default-off legacy highlight-share fallback was removed; normalized density shares are canonical across the full ramp.
 - Headless composite diagnostics expose capacity, reserve, and blend decisions for focused solver checks.
+- The obsolete composite-on/off comparison script was removed after Density Solver became invariant; the retained coverage screenshot helper now exercises the canonical path directly.
 
 ### Outstanding items
 1. **Guard precedence cleanup** — enforce one documented clamp order across available capacity, release taper, and End limits; delete redundant guard code only where fixture output proves it safe.
 2. **Shadow reserve deep dive** — probe aggressive negative-delta datasets to confirm reserve easing never overcompensates; add fixtures if real workloads expose gaps.
 3. **Documentation touch-ups** — keep the manual regression matrix, Help → Version History, and this spec aligned; remove any lingering references to the retired consumable-density model.
 4. **Validation cadence** — continue periodic headful verification on `P800_K36C26LK25_V6` and TRIFORCE fixtures after significant solver tweaks, and ensure `scripts/headful-capture-normalized-ladder.mjs` matches the snapshot ranges referenced in tests.
-5. **Exploratory tooling** — use `scripts/analyze_composite_weighting.cjs` only when a concrete dataset needs amplitude or ceiling diagnosis; do not expand it speculatively.
 
 ### Change control
 When tackling an outstanding item:

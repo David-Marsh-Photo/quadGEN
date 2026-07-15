@@ -279,9 +279,6 @@ Goal: confirm coverage ceilings and usage metrics surface correctly for audits.
 
 Attach console stats and chart screenshots whenever the amplitude drops unexpectedly or the bell channels flatten against the ceiling.
 
-### Optional Automation
-- Run `node scripts/analyze_composite_weighting.cjs` to compare legacy (composite off) vs composite totals for TRIFORCE fixtures. The script prints total-ink ratios and warning counts so you can spot amplitude drift without taking manual measurements.
-
 ## Curve Shape Detection Badges
 Goal: confirm the new bell-vs-monotonic detector flags highlight inks correctly and renders badges in the channel table.
 
