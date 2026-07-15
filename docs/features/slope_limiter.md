@@ -18,20 +18,17 @@ Blend abrupt per-channel jumps that slip through composite allocation guards by 
 - **Unit**: `tests/core/slope-limiter.test.js` feeds synthetic rise/drop scenarios through `applySnapshotSlopeLimiter` and validates both slope enforcement and snapshot resynchronization.
 - **Integration**: `tests/lab/composite-slope-limiter.test.js` runs the composite pipeline against `P800_K36C26LK25_V6` and asserts that no snapshot flags remain.
 - **Unit (kernel)**: `tests/core/slope-kernel.test.js` verifies that Gaussian smoothing preserves endpoints, respects monotonicity, and bails out when debug metadata marks a region as locked.
-- **Integration (kernel)**: `tests/lab/composite-slope-kernel.test.js` enables the feature flag for the P800 dataset and inspects the eased roll-off deltas to ensure the mid-window slope is higher than the shoulders without exceeding the 7 % ceiling.
+- **Integration (kernel)**: `tests/lab/composite-slope-kernel.test.js` runs the canonical composite path for the P800 dataset and inspects the eased roll-off deltas to ensure the mid-window slope is higher than the shoulders without exceeding the 7 % ceiling.
 - **Regression Gate**: Standard build + smoke remains the release gate (`npm run build:agent`, `npm run test:smoke`), alongside the new unit and lab tests above.
 
-## Kernel Smoothing (feature flag)
-- **Scope**: `applySnapshotSlopeKernel` runs before the linear limiter when `slopeKernelSmoothing` is enabled. It only activates once auto-raise completes and normalizes the curve into [0, 1] so the kernel can work in normalized space.
+## Kernel Smoothing
+- **Scope**: `applySnapshotSlopeKernel` runs before the linear limiter once auto-raise completes and normalizes the curve into [0, 1] so the kernel can work in normalized space.
 - **Detection**: The helper scans for deltas exceeding the shared 7 % threshold, merges adjacent spikes, and grows a window up to ±6 samples around the region (clamped by available data). Runs that park within ≈95 % of the guard for three or more samples now count as smoothing candidates so the staircase cases in the highlights get resurfaced.
 - **Kernel**: Each window is rebuilt with a symmetric Gaussian weight profile (cosine fallback) that preserves the original endpoints while concentrating the slope change near the center. The total change equals the original drop/rise so ink totals stay intact.
 - **Guards**: The window is skipped if debug metadata marks any sample as locked (`blendLimited`, exhausted reserve, zero headroom, disabled channel, or active blend clamps). Post-pass validation enforces monotonicity with a two-iteration cap; residual spikes fall back to the linear limiter.
 - **Telemetry**: When `DEBUG_LOGS` is true, the helper reports skipped windows and rejected residuals under the `[SLOPE_KERNEL]` tag.
 
-### Activation & Rollback
-- Runtime toggle: `setSlopeKernelSmoothingEnabled(true | false)` (paired `isSlopeKernelSmoothingEnabled()`), exposed on `window` and the `featureFlags` debug namespace. The smoother now starts **enabled**.
-- Headless tooling: set `QUADGEN_ENABLE_SLOPE_KERNEL=0` (or `false`) before running `scripts/capture-composite-debug.mjs` to force-disable the smoother in offline analysis; omit the variable to run with the default-on state.
-- Default is now **enabled**; removing the feature is still a two-line change (remove the import/call) because all data wiring reuses the limiter’s sync path.
+The kernel is the canonical first pass for completed composite redistribution. The linear limiter remains its safety net for locked or residual regions, and both passes stay suspended while auto-raise is evaluating.
 
 ### Multi-pass Curved Roll-off
 - **Goal**: eliminate the linear 7 % staircase entirely by widening the smoothing window, blending its anchors, and cascading lower-threshold passes while still respecting blend/reserve guards. The linear limiter remains a safety net only when residual spikes survive the kernel.

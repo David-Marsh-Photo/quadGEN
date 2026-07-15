@@ -45,7 +45,7 @@ function computeDeltas(series) {
 }
 
 describe('composite slope kernel integration', () => {
-  it('captures eased roll-off deltas when kernel smoothing flag is enabled', () => {
+  it('captures eased roll-off deltas in the canonical composite path', () => {
     const tempDir = mkdtempSync(join(tmpdir(), 'slope-kernel-'));
     const outputPath = join(tempDir, 'kernel.json');
 

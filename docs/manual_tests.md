@@ -155,15 +155,13 @@ Goal: confirm real composite datasets no longer produce >7 % ink jumps or snap
 If any flags reappear or the Δ exceeds 7 %, file a regression with the exported payload attached.
 
 ## Composite Slope Kernel
-Goal: validate the default-on kernel smoother reshapes steep roll-offs without violating the 7 % guard or altering roll-ons.
+Goal: validate the kernel smoother reshapes steep roll-offs without violating the 7 % guard or altering roll-ons.
 
 ### Manual Steps:
-1. On load confirm `window.isSlopeKernelSmoothingEnabled?.()` returns `true`. If a prior session disabled it, toggle back on via `window.enableSlopeKernelSmoothing?.(true)` or reload without `QUADGEN_ENABLE_SLOPE_KERNEL=0`.
-2. Load `data/P800_K36C26LK25_V6.quad` and `data/P800_K36C26LK25_V6.txt`. Allow redistribution to finish.
-3. Inspect K in `window.getCompositeDebugState?.().snapshots.slice(246, 253)`. The `normalizedAfter` deltas should begin around 0.05–0.06 and taper below 0.02 over the final three samples (no flat 0.07 staircase).
-4. Confirm `window.getCompositeDebugState?.().flags` stays empty.
-5. For comparison, disable the flag (`window.enableSlopeKernelSmoothing(false)`), rerun the import, and confirm the roll-off reverts to the linear fallback with nearly uniform ~0.07 steps.
-6. Capture both curves (kernel on/off) for traceability and leave the flag off only if you’re intentionally testing the fallback.
+1. Load `data/P800_K36C26LK25_V6.quad` and `data/P800_K36C26LK25_V6.txt`. Allow redistribution to finish.
+2. Inspect K in `window.getCompositeDebugState?.().snapshots.slice(246, 253)`. The `normalizedAfter` deltas should begin around 0.05–0.06 and taper below 0.02 over the final three samples (no flat 0.07 staircase).
+3. Confirm `window.getCompositeDebugState?.().flags` stays empty.
+4. Capture the curve for traceability.
 
 Document the measured deltas; if the kernel path exceeds 0.07 or flattens the transition, attach the debug payload with notes.
 

@@ -17,8 +17,7 @@ import { registerDebugNamespace } from '../utils/debug-registry.js';
 import { getLegacyLinearizationBridge } from '../legacy/linearization-bridge.js';
 import {
     isActiveRangeLinearizationEnabled,
-    isCubeEndpointAnchoringEnabled,
-    isSlopeKernelSmoothingEnabled
+    isCubeEndpointAnchoringEnabled
 } from './feature-flags.js';
 import { storeCompositeDebugSession } from './composite-debug.js';
 import { getAutoRaiseAuditState } from './auto-raise-on-import.js';
@@ -3469,7 +3468,7 @@ export function finalizeCompositeLabRedistribution() {
     let slopeLimiterNormalized = null;
     const normalizedAggregate = {};
     let limiterChannelList = channels.slice();
-    if (!autoRaiseInProgress && isSlopeKernelSmoothingEnabled()) {
+    if (!autoRaiseInProgress) {
         slopeKernelResult = applySnapshotSlopeKernel(correctedCurves, {
             channelNames: channels,
             endValues,

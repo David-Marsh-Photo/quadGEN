@@ -37,8 +37,7 @@ const DEFAULT_FLAGS = {
     activeRangeLinearization: false,
     cubeEndpointAnchoring: false,
     smartPointDrag: true,
-    autoRaiseInkLimitsOnImport: false,
-    slopeKernelSmoothing: true
+    autoRaiseInkLimitsOnImport: false
 };
 
 const flagState = {
@@ -48,11 +47,6 @@ const flagState = {
 const storedSmartPointDrag = loadSmartPointDragFromStorage();
 if (storedSmartPointDrag !== null) {
     flagState.smartPointDrag = storedSmartPointDrag;
-}
-
-if (typeof process !== 'undefined' && process && process.env && Object.prototype.hasOwnProperty.call(process.env, 'QUADGEN_ENABLE_SLOPE_KERNEL')) {
-    const raw = process.env.QUADGEN_ENABLE_SLOPE_KERNEL;
-    flagState.slopeKernelSmoothing = raw !== '0' && raw !== 'false';
 }
 
 export function isActiveRangeLinearizationEnabled() {
@@ -92,15 +86,6 @@ export function setAutoRaiseInkLimitsEnabled(enabled) {
     return flagState.autoRaiseInkLimitsOnImport;
 }
 
-export function isSlopeKernelSmoothingEnabled() {
-    return !!flagState.slopeKernelSmoothing;
-}
-
-export function setSlopeKernelSmoothingEnabled(enabled) {
-    flagState.slopeKernelSmoothing = !!enabled;
-    return flagState.slopeKernelSmoothing;
-}
-
 function installWindowAdapters() {
     if (typeof window === 'undefined') {
         return;
@@ -138,14 +123,6 @@ function installWindowAdapters() {
         window.isAutoRaiseInkLimitsEnabled = () => isAutoRaiseInkLimitsEnabled();
     }
 
-    if (typeof window.enableSlopeKernelSmoothing !== 'function') {
-        window.enableSlopeKernelSmoothing = (enabled = true) => setSlopeKernelSmoothingEnabled(enabled);
-    }
-
-    if (typeof window.isSlopeKernelSmoothingEnabled !== 'function') {
-        window.isSlopeKernelSmoothingEnabled = () => isSlopeKernelSmoothingEnabled();
-    }
-
 }
 
 installWindowAdapters();
@@ -158,9 +135,7 @@ registerDebugNamespace('featureFlags', {
     setSmartPointDragEnabled,
     isSmartPointDragEnabled,
     setAutoRaiseInkLimitsEnabled,
-    isAutoRaiseInkLimitsEnabled,
-    setSlopeKernelSmoothingEnabled,
-    isSlopeKernelSmoothingEnabled
+    isAutoRaiseInkLimitsEnabled
 }, {
     exposeOnWindow: typeof window !== 'undefined'
 });
@@ -182,10 +157,6 @@ export function resetFeatureFlags(overrides = {}) {
         Object.prototype.hasOwnProperty.call(overrides, 'autoRaiseInkLimitsOnImport')
             ? !!overrides.autoRaiseInkLimitsOnImport
             : DEFAULT_FLAGS.autoRaiseInkLimitsOnImport;
-    flagState.slopeKernelSmoothing =
-        Object.prototype.hasOwnProperty.call(overrides, 'slopeKernelSmoothing')
-            ? !!overrides.slopeKernelSmoothing
-            : DEFAULT_FLAGS.slopeKernelSmoothing;
     storeSmartPointDragToStorage(flagState.smartPointDrag);
     installWindowAdapters();
     return { ...flagState };
