@@ -207,8 +207,7 @@ import {
     reapplyCurrentGlobalScale,
     updateScaleBaselineForChannel,
     resetGlobalScale,
-    getCurrentScale,
-    setScalingStateEnabled
+    getCurrentScale
 } from './js/core/scaling-utils.js';
 
 // Import Chat Interface
@@ -1061,8 +1060,7 @@ function initializeApplication() {
         reapplyCurrentGlobalScale,
         updateScaleBaselineForChannel,
         resetGlobalScale,
-        getCurrentScale,
-        setScalingStateEnabled
+        getCurrentScale
     };
 
     const chartManagerCompat = {
@@ -1231,17 +1229,11 @@ function initializeApplication() {
             ...(existingCompat.scalingUtils || {})
         };
 
-        compatScalingUtils.setScalingStateEnabled = setScalingStateEnabled;
-
         debugRoot.compat = {
             ...compatExports,
             ...existingCompat,
             scalingUtils: compatScalingUtils
         };
-
-        if (typeof windowRef.setScalingStateEnabled !== 'function') {
-            windowRef.setScalingStateEnabled = setScalingStateEnabled;
-        }
     }
 
     if (windowRef && !Object.getOwnPropertyDescriptor(windowRef, 'chartZoomIndex')) {

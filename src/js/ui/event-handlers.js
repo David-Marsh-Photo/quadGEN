@@ -25,8 +25,7 @@ import {
 } from './chart-manager.js';
 import { setInkLoadThreshold, getInkLoadThreshold } from '../core/ink-load.js';
 import { clearLightBlockingCache } from '../core/light-blocking.js';
-import { getCurrentScale, reapplyCurrentGlobalScale, updateScaleBaselineForChannel as updateScaleBaselineForChannelCore, validateScalingStateSync } from '../core/scaling-utils.js';
-import { SCALING_STATE_FLAG_EVENT } from '../core/scaling-constants.js';
+import { getCurrentScale, reapplyCurrentGlobalScale, updateScaleBaselineForChannel as updateScaleBaselineForChannelCore } from '../core/scaling-utils.js';
 import scalingCoordinator from '../core/scaling-coordinator.js';
 import { updateCompactChannelsList, updateChannelCompactState, updateNoChannelsMessage } from './compact-channels.js';
 import { registerChannelRow, getChannelRow } from './channel-registry.js';
@@ -185,13 +184,10 @@ function isBakedMeasurement(entry) {
     return false;
 }
 
-let unsubscribeScalingStateInput = null;
 let unsubscribeLabNormalizationMode = null;
 let unsubscribeLabSmoothingPercent = null;
 let unsubscribeChannelDensityStore = null;
 let unsubscribeCorrectionMethod = null;
-let scalingStateFlagListenerAttached = false;
-let lastScalingStateValue = null;
 let scaleHandlerRetryCount = 0;
 const SCALE_HANDLER_MAX_RETRIES = 5;
 
@@ -396,90 +392,6 @@ function collectCurveWarnings(entries) {
     });
 
     return warnings;
-}
-
-function syncScaleInputFromStateValue(value) {
-    if (!elements.scaleAllInput) return;
-
-    const numeric = Number(value);
-    const fallback = getCurrentScale();
-    const target = Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
-    const formatted = formatScalePercent(target);
-
-    if (elements.scaleAllInput.value !== formatted) {
-        elements.scaleAllInput.value = formatted;
-    }
-
-    lastScalingStateValue = target;
-}
-
-function configureScalingStateSubscription() {
-    if (!elements.scaleAllInput) {
-        return;
-    }
-
-    if (unsubscribeScalingStateInput) {
-        try {
-            unsubscribeScalingStateInput();
-        } catch (err) {
-            console.warn('Failed to remove scaling state subscription', err);
-        }
-        unsubscribeScalingStateInput = null;
-        if (isBrowser) {
-            globalScope.__scalingStateSubscribed = false;
-        }
-    }
-
-    const enabled = !!(isBrowser && globalScope.__USE_SCALING_STATE);
-    if (!enabled) {
-        lastScalingStateValue = null;
-        syncScaleInputFromStateValue(getCurrentScale());
-        return;
-    }
-
-    let stateManager;
-    try {
-        stateManager = getStateManager();
-    } catch (error) {
-        console.warn('Scaling state manager unavailable:', error);
-        return;
-    }
-
-    if (!stateManager || typeof stateManager.subscribe !== 'function') {
-        return;
-    }
-
-    try {
-        syncScaleInputFromStateValue(stateManager.get('scaling.globalPercent'));
-    } catch (readError) {
-        console.warn('Unable to read scaling.globalPercent from state', readError);
-    }
-
-    unsubscribeScalingStateInput = stateManager.subscribe(['scaling.globalPercent'], (_, newValue) => {
-        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-            console.log('🔁 [SCALE STATE] scaling.globalPercent changed', newValue);
-        }
-        if (!elements.scaleAllInput) return;
-
-        if (lastScalingStateValue != null) {
-            const numeric = Number(newValue);
-            if (Number.isFinite(numeric) && Math.abs(numeric - lastScalingStateValue) < 1e-6) {
-                return;
-            }
-        }
-
-        syncScaleInputFromStateValue(newValue);
-    });
-
-    if (isBrowser) {
-        globalScope.__scalingStateSubscribed = true;
-    }
-
-    try {
-        validateScalingStateSync({ reason: 'subscription:resync', throwOnMismatch: false });
-    } catch (validationError) {
-        console.warn('Scaling state validation failed after subscription resync', validationError);
-    }
 }
 
 function setRevertInProgress(active) {
@@ -2434,23 +2346,13 @@ function initializeScaleHandlers() {
                 initializeScaleHandlers();
             }, 50 * scaleHandlerRetryCount);
         } else {
-            console.warn('Scale handlers unable to locate #scaleAllInput element. Dual-read subscription not initialized.');
+            console.warn('Scale handlers unable to locate #scaleAllInput element.');
         }
         return;
     }
 
     scaleHandlerRetryCount = 0;
-
-    if (isBrowser && !scalingStateFlagListenerAttached) {
-        globalScope.addEventListener(SCALING_STATE_FLAG_EVENT, () => {
-            console.log('🔁 [SCALE STATE] flag event received', globalScope.__USE_SCALING_STATE);
-            configureScalingStateSubscription();
-        });
-        scalingStateFlagListenerAttached = true;
-        globalScope.__scalingStateListenerReady = true;
-    }
-
-    configureScalingStateSubscription();
+    elements.scaleAllInput.value = formatScalePercent(getCurrentScale());
     refreshGlobalScaleLockState();
 
     const MIN_SCALE = 1;

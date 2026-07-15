@@ -3,7 +3,7 @@
 
 import { getStateManager } from './state-manager.js';
 import { elements, getLoadedQuadData, setLoadedQuadData, ensureLoadedQuadData, updateAppState, getAppState, setEditModeFlag } from './state.js';
-import { getCurrentScale, getLegacyScalingSnapshot, restoreLegacyScalingState, updateScaleBaselineForChannel, validateScalingStateSync } from './scaling-utils.js';
+import { getScalingSnapshot, restoreScalingState, updateScaleBaselineForChannel } from './scaling-utils.js';
 import { LinearizationState } from '../data/linearization-utils.js';
 import { setSmartKeyPoints, ControlPoints } from '../curves/smart-curves.js';
 import { InputValidator } from './validation.js';
@@ -265,7 +265,7 @@ export class HistoryManager {
      * @param {string} description - Batch action description
      * @param {Array} channelActions - Array of individual channel actions
      */
-    recordBatchAction(description, channelActions) {
+    recordBatchAction(description, channelActions, options = {}) {
         if (this.isRestoring) {
             return;
         }
@@ -274,7 +274,9 @@ export class HistoryManager {
             timestamp: Date.now(),
             type: 'batch',
             description: description,
-            channelActions: channelActions
+            channelActions: channelActions,
+            scalingBefore: options.scalingBefore ?? null,
+            scalingAfter: options.scalingAfter ?? null
         };
 
         this._pushHistoryEntry({ kind: 'batch', action: batchAction });
@@ -326,72 +328,12 @@ export class HistoryManager {
         }
         currentState.curves.loadedQuadData = loaded;
 
-        const scalingSnapshot = (() => {
-            try {
-                if (typeof getLegacyScalingSnapshot === 'function') {
-                    return getLegacyScalingSnapshot();
-                }
-            } catch (error) {
-                console.warn('history-manager: getLegacyScalingSnapshot failed during snapshot capture', error);
-            }
-
-            try {
-                const percent = typeof getCurrentScale === 'function' ? getCurrentScale() : null;
-                return {
-                    percent,
-                    baselines: null,
-                    maxAllowed: null,
-                    statePercent: null,
-                    stateBaselines: null,
-                    stateMaxAllowed: null,
-                    parity: {
-                        status: 'legacy-only',
-                        percentDelta: 0,
-                        baselineDiffs: [],
-                        maxAllowedDelta: 0
-                    }
-                };
-            } catch (fallbackError) {
-                console.warn('history-manager: getCurrentScale fallback failed during snapshot capture', fallbackError);
-                return {
-                    percent: null,
-                    baselines: null,
-                    maxAllowed: null,
-                    statePercent: null,
-                    stateBaselines: null,
-                    stateMaxAllowed: null,
-                    parity: {
-                        status: 'legacy-only',
-                        percentDelta: null,
-                        baselineDiffs: [],
-                        maxAllowedDelta: null
-                    }
-                };
-            }
-        })();
-
-        const scalingStateSnapshot = (scalingSnapshot.statePercent != null
-            || (scalingSnapshot.stateBaselines && Object.keys(scalingSnapshot.stateBaselines).length > 0)
-            || scalingSnapshot.stateMaxAllowed != null)
-            ? {
-                percent: scalingSnapshot.statePercent,
-                baselines: scalingSnapshot.stateBaselines,
-                maxAllowed: scalingSnapshot.stateMaxAllowed
-            }
-            : null;
-
         const state = {
             version: HISTORY_SNAPSHOT_VERSION,
             timestamp: Date.now(),
             action: actionDescription,
             stateSnapshot: currentState,
-            legacyScaling: {
-                percent: scalingSnapshot.percent,
-                baselines: scalingSnapshot.baselines,
-                maxAllowed: scalingSnapshot.maxAllowed
-            },
-            scalingStateSnapshot,
-            scalingParity: scalingSnapshot.parity
+            scaling: getScalingSnapshot()
         };
 
         this._pushHistoryEntry({ kind: 'snapshot', state, action: actionDescription });
@@ -478,15 +420,7 @@ export class HistoryManager {
                 return { success: false, message: 'Unknown action type' };
             }
 
-            const result = { success: true, message };
-            try {
-                validateScalingStateSync({ reason: 'history:undo', throwOnMismatch: false });
-            } catch (validationError) {
-                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-                    console.warn('HistoryManager undo parity validation failed', validationError);
-                }
-            }
-            return result;
+            return { success: true, message };
         } catch (error) {
             console.error('Undo failed:', error);
             return { success: false, message: `Undo failed: ${error.message}` };
@@ -571,15 +505,7 @@ export class HistoryManager {
                 return { success: false, message: 'Unknown action type' };
             }
 
-            const result = { success: true, message };
-            try {
-                validateScalingStateSync({ reason: 'history:redo', throwOnMismatch: false });
-            } catch (validationError) {
-                if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-                    console.warn('HistoryManager redo parity validation failed', validationError);
-                }
-            }
-            return result;
+            return { success: true, message };
         } catch (error) {
             console.error('Redo failed:', error);
             return { success: false, message: `Redo failed: ${error.message}` };
@@ -855,6 +781,7 @@ export class HistoryManager {
         for (let i = action.channelActions.length - 1; i >= 0; i--) {
             this.undoChannelAction(action.channelActions[i]);
         }
+        this.restoreScaling(action.scalingBefore);
     }
 
     /**
@@ -866,6 +793,7 @@ export class HistoryManager {
         for (const channelAction of action.channelActions) {
             this.redoChannelAction(channelAction);
         }
+        this.restoreScaling(action.scalingAfter);
     }
 
     /**
@@ -907,7 +835,7 @@ export class HistoryManager {
                     });
             }
 
-            this.applyLegacyScaling(normalized.legacyScaling);
+            this.restoreScaling(normalized.scaling);
         } else {
             this.restoreLegacySnapshot(normalized);
         }
@@ -976,35 +904,16 @@ export class HistoryManager {
             return {
                 ...snapshot,
                 version: HISTORY_SNAPSHOT_VERSION,
-                legacyScaling: snapshot.legacyScaling ?? null
+                scaling: snapshot.scaling ?? null
             };
         }
 
         return snapshot;
     }
 
-    applyLegacyScaling(legacyScaling) {
-        if (!legacyScaling || typeof legacyScaling.percent !== 'number') {
-            return;
-        }
-
-        const applyScale = (() => {
-            if (typeof globalScope.applyGlobalScale === 'function') {
-                return globalScope.applyGlobalScale;
-            }
-            if (globalScope.__quadDebug?.scalingUtils?.applyGlobalScale) {
-                return globalScope.__quadDebug.scalingUtils.applyGlobalScale;
-            }
-            return null;
-        })();
-
-        if (applyScale) {
-            try {
-                restoreLegacyScalingState(legacyScaling);
-                applyScale(legacyScaling.percent, { priority: 'history-restore', metadata: { trigger: 'historyRestore' } });
-            } catch (error) {
-                console.warn('history-manager: failed to reapply legacy scaling percent', error);
-            }
+    restoreScaling(scaling) {
+        if (scaling && typeof scaling.percent === 'number') {
+            restoreScalingState(scaling);
         }
     }
 
@@ -1595,7 +1504,7 @@ export class HistoryManager {
                 snapshot.curves = {};
             }
             snapshot.curves.loadedQuadData = currentLoaded ? JSON.parse(JSON.stringify(currentLoaded)) : null;
-            return { stateSnapshot: snapshot };
+            return { stateSnapshot: snapshot, scaling: getScalingSnapshot() };
         } catch (err) {
             console.warn('Failed to capture history transaction snapshot:', err);
             return null;
@@ -1651,8 +1560,8 @@ export function recordUIAction(uiType, oldValue, newValue, description) {
     return getHistoryManager().recordUIAction(uiType, oldValue, newValue, description);
 }
 
-export function recordBatchAction(description, channelActions) {
-    return getHistoryManager().recordBatchAction(description, channelActions);
+export function recordBatchAction(description, channelActions, options = {}) {
+    return getHistoryManager().recordBatchAction(description, channelActions, options);
 }
 
 export function captureState(actionDescription = 'Curve modification') {

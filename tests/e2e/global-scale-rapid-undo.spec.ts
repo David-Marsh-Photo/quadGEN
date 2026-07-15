@@ -1,8 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { navigateToApp, waitForAppReady } from '../utils/history-helpers';
-import { waitForScaleComplete, captureScalingState, compareScalingStates } from '../utils/scaling-test-helpers';
-
-const SCALE_INPUT = '#scaleAllInput';
+import { captureScalingState, compareScalingStates } from '../utils/scaling-test-helpers';
 
 async function getHistorySnapshot(page) {
   return page.evaluate(() => {
@@ -16,7 +14,7 @@ async function getHistorySnapshot(page) {
 }
 
 test.describe('Global scale rapid scrub history', () => {
-  test('rapid slider scrub preserves history and undo restores baseline', async ({ page }) => {
+  test('undo and redo restore the canonical scale state', async ({ page }) => {
     await navigateToApp(page);
     await waitForAppReady(page);
 
@@ -53,16 +51,11 @@ test.describe('Global scale rapid scrub history', () => {
     // Undo should move back to 50%
     await page.evaluate(() => (window as typeof window & { undo?: () => void }).undo?.());
     const afterFirstUndo = await captureScalingState(page);
+    expect(afterFirstUndo.scalePercent).toBe(50);
 
-    let restoredState = afterFirstUndo;
-    if (typeof afterFirstUndo.scalePercent === 'number' && Math.abs(afterFirstUndo.scalePercent - 50) <= 0.5) {
-      await page.evaluate(() => (window as typeof window & { undo?: () => void }).undo?.());
-      const afterSecondUndo = await captureScalingState(page);
-      expect(afterSecondUndo.scalePercent).toBe(100);
-      restoredState = afterSecondUndo;
-    } else {
-      expect(afterFirstUndo.scalePercent).toBe(100);
-    }
+    await page.evaluate(() => (window as typeof window & { undo?: () => void }).undo?.());
+    const restoredState = await captureScalingState(page);
+    expect(restoredState.scalePercent).toBe(100);
 
     const diff = compareScalingStates(initialState, restoredState);
     expect(diff.scaleDelta).toBe(0);
@@ -71,6 +64,10 @@ test.describe('Global scale rapid scrub history', () => {
       expect(Math.abs(change.endDelta ?? 0)).toBeLessThanOrEqual(1);
     }
 
-    const historyAfterUndo = await getHistorySnapshot(page);
+    await page.evaluate(() => (window as typeof window & { redo?: () => void }).redo?.());
+    expect((await captureScalingState(page)).scalePercent).toBe(50);
+
+    await page.evaluate(() => (window as typeof window & { redo?: () => void }).redo?.());
+    expect((await captureScalingState(page)).scalePercent).toBe(100);
   });
 });

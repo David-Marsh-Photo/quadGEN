@@ -8,17 +8,12 @@ const mockElements = {
 
 const mockLoadedData = { keyPoints: {}, keyPointsMeta: {}, sources: {} };
 
-const getCurrentScaleMock = vi.fn(() => 100);
 const getScalingSnapshotMock = vi.fn(() => ({
   percent: 87,
   baselines: { MK: 40200 },
-  maxAllowed: 163,
-  statePercent: 87,
-  stateBaselines: { MK: 40200 },
-  stateMaxAllowed: 163,
-  parity: { status: 'ok', percentDelta: 0, baselineDiffs: [], maxAllowedDelta: 0 }
+  maxAllowed: 163
 }));
-const restoreLegacyScalingStateMock = vi.fn();
+const restoreScalingStateMock = vi.fn();
 
 vi.mock('../../src/js/core/state.js', async () => {
   const actual = await vi.importActual('../../src/js/core/state.js');
@@ -69,9 +64,8 @@ vi.mock('../../src/js/ui/edit-mode.js', () => ({
 }));
 
 vi.mock('../../src/js/core/scaling-utils.js', () => ({
-  getCurrentScale: getCurrentScaleMock,
-  getLegacyScalingSnapshot: getScalingSnapshotMock,
-  restoreLegacyScalingState: restoreLegacyScalingStateMock
+  getScalingSnapshot: getScalingSnapshotMock,
+  restoreScalingState: restoreScalingStateMock
 }));
 
 const originalWindow = global.window;
@@ -105,7 +99,7 @@ describe('HistoryManager snapshot schema', () => {
     QuadGenStateManager = stateManagerModule.QuadGenStateManager;
     stateManager = new QuadGenStateManager();
     history = new HistoryManager(stateManager);
-    restoreLegacyScalingStateMock.mockReset();
+    restoreScalingStateMock.mockReset();
   });
 
   afterEach(() => {
@@ -114,16 +108,11 @@ describe('HistoryManager snapshot schema', () => {
     global.triggerInkChartUpdate = originalTriggerInkChartUpdate;
   });
 
-  it('captures versioned snapshots with legacy scaling metadata', () => {
-    getCurrentScaleMock.mockReturnValueOnce(87);
+  it('captures versioned snapshots with scaling metadata', () => {
     getScalingSnapshotMock.mockReturnValueOnce({
       percent: 87,
       baselines: { MK: 40200 },
-      maxAllowed: 163,
-      statePercent: 87,
-      stateBaselines: { MK: 40200 },
-      stateMaxAllowed: 163,
-      parity: { status: 'ok', percentDelta: 0, baselineDiffs: [], maxAllowedDelta: 0 }
+      maxAllowed: 163
     });
     history.captureState('Test Capture');
 
@@ -132,38 +121,26 @@ describe('HistoryManager snapshot schema', () => {
     expect(entry.kind).toBe('snapshot');
     expect(entry.state.version).toBe(2);
     expect(getScalingSnapshotMock).toHaveBeenCalled();
-    expect(entry.state.legacyScaling).toMatchObject({ percent: 87, baselines: { MK: 40200 }, maxAllowed: 163 });
-    expect(entry.state.scalingStateSnapshot).toMatchObject({ percent: 87, baselines: { MK: 40200 }, maxAllowed: 163 });
-    expect(entry.state.scalingParity).toEqual({ status: 'ok', percentDelta: 0, baselineDiffs: [], maxAllowedDelta: 0 });
+    expect(entry.state.scaling).toMatchObject({ percent: 87, baselines: { MK: 40200 }, maxAllowed: 163 });
     expect(entry.state.stateSnapshot.app.editMode).toBe(false);
   });
 
-  it('hydrates legacy scaling baselines on snapshot restore', () => {
+  it('hydrates scaling baselines on snapshot restore', () => {
     const snapshot = {
       version: 2,
       timestamp: Date.now(),
       action: 'After: Scale 120%',
       stateSnapshot: stateManager.getState(),
-      legacyScaling: {
-        percent: 120,
-        baselines: { MK: 41000 },
-        maxAllowed: 159,
-        statePercent: 120,
-        stateBaselines: { MK: 41000 },
-        stateMaxAllowed: 159,
-        parity: { status: 'ok', percentDelta: 0, baselineDiffs: [], maxAllowedDelta: 0 }
-      },
-      scalingStateSnapshot: {
+      scaling: {
         percent: 120,
         baselines: { MK: 41000 },
         maxAllowed: 159
-      },
-      scalingParity: { status: 'ok', percentDelta: 0, baselineDiffs: [], maxAllowedDelta: 0 }
+      }
     };
 
     history.restoreSnapshot(snapshot);
 
-    expect(restoreLegacyScalingStateMock).toHaveBeenCalledWith(snapshot.legacyScaling);
+    expect(restoreScalingStateMock).toHaveBeenCalledWith(snapshot.scaling);
   });
 
   it('restores v1 snapshots that include stateSnapshot without version', () => {

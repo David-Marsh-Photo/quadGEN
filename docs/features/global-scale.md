@@ -14,10 +14,10 @@
 ## Canonical Path
 
 1. `src/js/core/scaling-coordinator.js` validates the request, opens one history transaction, invokes the core scaler, and commits or rolls back.
-2. `src/js/core/scaling-utils.js` owns the synchronous endpoint math, baseline cache, clamping, Smart-curve rescaling, and batch history details.
+2. `src/js/core/scaling-utils.js` owns the canonical Scale percent, baseline cache, synchronous endpoint math, clamping, Smart-curve rescaling, and batch history details.
 3. On success, the coordinator refreshes the chart, preview, session status, and user-facing status message.
 
-There is no coordinator rollout flag, alternate direct window bridge, request queue, priority system, or scaling telemetry buffer. The core scaler is synchronous, and the Scale field already debounces rapid input, so those layers did not provide a distinct product behavior.
+There is no coordinator rollout flag, centralized-state mirror, alternate direct window bridge, request queue, priority system, or scaling telemetry/audit buffer. The scaler writes the Scale field directly, and the coordinator performs the required chart refresh, so state subscriptions did not provide a distinct product behavior.
 
 ## Expected Behavior
 
@@ -33,6 +33,7 @@ There is no coordinator rollout flag, alternate direct window bridge, request qu
 
 - A user-initiated scale is committed as one undoable transaction.
 - If the core scaler fails after mutation begins, the transaction restores the pre-scale snapshot.
+- Batch history stores the before/after Scale percent and cached baselines alongside channel endpoints so undo and redo restore one coherent state.
 - Automatic reapply operations pass `skipHistory: true`, avoiding no-op history entries.
 
 ### Per-channel edits while scaled
@@ -62,7 +63,7 @@ There is no coordinator rollout flag, alternate direct window bridge, request qu
 ## Diagnostics
 
 - `window.scalingCoordinator.scale(percent, options)` and `window.applyGlobalScale(percent, options)` use the canonical transaction-wrapped path.
-- `window.__quadDebug.scalingUtils` exposes the core scaler and baseline helpers for development diagnostics.
+- `window.__quadDebug.scalingUtils` exposes the core scaler plus its current Scale snapshot and baseline helpers for development diagnostics.
 
 ## References
 

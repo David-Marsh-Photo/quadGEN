@@ -50,14 +50,6 @@ vi.mock('../../src/js/core/processing-pipeline.js', () => ({
   }
 }));
 
-vi.mock('../../src/js/core/scaling-utils.js', () => ({
-  getCurrentScale: () => ({ percent: 100 })
-}));
-
-vi.mock('../../src/js/core/scaling-constants.js', () => ({
-  SCALING_STATE_FLAG_EVENT: 'scaling-event'
-}));
-
 const mockControlPoints = {
   get: () => ({ points: [] }),
   set: () => {},

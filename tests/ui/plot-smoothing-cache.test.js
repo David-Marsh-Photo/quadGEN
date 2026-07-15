@@ -78,13 +78,11 @@ vi.mock('../../src/js/core/scaling-utils.js', () => ({
   getCurrentScale: () => 100,
   reapplyCurrentGlobalScale: vi.fn(),
   updateScaleBaselineForChannel: vi.fn(),
-  updateScaleBaselineForChannelCore: vi.fn(),
-  validateScalingStateSync: () => true
+  updateScaleBaselineForChannelCore: vi.fn()
 }));
 
 vi.mock('../../src/js/core/scaling-coordinator.js', () => ({
-  setEnabled: vi.fn(),
-  withLock: async (fn) => (typeof fn === 'function' ? fn() : undefined)
+  default: { scale: vi.fn() }
 }));
 
 vi.mock('../../src/js/ui/compact-channels.js', () => ({

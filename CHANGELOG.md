@@ -9,7 +9,7 @@ This changelog follows a concise, user-facing format. Engineering details live i
 - _Nothing yet._
 
 ### Changed
-- Global Scale now uses one rollback-safe transaction path for the Scale field, Lab Tech, and compatibility helpers; the unused rollout flag and diagnostic queue/telemetry layers were removed.
+- Global Scale now uses one rollback-safe transaction and one canonical percent/baseline state for the Scale field, Lab Tech, history, and compatibility helpers; the unused rollout flags, mirrored state, subscriptions, and diagnostic queue/telemetry layers were removed.
 
 ### Fixed
 - Density Solver no longer honors obsolete hidden weighting values from browser storage; LAB redistribution always uses the documented normalized path.

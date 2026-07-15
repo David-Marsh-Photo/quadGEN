@@ -427,14 +427,6 @@ node test-undo-regression.js
 - `tests/e2e/triforce-correction-audit.spec.ts` drives the Options modal with TRIFORCE datasets, captures correction snapshots at 5 % and 95 %, and saves a JSON artifact (see `tests/e2e/utils/lab-flow.ts` for the shared harness). Use this when validating LAB smoothing, density redistribution, or regression reports.
 - `tests/e2e/correction-gain-100-baseline.spec.ts` validates LAB correction gain behavior at 100% gain, ensuring LAB-corrected curves are applied (not baseline), and that 99% and 100% gain produce identical results. This test prevents regression of the "100% shows less correction than 99%" bug fixed in October 2025.
 
-## Global Scale Undo Screenshot Check
-Goal: capture before/after artifacts that confirm the global scale batch history entry.
-
-1. Run `npx playwright test tests/history/batch_operations.spec.ts --reporter=line`.
-2. The test saves `batch-scale-applied.png` and `batch-scale-after-undo.png` in the Playwright output directory (for example, `test-results/tests-history-batch_operations-spec.ts/`).
-3. Attach those PNGs to the release log or manual QA report so a reviewer can visually confirm the pre-scale and post-undo states.
-4. If the screenshots show mismatched toggle states or out-of-date filenames, re-run the regression suite; the undo stack may not be recording batch actions correctly.
-
 ## Automated Coverage: Global Scaling *(Phase 0 – Foundation)*
 Phase 0 Track 4 regression guards now cover the following flows via Playwright (run automatically by `npm run test:e2e:gate`):
 
@@ -446,20 +438,5 @@ Phase 0 Track 4 regression guards now cover the following flows via Playwrig
 
 Phase 0 – Foundation tags in the regression matrix:
 - **Baseline cache** coverage — recorded against the three Vitest scenarios in `tests/core/scaling-utils-baseline.test.js`.
-- **Smart rescaling** coverage — mapped to the audit-mode assisted Playwright scenarios above.
+- **Smart rescaling** coverage — mapped to the retained Playwright scenarios above.
 - **Undo/Revert** coverage — tied to `global-scale-rapid-undo.spec.ts` and `global-scale-measurement-revert.spec.ts`.
-
-## Scaling State – Manual Acceptance (Single Operator)
-Use this quick pass whenever the scaling-state flag defaults to ON or after making related changes. It complements the automated harness by confirming the UI, history, and telemetry behave as expected in a real session.
-
-1. Launch the latest `index.html` build (post-`npm run build:agent`) and confirm `Help → Version History` loads normally without the former Scaling State audit panel.
-2. In the Global Scale panel, enter `135` and press Enter. Expect the field to snap back to `100`, reflecting the guard against values above the cached maximum.
-3. Click **Undo** and **Redo** once each. Verify the scale input returns to the prior value (`90` after redo in the current workflow) and that no console warnings/errors appear in DevTools.
-4. Open the DevTools console and run `window.validateScalingStateSync()`; ensure it logs success without mismatches.
-5. Capture the current scaling audit snapshot (if available) via:
-   ```js
-   JSON.stringify(window.scalingStateAudit, null, 2)
-   ```
-   Attach the JSON to your QA notes alongside the harness artifact names used for this release.
-
-If any step fails, toggle the flag off with `window.setScalingStateEnabled(false)`, re-run the harness to capture recovery metrics, and file an issue before re-enabling the flag.

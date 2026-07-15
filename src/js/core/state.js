@@ -9,12 +9,6 @@ import { ensureBellShiftContainer, syncBellShiftFromMeta, clearBellShiftEntry } 
 
 const legacyBridge = getLegacyStateBridge();
 
-if (typeof window !== 'undefined') {
-    if (typeof window.__USE_SCALING_STATE === 'undefined') {
-        window.__USE_SCALING_STATE = true;
-    }
-}
-
 /**
  * Printer configurations for different Epson models
  */
@@ -1042,10 +1036,6 @@ export function resetAppState() {
     // Correction state
     appState.correctionMethod = getCorrectionMethod();
     appState.correctionGain = 1;
-
-    // Scaling state
-    appState.scaleAllPercent = 100;
-    appState.scaleBaselineEnds = null;
 
     // Sync legacy bridges
     syncWindowLoadedQuadData();
