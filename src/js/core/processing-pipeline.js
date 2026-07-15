@@ -21,7 +21,6 @@ import {
     isCubeEndpointAnchoringEnabled,
     isRedistributionSmoothingWindowEnabled,
     getRedistributionSmoothingWindowConfig,
-    isCompositePerSampleCeilingEnabled,
     isSlopeKernelSmoothingEnabled
 } from './feature-flags.js';
 import {
@@ -804,13 +803,11 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
         forcedAutoRaiseMeta.set(name, entry);
     });
 
-    const perSampleCeilingEnabled = isCompositePerSampleCeilingEnabled();
     const smoothingEnabled = isRedistributionSmoothingWindowEnabled();
     const smoothingContext = smoothingEnabled
         ? createRedistributionSmoothingContext(getRedistributionSmoothingWindowConfig(), {
             forcedChannels: forcedAutoRaiseChannels,
-            forcedChannelMetadata: forcedAutoRaiseMeta,
-            perSampleCeiling: perSampleCeilingEnabled
+            forcedChannelMetadata: forcedAutoRaiseMeta
         })
         : null;
     const cumulativeDensity = {};
@@ -838,7 +835,6 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
         const alphaRaw = Number.isFinite(rawConfig.alpha) ? rawConfig.alpha : 1.5;
         const alpha = Math.max(0.5, Math.min(4, alphaRaw));
         const momentumBias = Number.isFinite(rawConfig.momentumBias) ? rawConfig.momentumBias : 0;
-        const perSampleActive = extras && extras.perSampleCeiling === true;
         return {
             config: {
                 minSamples,
@@ -848,13 +844,12 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
                 alpha,
                 momentumBias,
                 maxIncomingScan: Math.max(maxSamples, 6),
-                allowShortWindows: perSampleActive
+                allowShortWindows: true
             },
             sampleRecords: new Array(CURVE_RESOLUTION).fill(null),
             channelHistory: new Map(),
             saturationByChannel: new Map(),
             clampIndicesByChannel: new Map(),
-            perSampleCeiling: perSampleActive,
             windows: [],
             debugRows: [],
             nextWindowId: 1,
@@ -1178,14 +1173,13 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
         if (!context) return;
         const forcedChannels = context.forcedChannels instanceof Set ? context.forcedChannels : null;
         const clampMap = context.clampIndicesByChannel instanceof Map ? context.clampIndicesByChannel : null;
-        const perSampleCeilingActive = context.perSampleCeiling === true;
         context.channelHistory.forEach((history, channel) => {
             if (!Array.isArray(history) || !history.length) {
                 return;
             }
 
             let handledClamp = false;
-            if (perSampleCeilingActive && clampMap) {
+            if (clampMap) {
                 const clampIndices = clampMap.get(channel);
                 if (Array.isArray(clampIndices) && clampIndices.length) {
                     const uniqueClampIndices = Array.from(new Set(clampIndices)).sort((a, b) => a - b);
@@ -1581,9 +1575,6 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
         coverageBufferThreshold.set(name, thresholdAbsolute);
         coverageBufferThresholdNormalized.set(name, 0);
         coverageUsage.set(name, 0);
-        if (!perSampleCeilingEnabled) {
-            remainingByChannel[name] = Math.max(0, Number.isFinite(thresholdAbsolute) ? thresholdAbsolute : 0);
-        }
     });
 
     for (let i = 1; i < CURVE_RESOLUTION; i += 1) {
@@ -1756,7 +1747,7 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
         coverageClampEvents
     });
     const smoothingWindows = smoothingContext ? smoothingContext.windows.slice() : [];
-    if (perSampleCeilingEnabled && smoothingContext && smoothingWindows.length === 0) {
+    if (smoothingContext && smoothingWindows.length === 0) {
         const synthetic = [];
         Object.entries(coverageSummaryPlain || {}).forEach(([channel, entry]) => {
             if (!entry || typeof entry !== 'object') {
@@ -1822,8 +1813,7 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
         smoothingWindows,
         smoothingConfig: smoothingContext ? { ...smoothingContext.config } : null,
         remainingByChannel: { ...remainingByChannel },
-        smoothingContext,
-        perSampleCeilingEnabled
+        smoothingContext
     };
     } catch (error) {
         console.error('[computeCompositeDensityWeights] Error computing density weights:', error);
@@ -1846,8 +1836,7 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
             smoothingWindows: null,
             smoothingConfig: null,
             remainingByChannel: {},
-            smoothingContext: null,
-            perSampleCeilingEnabled: false
+            smoothingContext: null
         };
     }
 }
@@ -1878,7 +1867,6 @@ export function finalizeCompositeLabRedistribution() {
         return null;
     }
 
-    const perSampleCeilingEnabled = isCompositePerSampleCeilingEnabled();
     const analysisOnly = compositeLabSession.analysisOnly === true;
 
     const { channels, endValues, baseCurves } = compositeLabSession;
@@ -1887,7 +1875,6 @@ export function finalizeCompositeLabRedistribution() {
     if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
         console.log('[COMPOSITE] finalize redistribution', {
             activeChannels: channels?.length || 0,
-            perSampleCeilingEnabled,
             smoothingEnabled: isRedistributionSmoothingWindowEnabled(),
             autoCompute: compositeLabSession.autoComputeDensity,
             debugEnabled: isCompositeDebugEnabled()
@@ -2026,8 +2013,6 @@ export function finalizeCompositeLabRedistribution() {
             channel,
             Array.isArray(events) ? events.slice() : []
         ]));
-    compositeLabSession.perSampleCeilingEnabled = perSampleCeilingEnabled;
-
     const coverageLimits = compositeLabSession.densityCoverageLimits instanceof Map
         ? compositeLabSession.densityCoverageLimits
         : new Map();
@@ -2249,7 +2234,6 @@ export function finalizeCompositeLabRedistribution() {
                 });
                 return out;
             })(),
-            perSampleCeilingEnabled,
             smoothingWindows: Array.isArray(compositeLabSession.smoothingWindows)
                 ? compositeLabSession.smoothingWindows.map((entry) => (
                     entry ? {
@@ -2595,9 +2579,7 @@ export function finalizeCompositeLabRedistribution() {
             } else {
                 coverageUsage.set(name, info.normalized);
                 coverageBufferThresholdNormalized.set(name, 1);
-                if (perSampleCeilingEnabled) {
-                    remainingByChannel[name] = Math.max(0, densityWeight * (info.effectiveHeadroomNormalized ?? info.headroomNormalized));
-                }
+                remainingByChannel[name] = Math.max(0, densityWeight * (info.effectiveHeadroomNormalized ?? info.headroomNormalized));
             }
 
             cumulativeNormalizedStack = Math.max(cumulativeNormalizedStack, info.normalized);
@@ -3392,8 +3374,7 @@ export function finalizeCompositeLabRedistribution() {
 
             const prevNormalized = info.normalized;
             let newNormalized = clamp01(prevNormalized + clampedDelta);
-            if (perSampleCeilingEnabled && Number.isFinite(thresholdNormalized) &&
-                newNormalized > thresholdNormalized + DENSITY_EPSILON) {
+            if (Number.isFinite(thresholdNormalized) && newNormalized > thresholdNormalized + DENSITY_EPSILON) {
                 newNormalized = thresholdNormalized;
                 truncatedByThreshold = true;
             }
@@ -3421,7 +3402,7 @@ export function finalizeCompositeLabRedistribution() {
                 info.shadowBlendAppliedNormalized = (info.shadowBlendAppliedNormalized || 0) + appliedMagnitude;
             }
             info.headroom = Math.max(0, info.endValue - newValue);
-            if (perSampleCeilingEnabled && Number.isFinite(thresholdNormalized)) {
+            if (Number.isFinite(thresholdNormalized)) {
                 info.headroomNormalized = Math.max(0, thresholdNormalized - info.normalized);
             } else {
                 info.headroomNormalized = info.endValue > 0 ? info.headroom / info.endValue : 0;
@@ -3487,7 +3468,7 @@ export function finalizeCompositeLabRedistribution() {
             info.reserveAllowanceRemaining = Math.min(allowanceRemainingValue, postReserveMeta.allowance);
             info.blendLimited = truncatedByBlend;
 
-            if (perSampleCeilingEnabled && desiredDelta > 0) {
+            if (desiredDelta > 0) {
                 const normalizedApplied = info.normalized - prevNormalized;
                 const desiredNormalizedAfter = clamp01(prevNormalized + desiredDelta);
                 const overflowNormalized = Math.max(0, desiredNormalizedAfter - info.normalized);
@@ -3512,7 +3493,7 @@ export function finalizeCompositeLabRedistribution() {
                         floorNormalized: info.coverageFloorNormalized ?? null
                     });
                     coverageClampEvents.set(name, list);
-                    if (smoothingContext && smoothingContext.perSampleCeiling === true) {
+                    if (smoothingContext) {
                         const clampMap = smoothingContext.clampIndicesByChannel instanceof Map
                             ? smoothingContext.clampIndicesByChannel
                             : null;

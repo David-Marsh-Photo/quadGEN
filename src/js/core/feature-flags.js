@@ -56,7 +56,6 @@ const DEFAULT_FLAGS = {
     labBaselineSmoothing: true,
     redistributionSmoothingWindow: false,
     autoRaiseInkLimitsOnImport: false,
-    compositePerSampleCeiling: true,
     slopeKernelSmoothing: true
 };
 
@@ -202,15 +201,6 @@ export function setRedistributionSmoothingWindowEnabled(enabled) {
     return flagState.redistributionSmoothingWindow;
 }
 
-export function isCompositePerSampleCeilingEnabled() {
-    return !!flagState.compositePerSampleCeiling;
-}
-
-export function setCompositePerSampleCeilingEnabled(enabled) {
-    flagState.compositePerSampleCeiling = !!enabled;
-    return flagState.compositePerSampleCeiling;
-}
-
 export function isSlopeKernelSmoothingEnabled() {
     return !!flagState.slopeKernelSmoothing;
 }
@@ -298,14 +288,6 @@ function installWindowAdapters() {
         window.getRedistributionSmoothingWindowConfig = () => getRedistributionSmoothingWindowConfig();
     }
 
-    if (typeof window.enableCompositePerSampleCeiling !== 'function') {
-        window.enableCompositePerSampleCeiling = (enabled = true) => setCompositePerSampleCeilingEnabled(enabled);
-    }
-
-    if (typeof window.isCompositePerSampleCeilingEnabled !== 'function') {
-        window.isCompositePerSampleCeilingEnabled = () => isCompositePerSampleCeilingEnabled();
-    }
-
     if (typeof window.enableSlopeKernelSmoothing !== 'function') {
         window.enableSlopeKernelSmoothing = (enabled = true) => setSlopeKernelSmoothingEnabled(enabled);
     }
@@ -335,8 +317,6 @@ registerDebugNamespace('featureFlags', {
     isRedistributionSmoothingWindowEnabled,
     configureRedistributionSmoothingWindow,
     getRedistributionSmoothingWindowConfig,
-    setCompositePerSampleCeilingEnabled,
-    isCompositePerSampleCeilingEnabled,
     setSlopeKernelSmoothingEnabled,
     isSlopeKernelSmoothingEnabled
 }, {
@@ -368,10 +348,6 @@ export function resetFeatureFlags(overrides = {}) {
         Object.prototype.hasOwnProperty.call(overrides, 'autoRaiseInkLimitsOnImport')
             ? !!overrides.autoRaiseInkLimitsOnImport
             : DEFAULT_FLAGS.autoRaiseInkLimitsOnImport;
-    flagState.compositePerSampleCeiling =
-        Object.prototype.hasOwnProperty.call(overrides, 'compositePerSampleCeiling')
-            ? !!overrides.compositePerSampleCeiling
-            : DEFAULT_FLAGS.compositePerSampleCeiling;
     flagState.slopeKernelSmoothing =
         Object.prototype.hasOwnProperty.call(overrides, 'slopeKernelSmoothing')
             ? !!overrides.slopeKernelSmoothing

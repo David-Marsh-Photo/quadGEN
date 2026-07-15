@@ -254,8 +254,7 @@ function cloneSummary(summary) {
             : [],
         autoRaiseContext: summary.autoRaiseContext && typeof summary.autoRaiseContext === 'object'
             ? { ...summary.autoRaiseContext }
-            : null,
-        perSampleCeilingEnabled: summary.perSampleCeilingEnabled === true
+            : null
     };
     return clone;
 }

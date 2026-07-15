@@ -55,7 +55,7 @@ LAB delta / ink delta request
 | Effective headroom | `headroomNormalized − active reserve` | Gate ladder promotion | Creates sudden “no capacity” state the moment reserve outweighs remaining headroom. |
 | Reserve release taper | Scale LK delta once effective headroom < ~9× reserve | Slow the fall-off after crest | Works only after ladder already saturated; doesn’t mitigate front-side surge. |
 | Release smoothing | Optional window (`isRedistributionSmoothingWindowEnabled`) | Even out sudden changes over ~3 samples | No effect when guard forces delta to zero (e.g., effective headroom = 0). |
-| Per-sample ceiling flag | `isCompositePerSampleCeilingEnabled` | Control the explicit per-sample guard | If disabled, ladder capacity bookkeeping still constrains output. |
+| Per-sample ceiling | Buffered coverage clamp | Enforce the measured ceiling on every sample | Combines with reserve and ladder capacity bookkeeping. |
 | Auto-raise / End limits | `scaleChannelEndsByPercent`, end guard | Ensure End isn’t exceeded | When global scale is active, can reduce available headroom before ladder runs. |
 
 ### Key overlaps

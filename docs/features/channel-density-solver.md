@@ -28,7 +28,6 @@ This document is the single source of truth for the solver’s inputs, outputs, 
 | `coverageUsage` | Running sum of each channel’s contribution across the ramp | Solver |
 | `densityLadder` | Channel ordering from lightest effective density to darkest | Solver |
 | `availableCapacity` | Effective headroom after buffers/reserves | Solver |
-| `perSampleCeilingEnabled` | Toggle for composite coverage guard | UI option (auto-enabled) |
 
 All normalised values live in printer space: 0 represents paper white, 1 represents the darkest achievable density.
 
@@ -69,8 +68,7 @@ Manual overrides (fixed density entries, end-value constraints) supersede solved
 
 ## 5. Smoothing, Ceilings & Release
 ### 5.1 Per-sample Ceiling Guard
-- Enabled by default (`compositePerSampleCeiling`).  
-- When disabled, solver still tracks usage but does not clamp; intended only for diag sessions.
+- Always active: every sample is clamped to the channel's buffered coverage ceiling while the solver tracks usage and overflow diagnostics.
 
 ### 5.2 Redistribution Smoothing Windows
 - Window sizing constants: `REDISTRIBUTION_WINDOW_MIN = 3`, `REDISTRIBUTION_WINDOW_MAX = 9`, `REDISTRIBUTION_WINDOW_TARGET_SPAN = 0.07` (fraction of input domain).  
