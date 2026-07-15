@@ -102,4 +102,26 @@ test.describe('Options correction method', () => {
         .toBeGreaterThanOrEqual(3);
     });
   }
+
+  test('contains keyboard focus and restores the Options trigger on Escape', async ({ page }) => {
+    await page.goto(INDEX_URL);
+
+    const trigger = page.locator('#optionsBtn');
+    const modal = page.locator('#optionsModal');
+    const firstControl = page.getByRole('button', { name: 'What does the correction method control?' });
+    const closeButton = page.locator('#closeOptionsBtn');
+
+    await trigger.focus();
+    await page.keyboard.press('Enter');
+    await expect(closeButton).toBeFocused();
+
+    await page.keyboard.press('Tab');
+    await expect(firstControl).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(closeButton).toBeFocused();
+
+    await page.keyboard.press('Escape');
+    await expect(modal).toBeHidden();
+    await expect(trigger).toBeFocused();
+  });
 });
