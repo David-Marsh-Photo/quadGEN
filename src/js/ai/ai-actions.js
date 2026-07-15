@@ -28,6 +28,10 @@ import { parseManualLstarData } from '../parsers/file-parsers.js';
 import { setPrinter } from '../ui/printer-manager.js';
 import { computeGlobalRevertState, resetSmartPointsForChannels, resetChannelSmartPointsToMeasurement } from '../ui/revert-controls.js';
 import { maybeAutoRaiseInkLimits } from '../core/auto-raise-on-import.js';
+import {
+    CORRECTION_METHODS,
+    setCorrectionMethod as setCorrectionMethodPreference
+} from '../core/correction-method.js';
 
 const globalScope = typeof window !== 'undefined' ? window : globalThis;
 const isBrowser = typeof document !== 'undefined';
@@ -1326,18 +1330,18 @@ export class QuadGenActions {
                 return { success: false, message: 'method must be "simple" or "density_solver"' };
             }
 
-            if (typeof globalScope.enableSimpleScalingCorrection === 'function') {
-                const enableSimple = method === 'simple';
-                const result = globalScope.enableSimpleScalingCorrection(enableSimple);
-                return {
-                    success: true,
-                    message: `Correction method set to ${method === 'simple' ? 'Simple Scaling' : 'Density Solver'}`,
-                    method: method,
-                    enabled: result
-                };
-            } else {
-                return { success: false, message: 'enableSimpleScalingCorrection function not available' };
-            }
+            const selected = setCorrectionMethodPreference(
+                method === 'simple'
+                    ? CORRECTION_METHODS.SIMPLE_SCALING
+                    : CORRECTION_METHODS.DENSITY_SOLVER
+            );
+            updateAppState({ correctionMethod: selected });
+            return {
+                success: true,
+                message: `Correction method set to ${method === 'simple' ? 'Simple Scaling' : 'Density Solver'}`,
+                method,
+                enabled: selected === CORRECTION_METHODS.SIMPLE_SCALING
+            };
         } catch (error) {
             console.error('Failed to set correction method:', error);
             return { success: false, message: `Error: ${error.message}` };

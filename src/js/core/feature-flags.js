@@ -53,14 +53,12 @@ const DEFAULT_FLAGS = {
     cubeEndpointAnchoring: false,
     smartPointDrag: true,
     compositeLabRedistribution: true,
-    compositeClampGuard: true,
     compositeHighlightGuard: false,
     labBaselineSmoothing: true,
     redistributionSmoothingWindow: false,
     autoRaiseInkLimitsOnImport: false,
     compositePerSampleCeiling: true,
-    slopeKernelSmoothing: true,
-    simpleScalingCorrection: false
+    slopeKernelSmoothing: true
 };
 
 const flagState = {
@@ -178,15 +176,6 @@ export function setCompositeLabRedistributionEnabled(enabled) {
     return flagState.compositeLabRedistribution;
 }
 
-export function isCompositeClampGuardEnabled() {
-    return !!flagState.compositeClampGuard;
-}
-
-export function setCompositeClampGuardEnabled(enabled) {
-    flagState.compositeClampGuard = enabled !== false;
-    return flagState.compositeClampGuard;
-}
-
 export function isCompositeHighlightGuardEnabled() {
     return !!flagState.compositeHighlightGuard;
 }
@@ -241,15 +230,6 @@ export function setSlopeKernelSmoothingEnabled(enabled) {
     return flagState.slopeKernelSmoothing;
 }
 
-export function isSimpleScalingCorrectionEnabled() {
-    return !!flagState.simpleScalingCorrection;
-}
-
-export function setSimpleScalingCorrectionEnabled(enabled) {
-    flagState.simpleScalingCorrection = !!enabled;
-    return flagState.simpleScalingCorrection;
-}
-
 export function getRedistributionSmoothingWindowConfig() {
     return { ...redistributionSmoothingWindowConfig };
 }
@@ -298,14 +278,6 @@ function installWindowAdapters() {
 
     if (typeof window.isCompositeLabRedistributionEnabled !== 'function') {
         window.isCompositeLabRedistributionEnabled = () => isCompositeLabRedistributionEnabled();
-    }
-
-    if (typeof window.enableCompositeClampGuard !== 'function') {
-        window.enableCompositeClampGuard = (enabled = true) => setCompositeClampGuardEnabled(enabled);
-    }
-
-    if (typeof window.isCompositeClampGuardEnabled !== 'function') {
-        window.isCompositeClampGuardEnabled = () => isCompositeClampGuardEnabled();
     }
 
     if (typeof window.enableCompositeHighlightGuard !== 'function') {
@@ -360,13 +332,6 @@ function installWindowAdapters() {
         window.isSlopeKernelSmoothingEnabled = () => isSlopeKernelSmoothingEnabled();
     }
 
-    if (typeof window.enableSimpleScalingCorrection !== 'function') {
-        window.enableSimpleScalingCorrection = (enabled = true) => setSimpleScalingCorrectionEnabled(enabled);
-    }
-
-    if (typeof window.isSimpleScalingCorrectionEnabled !== 'function') {
-        window.isSimpleScalingCorrectionEnabled = () => isSimpleScalingCorrectionEnabled();
-    }
 }
 
 installWindowAdapters();
@@ -380,8 +345,6 @@ registerDebugNamespace('featureFlags', {
     isSmartPointDragEnabled,
     setCompositeLabRedistributionEnabled,
     isCompositeLabRedistributionEnabled,
-    setCompositeClampGuardEnabled,
-    isCompositeClampGuardEnabled,
     setCompositeHighlightGuardEnabled,
     isCompositeHighlightGuardEnabled,
     setLabBaselineSmoothingEnabled,
@@ -395,9 +358,7 @@ registerDebugNamespace('featureFlags', {
     setCompositePerSampleCeilingEnabled,
     isCompositePerSampleCeilingEnabled,
     setSlopeKernelSmoothingEnabled,
-    isSlopeKernelSmoothingEnabled,
-    setSimpleScalingCorrectionEnabled,
-    isSimpleScalingCorrectionEnabled
+    isSlopeKernelSmoothingEnabled
 }, {
     exposeOnWindow: typeof window !== 'undefined'
 });
@@ -419,10 +380,6 @@ export function resetFeatureFlags(overrides = {}) {
         Object.prototype.hasOwnProperty.call(overrides, 'compositeLabRedistribution')
             ? !!overrides.compositeLabRedistribution
             : DEFAULT_FLAGS.compositeLabRedistribution;
-    flagState.compositeClampGuard =
-        Object.prototype.hasOwnProperty.call(overrides, 'compositeClampGuard')
-            ? !!overrides.compositeClampGuard
-            : DEFAULT_FLAGS.compositeClampGuard;
     flagState.compositeHighlightGuard =
         Object.prototype.hasOwnProperty.call(overrides, 'compositeHighlightGuard')
             ? !!overrides.compositeHighlightGuard
@@ -443,10 +400,6 @@ export function resetFeatureFlags(overrides = {}) {
         Object.prototype.hasOwnProperty.call(overrides, 'slopeKernelSmoothing')
             ? !!overrides.slopeKernelSmoothing
             : DEFAULT_FLAGS.slopeKernelSmoothing;
-    flagState.simpleScalingCorrection =
-        Object.prototype.hasOwnProperty.call(overrides, 'simpleScalingCorrection')
-            ? !!overrides.simpleScalingCorrection
-            : DEFAULT_FLAGS.simpleScalingCorrection;
     storeSmartPointDragToStorage(flagState.smartPointDrag);
     installWindowAdapters();
     return { ...flagState };

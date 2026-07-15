@@ -147,8 +147,10 @@ Durable conclusions extracted from the raw audits:
 
 - Do not split large modules, introduce constants/debug frameworks, or deduplicate small helpers merely to improve structural metrics; require a measured defect or change bottleneck.
 - The legacy bridge modules still have production callers. Remove a bridge only with a caller inventory and a behavior-complete replacement, not as a naming cleanup.
-- Default-on/off runtime branches and diagnostic adapters remain a better deletion target than broad refactoring. The centralized flag module currently defines 12 flags; `compositeClampGuard` has no production reader, while `simpleScalingCorrection` is set by Lab Tech but never read by processing. Those two warrant a focused behavior/API decision before further cleanup.
+- Default-on/off runtime branches and diagnostic adapters remain a better deletion target than broad refactoring. The centralized flag module now defines ten flags after removing the unread `compositeClampGuard` and `simpleScalingCorrection` entries; Lab Tech's correction-method action now selects the existing canonical persisted preference instead of toggling the no-op flag.
 - Existing feature documents already capture the durable bell-curve, edit-mode, correction, and solver contracts; raw multi-agent outputs are provenance, not runtime context.
+
+Focused flag follow-up (2026-07-14): complete. The `compositeClampGuard` adapter had no production reader, and Lab Tech's `simpleScalingCorrection` flag changed no processing decision despite reporting success. Both flag entries and their window/debug/reset machinery were removed. Lab Tech now maps `simple` and `density_solver` onto the existing persisted correction-method preference used by the Options UI. The slice removed 43 net production-source lines and added one 18-line assertion to an existing AI-actions test file. Focused unit checks (6/6), Vitest in the development workspace (299/299), build (103 modules), smoke (1/1), and the focused browser gate (4/4) passed.
 
 Explicitly declined for this checkpoint:
 
