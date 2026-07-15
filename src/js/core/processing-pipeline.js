@@ -1524,8 +1524,6 @@ export function finalizeCompositeLabRedistribution() {
                 measurementDeltas: Array.isArray(measurementDeltas) ? measurementDeltas.slice() : null,
                 densityInputs: Array.isArray(densityInputs) ? densityInputs.slice() : null,
                 densitySources: densitySourcesPlain,
-                densityLadder: densityLadder.slice(),
-                ladderOrderIndex: { ...ladderIndicesPlain },
                 warnings: summaryWarnings.slice(),
                 peakIndices: null,
                 coverageSummary: cloneCoverageSummary(coverageSummaryPlain),

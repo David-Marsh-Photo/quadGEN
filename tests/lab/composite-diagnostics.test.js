@@ -6,7 +6,9 @@ import { parseLabData } from '../../src/js/data/lab-parser.js';
 import { LinearizationState } from '../../src/js/data/linearization-utils.js';
 import {
   beginCompositeLabRedistribution,
+  registerCompositeLabBase,
   finalizeCompositeLabRedistribution,
+  getCompositeCoverageSummary,
   make256
 } from '../../src/js/core/processing-pipeline.js';
 import { setLoadedQuadData, ensureLoadedQuadData } from '../../src/js/core/state.js';
@@ -150,5 +152,46 @@ describe('Composite diagnostics', () => {
         expect(Math.abs(valueDeltaSum - snapshot.inkDelta)).toBeLessThan(1);
       }
     }
+  });
+
+  it('preserves baked baselines while capturing analysis-only diagnostics', () => {
+    const quad = parseQuadFile('data/P800_K36C26LK25_V6.quad');
+    const measurementText = fs.readFileSync(path.resolve('data/P800_K36C26LK25_V6.txt'), 'utf8');
+    const labEntry = parseLabData(measurementText, '*BAKED* P800_K36C26LK25_V6.txt');
+    const channelNames = ['K', 'C', 'LK'];
+    const endValues = {};
+
+    channelNames.forEach((channelName) => {
+      endValues[channelName] = Math.max(...quad.curves[channelName]);
+    });
+
+    expect(beginCompositeLabRedistribution({
+      channelNames,
+      endValues,
+      labEntry,
+      analysisOnly: true
+    })).toBe(true);
+
+    channelNames.forEach((channelName) => {
+      registerCompositeLabBase(channelName, quad.curves[channelName]);
+    });
+
+    const compositeResult = finalizeCompositeLabRedistribution();
+    channelNames.forEach((channelName) => {
+      expect(compositeResult?.curves?.[channelName]).toEqual(quad.curves[channelName]);
+    });
+
+    const snapshot = getCompositeDebugSnapshot(184);
+    expect(snapshot).toBeTruthy();
+    expect(snapshot?.deltaDensity).toBe(0);
+    expect(snapshot?.inkDelta).toBe(0);
+    channelNames.forEach((channelName) => {
+      const entry = snapshot?.perChannel?.[channelName];
+      expect(entry?.valueDelta).toBe(0);
+      expect(entry?.normalizedDelta).toBe(0);
+    });
+
+    const coverageSummary = getCompositeCoverageSummary();
+    expect(Object.keys(coverageSummary)).toEqual(expect.arrayContaining(channelNames));
   });
 });
