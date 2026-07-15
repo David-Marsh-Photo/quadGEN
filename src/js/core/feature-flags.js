@@ -52,7 +52,6 @@ const DEFAULT_FLAGS = {
     activeRangeLinearization: false,
     cubeEndpointAnchoring: false,
     smartPointDrag: true,
-    labBaselineSmoothing: true,
     redistributionSmoothingWindow: false,
     autoRaiseInkLimitsOnImport: false,
     slopeKernelSmoothing: true
@@ -164,15 +163,6 @@ export function setSmartPointDragEnabled(enabled) {
     return flagState.smartPointDrag;
 }
 
-export function isLabBaselineSmoothingEnabled() {
-    return !!flagState.labBaselineSmoothing;
-}
-
-export function setLabBaselineSmoothingEnabled(enabled) {
-    flagState.labBaselineSmoothing = enabled !== false;
-    return flagState.labBaselineSmoothing;
-}
-
 export function isAutoRaiseInkLimitsEnabled() {
     return !!flagState.autoRaiseInkLimitsOnImport;
 }
@@ -242,14 +232,6 @@ function installWindowAdapters() {
         window.isSmartPointDragEnabled = () => isSmartPointDragEnabled();
     }
 
-    if (typeof window.enableLabBaselineSmoothing !== 'function') {
-        window.enableLabBaselineSmoothing = (enabled = true) => setLabBaselineSmoothingEnabled(enabled);
-    }
-
-    if (typeof window.isLabBaselineSmoothingEnabled !== 'function') {
-        window.isLabBaselineSmoothingEnabled = () => isLabBaselineSmoothingEnabled();
-    }
-
     if (typeof window.enableAutoRaiseInkLimitsOnImport !== 'function') {
         window.enableAutoRaiseInkLimitsOnImport = (enabled = true) => setAutoRaiseInkLimitsEnabled(enabled);
     }
@@ -289,8 +271,6 @@ registerDebugNamespace('featureFlags', {
     isCubeEndpointAnchoringEnabled,
     setSmartPointDragEnabled,
     isSmartPointDragEnabled,
-    setLabBaselineSmoothingEnabled,
-    isLabBaselineSmoothingEnabled,
     setAutoRaiseInkLimitsEnabled,
     isAutoRaiseInkLimitsEnabled,
     setRedistributionSmoothingWindowEnabled,
@@ -316,10 +296,6 @@ export function resetFeatureFlags(overrides = {}) {
         Object.prototype.hasOwnProperty.call(overrides, 'smartPointDrag')
             ? !!overrides.smartPointDrag
             : DEFAULT_FLAGS.smartPointDrag;
-    flagState.labBaselineSmoothing =
-        Object.prototype.hasOwnProperty.call(overrides, 'labBaselineSmoothing')
-            ? !!overrides.labBaselineSmoothing
-            : DEFAULT_FLAGS.labBaselineSmoothing;
     flagState.autoRaiseInkLimitsOnImport =
         Object.prototype.hasOwnProperty.call(overrides, 'autoRaiseInkLimitsOnImport')
             ? !!overrides.autoRaiseInkLimitsOnImport

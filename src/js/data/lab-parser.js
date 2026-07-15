@@ -23,7 +23,6 @@ import {
   getLabWidenFactor,
   mapSmoothingPercentToWiden
 } from '../core/lab-settings.js';
-import { isLabBaselineSmoothingEnabled } from '../core/feature-flags.js';
 export { lstarToY_CIE, cieDensityFromLstar, log10Safe as log10_safe } from '../utils/lab-math.js';
 
 const DEFAULT_LAB_TUNING = {
@@ -351,7 +350,6 @@ export function parseLabData(fileContent, filename, options = {}) {
     })();
 
     const smoothingPercent = getLabSmoothingPercent();
-    const baselineWidenFactor = isLabBaselineSmoothingEnabled() ? 1 : getLabWidenFactor();
 
     const helper = buildInkInterpolatorFromMeasurements(originalDataPoints, {
       neighbors: LAB_TUNING.get('K_NEIGHBORS', 6),
@@ -360,7 +358,7 @@ export function parseLabData(fileContent, filename, options = {}) {
       sigmaAlpha: LAB_TUNING.get('SIGMA_ALPHA', 3.0),
       normalizationMode,
       skipDefaultSmoothing: smoothingPercent <= 0,
-      widenFactor: baselineWidenFactor
+      widenFactor: 1
     });
 
     const targetFn = (t) => clamp01(getTargetRelAt(t));
@@ -551,8 +549,7 @@ export function rebuildLabSamplesFromOriginal(originalDataPoints, options = {}) 
     };
 
     if (!Number.isFinite(helperOptions.widenFactor)) {
-      const baselineEnabled = isLabBaselineSmoothingEnabled();
-      if (options.useBaselineWidenFactor && baselineEnabled) {
+      if (options.useBaselineWidenFactor) {
         helperOptions.widenFactor = 1;
       } else {
         helperOptions.widenFactor = getLabWidenFactor();

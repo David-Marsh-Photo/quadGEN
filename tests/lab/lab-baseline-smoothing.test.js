@@ -3,13 +3,8 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { rebuildLabSamplesFromOriginal } from '../../src/js/data/lab-parser.js';
 import {
   LAB_NORMALIZATION_MODES,
-  setLabSmoothingPercent,
-  getLabWidenFactor
+  setLabSmoothingPercent
 } from '../../src/js/core/lab-settings.js';
-import {
-  setLabBaselineSmoothingEnabled,
-  resetFeatureFlags
-} from '../../src/js/core/feature-flags.js';
 
 const SAMPLE_DATA = [
   { input: 0, lab: 99.2 },
@@ -37,18 +32,16 @@ const maxAbsDelta = (a, b) => {
   return max;
 };
 
-describe('LAB baseline smoothing flag', () => {
+describe('LAB baseline smoothing', () => {
   beforeEach(() => {
     setLabSmoothingPercent(50);
-    resetFeatureFlags();
   });
 
   afterEach(() => {
-    resetFeatureFlags();
+    setLabSmoothingPercent(0);
   });
 
-  it('matches widen ×1 output when legacy baseline smoothing flag is enabled', () => {
-    setLabBaselineSmoothingEnabled(true);
+  it('matches widen ×1 output for baseline reconstruction', () => {
     const baseline = rebuildLabSamplesFromOriginal(SAMPLE_DATA, {
       ...DEFAULT_OPTIONS,
       useBaselineWidenFactor: true
@@ -61,25 +54,5 @@ describe('LAB baseline smoothing flag', () => {
     expect(baseline).toHaveLength(256);
     expect(widenOne).toHaveLength(256);
     expect(maxAbsDelta(baseline, widenOne)).toBeLessThan(1e-6);
-  });
-
-  it('falls back to configured smoothing widen factor when flag is disabled', () => {
-    setLabBaselineSmoothingEnabled(false);
-    const baseline = rebuildLabSamplesFromOriginal(SAMPLE_DATA, DEFAULT_OPTIONS);
-    const configuredWiden = getLabWidenFactor();
-    const widenDefault = rebuildLabSamplesFromOriginal(SAMPLE_DATA, {
-      ...DEFAULT_OPTIONS,
-      widenFactor: configuredWiden
-    });
-
-    expect(baseline).toHaveLength(256);
-    expect(widenDefault).toHaveLength(256);
-    expect(maxAbsDelta(baseline, widenDefault)).toBeLessThan(1e-6);
-
-    const widenOne = rebuildLabSamplesFromOriginal(SAMPLE_DATA, {
-      ...DEFAULT_OPTIONS,
-      widenFactor: 1
-    });
-    expect(maxAbsDelta(baseline, widenOne)).toBeGreaterThan(1e-4);
   });
 });

@@ -27,7 +27,7 @@ import {
     storeCompositeDebugSession
 } from './composite-debug.js';
 import { getAutoRaiseAuditState } from './auto-raise-on-import.js';
-import { getLabSmoothingPercent, mapSmoothingPercentToWiden, isLabBaselineSmoothingEnabled } from './lab-settings.js';
+import { getLabSmoothingPercent, mapSmoothingPercentToWiden } from './lab-settings.js';
 import { DEFAULT_CHANNEL_DENSITIES } from './channel-densities.js';
 import { computeSnapshotFlags, SNAPSHOT_FLAG_THRESHOLD_PERCENT } from './snapshot-flags.js';
 import {
@@ -1230,16 +1230,14 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
         ? Number(options.smoothingPercent)
         : compositeLabSession.smoothingPercent;
 
-    const baselineSmoothingEnabled = isLabBaselineSmoothingEnabled();
     const widenFactor = smoothingPercent > 0
         ? mapSmoothingPercentToWiden(smoothingPercent)
-        : (baselineSmoothingEnabled ? 1 : 1);
+        : 1;
 
     let measurementEvaluator = null;
     if (Array.isArray(normalizedEntry?.originalData) && normalizedEntry.originalData.length >= 2) {
         try {
             const helper = buildInkInterpolatorFromMeasurements(normalizedEntry.originalData, {
-                skipDefaultSmoothing: !baselineSmoothingEnabled && smoothingPercent <= 0,
                 widenFactor
             });
             if (helper && typeof helper.evaluate === 'function') {
