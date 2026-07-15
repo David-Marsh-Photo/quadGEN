@@ -7,7 +7,7 @@ Use the smallest reliable test layer that proves the behavior. Tests are maintai
 ```bash
 npm test                # Vitest suite
 npm run test:smoke      # Default browser smoke gate
-npm run test:e2e:gate   # Focused scaling/edit Playwright gate
+npm run test:e2e:gate   # Focused global-scaling Playwright gate
 npm run test:e2e        # Full retained Playwright suite
 ```
 
@@ -40,7 +40,7 @@ Do not use Playwright for a pure function or create a diagnostic script before e
 
 ## Required Verification
 
-Run focused tests while iterating. After a fix, run the complete Vitest suite and `npm run test:smoke`; run `npm run test:e2e:gate` for affected scaling/edit workflows. Run `npm run build:agent` after source changes and verify the generated artifact. Use `npm run test:e2e` when changing broad UI infrastructure or auditing the suite.
+Run focused tests while iterating. After a fix, run the complete Vitest suite and `npm run test:smoke`; run `npm run test:e2e:gate` for affected global-scaling workflows and the narrow relevant Playwright spec for other browser workflows. Run `npm run build:agent` after source changes and verify the generated artifact. Use `npm run test:e2e` when changing broad UI infrastructure or auditing the suite.
 
 ## Specialized Contracts
 

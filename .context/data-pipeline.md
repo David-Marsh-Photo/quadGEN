@@ -33,24 +33,26 @@ Options:
 1. **Load .quad**: `baselineEnd` captured, `originalCurves` stored
 2. **Load LAB**: `linearizationData` set, `linearizationApplied = true`
 3. **Edit Mode**: Smart Curves generated from LAB-corrected data
-4. **Revert**: MUST clear `linearizationData = null` and `linearizationApplied = false`
+4. **Revert**: remove Smart/edited/baked state, restore the measurement-derived curves and baselines, and keep the loaded measurement applied
 
 ### Revert Operation (Critical)
 ```javascript
 // CORRECT revert workflow:
-linearizationData = null;           // Clear LAB data completely
-linearizationApplied = false;       // Disable corrections
-// Restore original curves and baseline End values
+linearizationData.edited = false;   // Mark the loaded measurement clean
+linearizationApplied = true;        // Keep the measurement correction enabled
+// Clear Smart/baked state, restore measurement-derived curves and baselines,
+// then reapply the canonical global scale.
 
-// WRONG - causes scaling artifacts:
-linearizationData.edited = false;   // Keeps LAB data active!
+// WRONG - unloads the measurement instead of reverting edits:
+linearizationData = null;
+linearizationApplied = false;
 ```
 
 ### Debugging Revert Issues
 With `DEBUG_LOGS = true`, look for:
 - `[DEBUG REVERT] Button clicked:` - confirms revert triggered
-- `[DEBUG REVERT] Clearing linearization data` - confirms LAB data cleared
-- `[DEBUG BASELINE] Captured initial baseline:` - confirms original values preserved
+- `[DEBUG REVERT] Smart points restored during global revert` - confirms editable state reset
+- `[DEBUG REVERT] Baselines restored for channels` - confirms measurement baselines restored
 
 ## Key-Point Editing
 
@@ -92,7 +94,7 @@ Applied in `make256()` after per-channel and global linearization, before return
 
 ### UI Controls
 - `#autoWhiteLimitToggle` (default OFF)
-- `#autoBlackLimitToggle` (default ON)
+- `#autoBlackLimitToggle` (default OFF)
 - Assistant functions: `set_auto_white_limit(enabled)`, `set_auto_black_limit(enabled)`
 
 ## Print Intent & EDN/QTR

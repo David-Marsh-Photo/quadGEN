@@ -91,8 +91,8 @@ Control points are stored as "relative" percentages but presented as "absolute":
 
 ### Revert Control State Machine
 - Files: `src/js/ui/revert-controls.js`, `src/js/ui/event-handlers.js`
-- Risk: Revert must clear `linearizationData = null` completely or LAB data remains active causing scaling artifacts
-- Test: After load LAB → scale → revert, verify curves return to baseline not scaled state
+- Risk: Revert must clear Smart/edited/baked state while preserving and re-enabling the loaded measurement; unloading `linearizationData` changes the operation into measurement removal
+- Test: After load LAB → scale → edit → revert, verify curves return to the measurement state and the measurement remains applied
 
 ### Bell Curve Scaling Interactions
 - Files: `src/js/core/bell-width-controller.js`, `src/js/core/bell-shift-controller.js`

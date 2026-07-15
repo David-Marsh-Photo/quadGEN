@@ -18,7 +18,7 @@
 ## Expected Behavior
 1. **Global Revert**
    - Guard: only enabled when global measurement data (LAB/CGATS/manual) is applied.
-   - On click: capture history, clear `LinearizationState` global data, remove Smart curves and metadata for every channel, restore original `.quad` curves (`loadedQuadData.originalCurves`), and reset ink limits from stored baselines.
+   - On click: capture history, clear Smart/edited/baked state, restore the measurement-derived curves and stored baselines, and keep the original global measurement entry applied in `LinearizationState`.
    - If a correction was previously rebased, `restoreChannelsToRebasedSources` pulls the baked curve back into the channel table so percent/End fields, Smart metadata, and baseline caches return to the rebased values instead of the pre-load `.quad` defaults.
    - UI updates: global toggle re-enabled (ON), filename/labels drop “Edited”, status toast `Reverted to measurement (global)`.
    - Edit Mode: previously selected channel is re-selected if still enabled so key-point panels stay in sync.

@@ -157,7 +157,7 @@ Render Canvas (chart-renderer.js)
 - Files: `src/js/data/linearization-utils.js`
 - Fields: `samples` (0-1 normalized), `domainMin/Max`, `edited` flag, `extras` (metadata)
 - Conversion: `normalizeLinearizationEntry()` ensures printer-space compatibility
-- Lifecycle: Cleared on revert via `linearizationData = null; linearizationApplied = false`
+- Lifecycle: Revert clears Smart/edited/baked state, restores measurement-derived curves, and keeps the loaded measurement applied
 
 **ProcessingPipeline:**
 - Purpose: Coordinate multi-stage curve generation
