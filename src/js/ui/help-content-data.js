@@ -9,7 +9,9 @@ export const VERSION_HISTORY = {
     title: '',
     sections: {
       ADDED: [],
-      CHANGED: [],
+      CHANGED: [
+        'Auto Black Limit now defaults OFF for new browser profiles; saved preferences remain unchanged.'
+      ],
       FIXED: [],
       REMOVED: [],
       DOCS: []

@@ -4290,7 +4290,7 @@ function handleEndInput(input, options = {}) {
  * Initialize handlers for auto white/black limit toggles
  */
 export function initializeAutoLimitHandlers() {
-    // Initialize toggle state from storage (defaults: white OFF, black ON)
+    // Initialize toggle state from storage (defaults: OFF)
     try {
         if (elements.autoWhiteLimitToggle) {
             const stored = localStorage.getItem('autoWhiteLimitV1');
@@ -4298,7 +4298,7 @@ export function initializeAutoLimitHandlers() {
         }
         if (elements.autoBlackLimitToggle) {
             const stored = localStorage.getItem('autoBlackLimitV1');
-            elements.autoBlackLimitToggle.checked = stored === null ? true : stored === '1';
+            elements.autoBlackLimitToggle.checked = stored === null ? false : stored === '1';
         }
     } catch (err) {
         // Ignore storage read errors (private mode, etc.)

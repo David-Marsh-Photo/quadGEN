@@ -28,6 +28,7 @@ test.describe('Page load smoke check', () => {
       { timeout: 15000 }
     );
 
+    await expect(page.locator('#autoBlackLimitToggle')).not.toBeChecked();
     expect(consoleErrors).toEqual([]);
   });
 });
