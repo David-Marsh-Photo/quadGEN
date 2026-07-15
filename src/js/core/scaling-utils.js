@@ -114,20 +114,10 @@ export function scaleChannelEndsByPercent(percent, options = {}) {
     const opts = typeof options === 'object' && options !== null ? options : {};
     const skipHistory = !!opts.skipHistory;
 
-    console.log(`🔍 [SCALE CORE DEBUG] scaleChannelEndsByPercent called:`, {
-        percent,
-        timestamp: Date.now(),
-        currentScaleAllPercent: scaleAllPercent,
-        scaleBaselineEnds: scaleBaselineEnds,
-        callStack: new Error().stack.split('\n').slice(1, 3)
-    });
-
     try {
         const rawPercent = Number(percent);
-        console.log(`🔍 [SCALE CORE DEBUG] Raw percent validation:`, { percent, rawPercent, isFinite: Number.isFinite(rawPercent), isPositive: rawPercent > 0 });
 
         if (!Number.isFinite(rawPercent) || rawPercent <= 0) {
-            console.log(`🔍 [SCALE CORE DEBUG] Invalid percent - returning error`);
             return {
                 success: false,
                 message: `Invalid scale '${percent}'. Enter a positive percent value.`

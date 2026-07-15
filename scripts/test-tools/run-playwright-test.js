@@ -1,7 +1,6 @@
 // run-playwright-test.js
 import { spawn } from 'node:child_process';
 
-const DEFAULT_SEEDING_SCRIPT = 'tests/playwright-edit-mode-seeding.cjs';
 const DEFAULT_SCALING_SPEC_PATTERN = 'tests/e2e/global-scale-*.spec.ts';
 const DEFAULT_SCALE_WORKERS = '3';
 
@@ -43,14 +42,7 @@ const args = process.argv.slice(2);
 if (args.length > 0) {
   runCommand('node', [args[0], ...args.slice(1)]).catch(handleFailure);
 } else {
-  (async () => {
-    try {
-      await runCommand('node', [DEFAULT_SEEDING_SCRIPT]);
-      const scaleWorkers = (process.env.SCALE_SPEC_WORKERS ?? DEFAULT_SCALE_WORKERS).trim();
-      const workerArgs = scaleWorkers.length > 0 ? [`--workers=${scaleWorkers}`] : [];
-      await runCommand('npx', ['playwright', 'test', DEFAULT_SCALING_SPEC_PATTERN, ...workerArgs]);
-    } catch (error) {
-      handleFailure(error);
-    }
-  })();
+  const scaleWorkers = (process.env.SCALE_SPEC_WORKERS ?? DEFAULT_SCALE_WORKERS).trim();
+  const workerArgs = scaleWorkers.length > 0 ? [`--workers=${scaleWorkers}`] : [];
+  runCommand('npx', ['playwright', 'test', DEFAULT_SCALING_SPEC_PATTERN, ...workerArgs]).catch(handleFailure);
 }

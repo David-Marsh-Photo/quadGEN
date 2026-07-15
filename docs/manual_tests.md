@@ -428,13 +428,14 @@ node test-undo-regression.js
 - `tests/e2e/correction-gain-100-baseline.spec.ts` validates LAB correction gain behavior at 100% gain, ensuring LAB-corrected curves are applied (not baseline), and that 99% and 100% gain produce identical results. This test prevents regression of the "100% shows less correction than 99%" bug fixed in October 2025.
 
 ## Automated Coverage: Global Scaling *(Phase 0 – Foundation)*
-Phase 0 Track 4 regression guards now cover the following flows via Playwright (run automatically by `npm run test:e2e:gate`):
+Phase 0 Track 4 regression guards cover four flows via Playwright (run automatically by `npm run test:e2e:gate`):
 
 - `tests/e2e/global-scale-baseline-drift.spec.ts` – edits under non-100 % scale return to baseline without drifting cached ends.
 - `tests/e2e/global-scale-rapid-undo.spec.ts` – rapid slider scrub (100 %→50 %→100 %) retains history entries and undoes cleanly.
 - `tests/e2e/global-scale-ui.spec.ts` – the Scale field commits through the canonical path and per-channel edits retain the active multiplier.
-- `tests/e2e/edit-mode-scale.spec.ts` – confirms Smart points remain aligned when global correction is rescaled.
 - `tests/e2e/global-scale-measurement-revert.spec.ts` – verifies measurement loads survive revert + rescale cycles without baseline cache contamination.
+
+The full retained Playwright suite also runs `tests/e2e/edit-mode-scale.spec.ts`, which confirms Smart points remain aligned when global correction is rescaled.
 
 Phase 0 – Foundation tags in the regression matrix:
 - **Baseline cache** coverage — recorded against the three Vitest scenarios in `tests/core/scaling-utils-baseline.test.js`.
