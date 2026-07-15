@@ -103,7 +103,7 @@ Build-reproducibility prerequisite (2026-07-14): complete. The broad `data/` ign
 
 ## Checkpoint 4 — Workspace Hygiene and Review
 
-Status: queued
+Status: inventory complete; user approval required before archive/delete/ignore actions
 
 Work:
 
@@ -116,3 +116,43 @@ Exit check:
 - no user material is deleted without approval
 - retained context is concise and durable
 - remaining cleanup is either justified by measured value or explicitly declined
+
+Inventory result (2026-07-14):
+
+- Raw Aider history occupies 15.08 MB and its disposable tag cache another 1.22 MB. None is ignored today.
+- `agent-logs/compare/` contains 23 raw multi-agent transcripts totaling 14.46 MB. Five separate curated logs total only 7 KB; two describe shipped behavior, two describe local Claude tooling, and one records this development-session bootstrap.
+- The superseded `AGENTS.md.bak` and `CLAUDE.md.bak` files total 66.8 KB and are roughly ten times longer than their current counterparts.
+- Nine untracked engineering/domain drafts total 2,425 lines / 95 KB. They should not be bulk-added: the three LAB-correction analyses overlap, the 941-line Channel Builder plan describes an already-built feature, the state-access note references retired cache guidance, and the photogravure workflow needs owner review as domain documentation.
+- Ten untracked test/diagnostic source files, one generated 203 KB screenshot, and two scratch helpers add 1,715 text lines. The uppercase-label checks, zoom audit, KCLK plateau browser case, LAB direction diagnostic, and plot-smoothing experiment are presentation checks, diagnostics, or duplicates of retained contracts. The end/percent synchronization and measurement-reseed cases may contain unique behavior and need a focused consolidation review rather than wholesale adoption.
+- The ignored root `data/` directory occupies about 632 KB on disk. Tracked tests name 27 fixtures; 22 are locally present (88.8 KB total) and five are missing. This explains the remaining 40 clean-checkout browser failures and is a provenance/privacy decision, not a reason to commit the whole directory.
+- Generated `test-results/` output occupies about 519 KB and is already ignored.
+
+Proposed disposition, pending approval:
+
+- retain the two concise shipped-behavior logs; archive the three tooling/session logs outside the repository
+- archive raw Aider histories and comparison transcripts outside the repository, delete the reproducible Aider cache, then ignore those local artifact paths
+- archive or delete the two superseded instruction backups and scratch helpers
+- review draft documentation by topic, extracting only current contracts into existing feature/context documents
+- consolidate only the unique end/percent and measurement-reseed assertions at the lowest stable layer; archive the remaining diagnostic and duplicate test material
+- decide whether the 22 referenced local measurement fixtures may be published, replaced with synthetic fixtures, or kept private with an explicitly local-only test tier
+
+Measured comparison with the starting commit (`4b84e5c`):
+
+- tracked production JavaScript: 57,117 → 58,033 lines; excluding the 4,148 existing-but-previously-ignored data-pipeline lines recovered for clean builds, remediation removed 3,232 production lines
+- tracked test JavaScript/TypeScript: 25,191 → 17,343 lines (−7,848, or 31%)
+- tracked test files: 204 → 160; Playwright inventory: 99 files / 159 tests → 61 files / 87 tests
+- the full development-workspace browser run fell from about two minutes with 71 failures to 19.4 seconds with 99 passing cases, including 12 still-untracked cases under review
+
+Durable conclusions extracted from the raw audits:
+
+- Do not split large modules, introduce constants/debug frameworks, or deduplicate small helpers merely to improve structural metrics; require a measured defect or change bottleneck.
+- The legacy bridge modules still have production callers. Remove a bridge only with a caller inventory and a behavior-complete replacement, not as a naming cleanup.
+- Default-on/off runtime branches and diagnostic adapters remain a better deletion target than broad refactoring. The centralized flag module currently defines 12 flags; `compositeClampGuard` has no production reader, while `simpleScalingCorrection` is set by Lab Tech but never read by processing. Those two warrant a focused behavior/API decision before further cleanup.
+- Existing feature documents already capture the durable bell-curve, edit-mode, correction, and solver contracts; raw multi-agent outputs are provenance, not runtime context.
+
+Explicitly declined for this checkpoint:
+
+- broad `event-handlers.js` or `chart-manager.js` decomposition without a concrete bug or active change bottleneck
+- a new constants, logging, telemetry, fixture-management, or compatibility abstraction
+- adding every historical diagnostic as a regression test
+- committing the entire local calibration-data directory merely to make all tests hermetic
