@@ -91,6 +91,8 @@ Exit check:
 
 Slice 3A result (2026-07-14): complete. The `make256` memoization cache and its invalidation bridge were removed after an uncached LAB benchmark measured 1.74 ms for the real three-channel workload and 2.09 ms for a synthetic ten-channel pass. The cache-free bundle measured 0.90 ms and 2.38 ms respectively, kept deterministic output, and removed 61 net production lines plus two test lines. Focused tests (19/19), Vitest (334/334), smoke (1/1), focused E2E (3/3), full E2E (108/108), and the production build passed. Slice 3B will assess dormant composite modes and debug capture without changing the supported solver behavior.
 
+Build-reproducibility prerequisite (2026-07-14): complete. The broad `data/` ignore rule had omitted ten modules under `src/js/data/` even though tracked code imports them in the shipped application. An explicit source-directory exception now tracks the existing 4,148-line implementation without editing it. A clean staged checkout built a byte-identical bundle and passed smoke; the normal workspace also passed Vitest (334/334), focused E2E (3/3), and full E2E (108/108). Clean-checkout Vitest still has 31 pre-existing failures because root `data/` measurement fixtures are intentionally ignored; fixture provenance and privacy require a separate decision before any are added.
+
 ## Checkpoint 4 — Workspace Hygiene and Review
 
 Status: queued

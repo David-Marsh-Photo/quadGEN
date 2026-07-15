@@ -3,6 +3,8 @@ test-*.js
 *.log
 .DS_Store
 data/
+!src/js/data/
+!src/js/data/*.js
 data-samples/
 targets/
 .playwright-mcp/
