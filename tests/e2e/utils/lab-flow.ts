@@ -42,7 +42,6 @@ export interface LinearizationFlowResult {
 }
 
 export interface LinearizationFlowOptions {
-  enableComposite?: boolean;
   waitForGlobalAppliedMs?: number;
   waitAfterLoadMs?: number;
   percentages?: number[];
@@ -85,7 +84,6 @@ export async function runLinearizationAudit(
   options: LinearizationFlowOptions = {}
 ): Promise<LinearizationFlowResult> {
   const {
-    enableComposite = true,
     waitForGlobalAppliedMs = 20000,
     waitAfterLoadMs = 3000,
     percentages = [95]
@@ -101,14 +99,6 @@ export async function runLinearizationAudit(
   ]);
 
   await page.waitForFunction(() => typeof window.getLoadedQuadData === 'function', null, { timeout: 20000 });
-
-  if (enableComposite) {
-    await page.evaluate(() => {
-      if (typeof window.enableCompositeLabRedistribution === 'function') {
-        window.enableCompositeLabRedistribution(true);
-      }
-    });
-  }
 
   await page.setInputFiles('#quadFile', resolve(dataset.quadPath));
 

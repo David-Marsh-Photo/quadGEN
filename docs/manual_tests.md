@@ -245,17 +245,16 @@ Goal: confirm the density-solver composite redistribution keeps multi-ink `.quad
 
 ### Manual Steps:
 1. Load `index.html`, open the ⚙️ Options panel, switch **Correction method** to **Density Solver**, and verify the selection sticks (the default Simple Scaling path must be deselected).
-2. In the DevTools console ensure composite redistribution is enabled (`window.isCompositeLabRedistributionEnabled?.()` should return `true`).
-3. Use **Load .quad** to open `data/TRIFORCE_V4.quad`, then load `data/TRIFORCE_V4.txt` via **Load LAB / Manual**.
-4. Observe the Global Correction chart: the cyan (C) and light black (LK) bells should retain their shape below the ink ceiling while the K channel stays above 20 k counts through the midtones (compare against `artifacts/triforce_v4_composite_redistribution.png`).
-5. In the console, capture the total-output spread for reference:
+2. Use **Load .quad** to open `data/TRIFORCE_V4.quad`, then load `data/TRIFORCE_V4.txt` via **Load LAB / Manual**.
+3. Observe the Global Correction chart: the cyan (C) and light black (LK) bells should retain their shape below the ink ceiling while the K channel stays above 20 k counts through the midtones (compare against `artifacts/triforce_v4_composite_redistribution.png`).
+4. In the console, capture the total-output spread for reference:
    ```js
    const data = window.getLoadedQuadData(); const totals = new Array(256).fill(0);
    Object.values(data.curves).forEach((arr) => arr.forEach((v, i) => totals[i] += v));
    ({ min: Math.min(...totals), max: Math.max(...totals) })
    ```
-   Expected max ≈ 39 k. Values under ~33 k indicate an amplitude regression—re-run with `window.enableCompositeLabRedistribution(false)` to confirm the issue and file a bug with screenshots.
-6. While the files remain loaded, inspect the density solver output:
+   Expected max ≈ 39 k. Values under ~33 k indicate an amplitude regression; capture the chart and console state and file a bug.
+5. While the files remain loaded, inspect the density solver output:
    ```js
    const profile = window.getCompositeDensityProfile?.(95);
    const summary = profile ? Object.fromEntries(

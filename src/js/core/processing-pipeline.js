@@ -17,7 +17,6 @@ import { registerDebugNamespace } from '../utils/debug-registry.js';
 import { getLegacyLinearizationBridge } from '../legacy/linearization-bridge.js';
 import {
     isActiveRangeLinearizationEnabled,
-    isCompositeLabRedistributionEnabled,
     isCubeEndpointAnchoringEnabled,
     isRedistributionSmoothingWindowEnabled,
     getRedistributionSmoothingWindowConfig,
@@ -449,7 +448,7 @@ const compositeLabSession = {
 
 export function beginCompositeLabRedistribution(config = {}) {
     const { channelNames = [], endValues = {}, labEntry = null } = config;
-    if (!isCompositeLabRedistributionEnabled() || !labEntry) {
+    if (!labEntry) {
         compositeLabSession.active = false;
         compositeLabSession.channels = [];
         compositeLabSession.baseCurves = {};

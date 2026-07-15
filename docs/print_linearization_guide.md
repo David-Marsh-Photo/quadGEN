@@ -140,7 +140,7 @@ Multi-ink `.quad` files frequently stagger ink usage—highlight grays, cyan mid
 - **Shadows:** K dominates past 70 %; the solver assigns the remaining ~0.77 to black so the redistribution knows K can legitimately supply nearly all of the shadow density.
 - **Runtime inspection:** With both files loaded, run `window.getCompositeDensityProfile(95)` in DevTools. The result reports the per-channel density constants, cumulative usage, and the weighted shares applied at 95 % input—expect K to carry ~90 % of the correction, C the remainder, and LK almost none.
 
-When composite redistribution is active, it runs with the behaviours above. You can toggle it off for diagnostics via `window.enableCompositeLabRedistribution(false)` if you need to compare against the legacy per-channel application. Additional implementation notes and troubleshooting tips live in `MULTICHANNEL_CORRECTION.md`, while the solver math is broken down in `docs/features/channel-density-solver.md`.
+Selecting **Density Solver** always runs composite redistribution with the behaviours above for valid LAB data. Additional implementation notes and troubleshooting tips live in `MULTICHANNEL_CORRECTION.md`, while the solver math is broken down in `docs/features/channel-density-solver.md`.
 
 The solver uses one normalized path: it mirrors the ink mix from the loaded `.quad` and keeps corrections proportional to the baseline composition unless a channel runs out of headroom.
 

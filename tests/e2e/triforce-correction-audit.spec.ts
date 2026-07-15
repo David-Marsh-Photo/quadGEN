@@ -31,7 +31,6 @@ test.describe('TRIFORCE_V4 LAB correction audit', () => {
     };
 
     const flowResult = await runLinearizationAudit(page, dataset, {
-      enableComposite: true,
       percentages: SAMPLE_PERCENTS,
       waitAfterLoadMs: 3500
     });

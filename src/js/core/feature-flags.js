@@ -52,7 +52,6 @@ const DEFAULT_FLAGS = {
     activeRangeLinearization: false,
     cubeEndpointAnchoring: false,
     smartPointDrag: true,
-    compositeLabRedistribution: true,
     labBaselineSmoothing: true,
     redistributionSmoothingWindow: false,
     autoRaiseInkLimitsOnImport: false,
@@ -165,15 +164,6 @@ export function setSmartPointDragEnabled(enabled) {
     return flagState.smartPointDrag;
 }
 
-export function isCompositeLabRedistributionEnabled() {
-    return !!flagState.compositeLabRedistribution;
-}
-
-export function setCompositeLabRedistributionEnabled(enabled) {
-    flagState.compositeLabRedistribution = !!enabled;
-    return flagState.compositeLabRedistribution;
-}
-
 export function isLabBaselineSmoothingEnabled() {
     return !!flagState.labBaselineSmoothing;
 }
@@ -252,14 +242,6 @@ function installWindowAdapters() {
         window.isSmartPointDragEnabled = () => isSmartPointDragEnabled();
     }
 
-    if (typeof window.enableCompositeLabRedistribution !== 'function') {
-        window.enableCompositeLabRedistribution = (enabled = true) => setCompositeLabRedistributionEnabled(enabled);
-    }
-
-    if (typeof window.isCompositeLabRedistributionEnabled !== 'function') {
-        window.isCompositeLabRedistributionEnabled = () => isCompositeLabRedistributionEnabled();
-    }
-
     if (typeof window.enableLabBaselineSmoothing !== 'function') {
         window.enableLabBaselineSmoothing = (enabled = true) => setLabBaselineSmoothingEnabled(enabled);
     }
@@ -307,8 +289,6 @@ registerDebugNamespace('featureFlags', {
     isCubeEndpointAnchoringEnabled,
     setSmartPointDragEnabled,
     isSmartPointDragEnabled,
-    setCompositeLabRedistributionEnabled,
-    isCompositeLabRedistributionEnabled,
     setLabBaselineSmoothingEnabled,
     isLabBaselineSmoothingEnabled,
     setAutoRaiseInkLimitsEnabled,
@@ -336,10 +316,6 @@ export function resetFeatureFlags(overrides = {}) {
         Object.prototype.hasOwnProperty.call(overrides, 'smartPointDrag')
             ? !!overrides.smartPointDrag
             : DEFAULT_FLAGS.smartPointDrag;
-    flagState.compositeLabRedistribution =
-        Object.prototype.hasOwnProperty.call(overrides, 'compositeLabRedistribution')
-            ? !!overrides.compositeLabRedistribution
-            : DEFAULT_FLAGS.compositeLabRedistribution;
     flagState.labBaselineSmoothing =
         Object.prototype.hasOwnProperty.call(overrides, 'labBaselineSmoothing')
             ? !!overrides.labBaselineSmoothing
