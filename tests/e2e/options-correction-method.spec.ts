@@ -1,9 +1,38 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Locator } from '@playwright/test';
 import { resolve } from 'path';
 import { pathToFileURL } from 'url';
 
 const INDEX_URL = pathToFileURL(resolve('index.html')).href;
 const STORAGE_KEY = 'quadgen.correctionMethod.v1';
+
+async function contrastRatio(locator: Locator) {
+  return locator.evaluate((element) => {
+    const parseColor = (value: string) => {
+      const channels = value.match(/[\d.]+/g)?.map(Number) ?? [];
+      return { rgb: channels.slice(0, 3), alpha: channels[3] ?? 1 };
+    };
+    const luminance = (rgb: number[]) => rgb
+      .map((channel) => channel / 255)
+      .map((channel) => channel <= 0.03928
+        ? channel / 12.92
+        : ((channel + 0.055) / 1.055) ** 2.4)
+      .reduce((sum, channel, index) => sum + channel * [0.2126, 0.7152, 0.0722][index], 0);
+
+    const foreground = parseColor(getComputedStyle(element).color).rgb;
+    let background = [255, 255, 255];
+    for (let current: Element | null = element; current; current = current.parentElement) {
+      const candidate = parseColor(getComputedStyle(current).backgroundColor);
+      if (candidate.rgb.length === 3 && candidate.alpha === 1) {
+        background = candidate.rgb;
+        break;
+      }
+    }
+
+    const [lighter, darker] = [luminance(foreground), luminance(background)]
+      .sort((a, b) => b - a);
+    return (lighter + 0.05) / (darker + 0.05);
+  });
+}
 
 test.describe('Options correction method', () => {
   test('shows the default and persists the selected method', async ({ page }) => {
@@ -32,5 +61,19 @@ test.describe('Options correction method', () => {
     await simpleScaling.check();
     await expect.poll(() => page.evaluate((key) => window.localStorage.getItem(key), STORAGE_KEY))
       .toBe('simpleScaling');
+  });
+
+  test('keeps primary Options text readable in dark mode', async ({ page }) => {
+    await page.addInitScript(() => window.localStorage.setItem('quadgen.theme', 'dark'));
+    await page.goto(INDEX_URL);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
+    await page.locator('#optionsBtn').click();
+
+    const title = page.locator('#optionsModalTitle');
+    const optionLabel = page.locator('label[for="smartPointDragToggle"]');
+    await expect(title).toBeVisible();
+    await expect(optionLabel).toBeVisible();
+    expect(await contrastRatio(title), 'Options title contrast').toBeGreaterThanOrEqual(4.5);
+    expect(await contrastRatio(optionLabel), 'Options label contrast').toBeGreaterThanOrEqual(4.5);
   });
 });

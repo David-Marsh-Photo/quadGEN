@@ -338,6 +338,10 @@
     .text-gray-500 { color: color-mix(in srgb, var(--muted) 80%, var(--bg)) !important; }
     .text-gray-400 { color: color-mix(in srgb, var(--muted) 65%, var(--bg)) !important; }
 
+    /* Options headings and labels retain primary-text contrast in dark mode. */
+    [data-theme="dark"] #optionsModal .text-gray-800,
+    [data-theme="dark"] #optionsModal .text-gray-900 { color: var(--text) !important; }
+
     /* Buttons using blue accents keep contrast in dark */
     .bg-blue-600 { background-color: var(--accent) !important; color: var(--accent-contrast) !important; }
     .hover\:bg-blue-700:hover { background-color: color-mix(in srgb, var(--accent) 85%, black) !important; }
