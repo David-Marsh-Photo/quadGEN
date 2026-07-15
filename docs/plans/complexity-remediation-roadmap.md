@@ -1,6 +1,6 @@
 # Complexity Remediation Roadmap
 
-Status: active
+Status: complete
 Started: 2026-07-14
 Goal: restore trustworthy verification and reduce unnecessary code, tests, dual paths, and generated context without changing supported calibration behavior.
 
@@ -103,7 +103,7 @@ Build-reproducibility prerequisite (2026-07-14): complete. The broad `data/` ign
 
 ## Checkpoint 4 — Workspace Hygiene and Review
 
-Status: inventory complete; user approval required before archive/delete/ignore actions
+Status: complete
 
 Work:
 
@@ -127,21 +127,21 @@ Inventory result (2026-07-14):
 - The ignored root `data/` directory occupies about 632 KB on disk. Tracked tests name 27 fixtures; 22 are locally present (88.8 KB total) and five are missing. This explains the remaining 40 clean-checkout browser failures and is a provenance/privacy decision, not a reason to commit the whole directory.
 - Generated `test-results/` output occupies about 519 KB and is already ignored.
 
-Proposed disposition, pending approval:
+Approved disposition result (2026-07-14):
 
-- retain the two concise shipped-behavior logs; archive the three tooling/session logs outside the repository
-- archive raw Aider histories and comparison transcripts outside the repository, delete the reproducible Aider cache, then ignore those local artifact paths
-- archive or delete the two superseded instruction backups and scratch helpers
-- review draft documentation by topic, extracting only current contracts into existing feature/context documents
-- consolidate only the unique end/percent and measurement-reseed assertions at the lowest stable layer; archive the remaining diagnostic and duplicate test material
-- decide whether the 22 referenced local measurement fixtures may be published, replaced with synthetic fixtures, or kept private with an explicitly local-only test tier
+- User approval was received. Fifty-two source artifacts totaling about 29 MB were moved to `/home/davidmarsh/Dropbox/Photography/quadGEN-archive/2026-07-14-workspace-hygiene/`; a manifest there records the disposition and restoration context.
+- The reproducible 1.22 MB Aider tag cache was deleted. Generated Playwright output was deleted after verification. Narrow ignore rules now cover those local histories, caches, backups, comparison transcripts, and one-off helpers without hiding future docs or tests.
+- The two concise shipped-behavior logs remain in the repository. Three tooling/session logs, raw comparison transcripts, superseded instruction backups, and scratch helpers were archived.
+- The historical Channel Builder plan was distilled into a concise current feature contract. Overlapping LAB/bell drafts, retired state guidance, and the owner-unreviewed photogravure workflow were archived rather than bulk-added.
+- Bidirectional End/% synchronization was added to the existing quad ink-limit browser case. Measurement-based Smart reseeding was merged into the existing Edit Mode unit suite and converted from a private quad fixture to synthetic samples. The remaining duplicate, diagnostic, and presentation-only local tests were archived.
+- The ignored root `data/` directory was deliberately left untouched. Publication, synthetic replacement, or an explicitly local-only fixture tier remains a separate provenance/privacy decision.
 
 Measured comparison with the starting commit (`4b84e5c`):
 
 - tracked production JavaScript: 57,117 → 58,033 lines; excluding the 4,148 existing-but-previously-ignored data-pipeline lines recovered for clean builds, remediation removed 3,232 production lines
-- tracked test JavaScript/TypeScript: 25,191 → 17,343 lines (−7,848, or 31%)
+- tracked test JavaScript/TypeScript: 25,191 → 17,395 lines (−7,796, or 31%)
 - tracked test files: 204 → 160; Playwright inventory: 99 files / 159 tests → 61 files / 87 tests
-- the full development-workspace browser run fell from about two minutes with 71 failures to 19.4 seconds with 99 passing cases, including 12 still-untracked cases under review
+- the full active-workspace browser run fell from about two minutes with 71 failures to 18.9 seconds with 87 retained passing cases; 12 untracked cases were archived after consolidation review
 
 Durable conclusions extracted from the raw audits:
 
@@ -151,6 +151,8 @@ Durable conclusions extracted from the raw audits:
 - Existing feature documents already capture the durable bell-curve, edit-mode, correction, and solver contracts; raw multi-agent outputs are provenance, not runtime context.
 
 Focused flag follow-up (2026-07-14): complete. The `compositeClampGuard` adapter had no production reader, and Lab Tech's `simpleScalingCorrection` flag changed no processing decision despite reporting success. Both flag entries and their window/debug/reset machinery were removed. Lab Tech now maps `simple` and `density_solver` onto the existing persisted correction-method preference used by the Options UI. The slice removed 43 net production-source lines and added one 18-line assertion to an existing AI-actions test file. Focused unit checks (6/6), Vitest in the development workspace (299/299), build (103 modules), smoke (1/1), and the focused browser gate (4/4) passed.
+
+Checkpoint 4 verification (2026-07-14): complete. This slice changed no production source. Channel Builder and Edit Mode focused unit checks passed (67/67), the consolidated ink-limit workflow passed (1/1), Vitest passed (296/296), smoke passed (1/1), the focused browser gate passed (4/4), the full retained Playwright inventory passed (87/87 in 18.9 seconds), and the production build completed with 103 modules. Final diff review and whitespace validation passed.
 
 Explicitly declined for this checkpoint:
 
