@@ -1284,11 +1284,6 @@ export function finalizeCompositeLabRedistribution() {
     }
 
     const { interpolationFunction, lutDomainMin, domainSpan } = context;
-    if (!channels.length) {
-        compositeLabSession.active = false;
-        compositeLabSession.preparedContext = null;
-        return null;
-    }
 
     clearFrontReservePeakMap();
 
@@ -2251,9 +2246,6 @@ export function finalizeCompositeLabRedistribution() {
             }
         }
 
-        if (analysisOnly) {
-            deltaDensity = 0;
-        }
         if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
             console.log('[deltaCheck.after]', { sample: i, deltaDensity });
         }
