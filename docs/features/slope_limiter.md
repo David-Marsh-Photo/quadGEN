@@ -54,8 +54,6 @@ Blend abrupt per-channel jumps that slip through composite allocation guards by 
     - `tests/core/slope-kernel.test.js` covers widened windows, anchor blending, two-pass progression, and limiter fallback when locks block smoothing.
   - **Integration**
     - `tests/lab/composite-slope-kernel.test.js` validates hard roll-offs with tails tapering below 0.02 while staying ≤7 % overall, plus blend-cap fixtures that force fallbacks.
-  - **Playwright (visual)**
-    - Optional headful capture (`tests/e2e/composite-flagged-snapshots.spec.ts`) can snapshot the curved highlight to compare against the legacy staircase baseline.
 
 ## Future Considerations
 - **Configurability**: Threshold still tracks `SNAPSHOT_FLAG_THRESHOLD_PERCENT`; we can layer a dedicated UI control if operators need to widen/narrow the kernel window.
