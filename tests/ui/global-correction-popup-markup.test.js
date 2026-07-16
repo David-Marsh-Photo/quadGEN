@@ -1,25 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 
-describe('global correction help popup markup', () => {
-  it('has balanced <div> tags', () => {
+describe('template modal markup', () => {
+  it('does not retain the obsolete global correction help popup', () => {
     const html = readFileSync('src/index.template.html', 'utf8');
-    const startIndex = html.indexOf('<div id="globalCorrectionHelpPopup"');
 
-    expect(startIndex).toBeGreaterThanOrEqual(0);
-
-    const endIndex = html.indexOf('<!-- Intent Help Popup', startIndex);
-
-    expect(endIndex).toBeGreaterThan(startIndex);
-
-    const snippet = html.slice(startIndex, endIndex);
-    const openCount = (snippet.match(/<div\b/gi) || []).length;
-    const closeCount = (snippet.match(/<\/div>/gi) || []).length;
-
-    expect(closeCount).toBe(
-      openCount,
-      'Mismatched <div> closures in globalCorrectionHelpPopup markup'
-    );
+    expect(html.includes('id="globalCorrectionHelpPopup"')).toBe(false);
+    expect(html.includes('id="closeGlobalCorrectionHelpBtn"')).toBe(false);
   });
 
   it('wraps the app shell in a properly closed main/section pair', () => {

@@ -36,6 +36,7 @@ import {
 import { getLoadedQuadData } from '../core/state.js';
 import { setSolverChannelDensity } from '../core/channel-densities.js';
 import { addStatusMessage } from './status-messages.js';
+import { createDialogFocusController } from './dialog-focus.js';
 import {
     createLstarRowMarkup,
     validateLstarRows,
@@ -49,6 +50,7 @@ import {
 let modalElement = null;
 let isInitialized = false;
 let unsubscribe = null;
+let dialogFocusController = null;
 
 // Tab elements
 const TAB_IDS = ['channelBuilderTabK', 'channelBuilderTabAdd', 'channelBuilderTabPreview', 'channelBuilderTabApply'];
@@ -79,6 +81,13 @@ export function initChannelBuilderModal() {
         console.warn('[ChannelBuilder] Modal element not found');
         return;
     }
+
+    dialogFocusController = createDialogFocusController({
+        dialog: modalElement,
+        initialFocus: () => document.getElementById('closeChannelBuilderModal'),
+        fallbackFocus: () => document.getElementById('channelBuilderBtn'),
+        onEscape: closeModal
+    });
 
     // Set up event listeners
     setupEventListeners();
@@ -174,7 +183,7 @@ export function openChannelBuilderModal() {
     updateUI();
 
     // Show modal
-    modalElement.classList.remove('hidden');
+    dialogFocusController?.open();
     document.body.style.overflow = 'hidden';
 }
 
@@ -183,7 +192,7 @@ export function openChannelBuilderModal() {
  */
 export function closeModal() {
     if (modalElement) {
-        modalElement.classList.add('hidden');
+        dialogFocusController?.close();
         document.body.style.overflow = '';
     }
 }

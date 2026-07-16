@@ -226,9 +226,6 @@ export const elements = {
     helpTabGlossary: null,
     editModeHelpBtn: null,
     editModeHelpPopup: null,
-    globalCorrectionHelpBtn: null,
-    globalCorrectionHelpPopup: null,
-    closeGlobalCorrectionHelpBtn: null,
     intentHelpBtn: null,
     intentHelpPopup: null,
     closeIntentHelpBtn: null,
@@ -442,9 +439,6 @@ export function initializeElements() {
     elements.helpTabGlossary = document.getElementById('helpTabGlossary');
     elements.editModeHelpBtn = document.getElementById('editModeHelpBtn');
     elements.editModeHelpPopup = document.getElementById('editModeHelpPopup');
-    elements.globalCorrectionHelpBtn = document.getElementById('globalCorrectionHelpBtn');
-    elements.globalCorrectionHelpPopup = document.getElementById('globalCorrectionHelpPopup');
-    elements.closeGlobalCorrectionHelpBtn = document.getElementById('closeGlobalCorrectionHelpBtn');
     elements.intentHelpBtn = document.getElementById('intentHelpBtn');
     elements.intentHelpPopup = document.getElementById('intentHelpPopup');
     elements.closeIntentHelpBtn = document.getElementById('closeIntentHelpBtn');

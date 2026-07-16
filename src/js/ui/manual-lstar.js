@@ -15,6 +15,7 @@ import { getLegacyLinearizationBridge } from '../legacy/linearization-bridge.js'
 import { getLabNormalizationMode, setLabNormalizationMode, isDensityNormalizationEnabled, LAB_NORMALIZATION_MODES } from '../core/lab-settings.js';
 import { parseManualLstarData as coreParseManualLstarData } from '../parsers/file-parsers.js';
 import { maybeAutoRaiseInkLimits } from '../core/auto-raise-on-import.js';
+import { createDialogFocusController } from './dialog-focus.js';
 import {
   lstarToHex,
   formatPatchPercent,
@@ -32,6 +33,7 @@ const LSTAR_LAYOUT_STORAGE_KEY = 'quadgen.manualLstarLayout';
 let lstarInputCount = MIN_ROWS;
 let lastLstarValues = [];
 let storedPatchPercents = [];
+let dialogFocusController = null;
 
 const legacyLinearizationBridge = getLegacyLinearizationBridge();
 
@@ -161,6 +163,18 @@ function setModalScrollLock(enabled) {
   }
 }
 
+function getDialogFocusController() {
+  if (!dialogFocusController && elements.lstarModal) {
+    dialogFocusController = createDialogFocusController({
+      dialog: elements.lstarModal,
+      initialFocus: () => elements.closeLstarModal,
+      fallbackFocus: () => elements.manualLstarBtn,
+      onEscape: hideModal
+    });
+  }
+  return dialogFocusController;
+}
+
 function showModal() {
   if (!elements.lstarModal) return;
   restoreLayoutFromStorage();
@@ -170,13 +184,13 @@ function showModal() {
     elements.manualLstarDensityToggle.checked = isDensity;
     elements.manualLstarDensityToggle.setAttribute('aria-checked', String(isDensity));
   }
-  elements.lstarModal.classList.remove('hidden');
+  getDialogFocusController()?.open();
   setModalScrollLock(true);
 }
 
 function hideModal() {
   if (!elements.lstarModal) return;
-  elements.lstarModal.classList.add('hidden');
+  getDialogFocusController()?.close();
   setModalScrollLock(false);
 }
 

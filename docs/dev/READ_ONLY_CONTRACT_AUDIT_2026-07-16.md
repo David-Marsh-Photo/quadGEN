@@ -4,14 +4,14 @@ Audit date: July 16, 2026
 
 Source: Houston workspace `quadGEN`, session `dev`, session ID `84199578-bdc7-4e8b-96e4-32053ef04c77`, final report event sequence 5490.
 
-> **Post-audit remediation status (July 16, 2026):** Findings 1–3 and 5 are
+> **Post-audit remediation status (July 16, 2026):** Findings 1–3, 5, and 7 are
 > resolved for the audited contracts by mandatory PCHIP enforcement, an isolated
 > zero-skip history gate, preflight validation that preserves all prior state
-> when a correction import is rejected, and a deterministic network-free
-> portable bundle. Findings 4 and 6 are operationally contained while Lab Tech
-> remains shelved and its public Worker route remains disabled. Findings 7–10
-> remain active. Credential rotation is intentionally deferred to a separate
-> session.
+> when a correction import is rejected, a deterministic network-free portable
+> bundle, and complete dialog behavior for the three remaining audited surfaces.
+> Findings 4 and 6 are operationally contained while Lab Tech remains shelved
+> and its public Worker route remains disabled. Findings 8–10 remain active.
+> Credential rotation is intentionally deferred to a separate session.
 
 All ten compound questions resolve to “No,” though several contain healthy subpaths. The highest-risk confirmed defects are the live cubic interpolation fallback, non-atomic correction imports, dormant history tests, false-success Lab Tech results, and non-atomic Worker quotas.
 
@@ -170,6 +170,23 @@ Scroll locking and basic 390×844 panel fit work. Close controls are only 11–2
 The old [Global Correction popup](/home/davidmarsh/Dropbox/Photography/quadGEN/src/index.template.html:768) is dead markup: it has no opener and its close control is unwired. The former help path now opens Main Help’s workflow tab.
 
 The frontend-design audit contract shaped this check: semantics, focus containment/restoration, close paths, error announcement, touch targets, and desktop/mobile geometry were all exercised.
+
+**Post-audit remediation:** Manual L*, Channel Builder, and Intent Help now
+expose named modal semantics, focus their visible close control on entry, contain
+forward and reverse Tab navigation, close through Escape, the close control, or
+the backdrop, and restore the exact connected opener. Manual L* and both Channel
+Builder validation regions expose polite atomic live status semantics. Each
+audited close control is 44×44 px with a visible focus treatment. The dead Global
+Correction popup and its sample-only wiring, cached state, modal-peer entry, and
+theme selector were removed; supported correction guidance remains available
+through Main Help's workflow. A 12-case light/dark browser matrix at 390×844 and
+1280×900 confirmed initial focus, panel fit, target size, and zero console/page
+errors, with visual inspection at narrow light and desktop dark. The focused
+browser contract passed 3/3, Vitest passed 297/297, the 100-module build passed,
+smoke passed 2/2, the focused gate passed 4/4, history passed 7/7, the full
+Playwright inventory passed 100/100, and the pre-commit guard passed 12/12. This
+resolves the three surfaces named by Finding 7; it is not a blanket claim about
+every overlay in the application.
 
 ## 8. Canonical `.quad` parsing
 

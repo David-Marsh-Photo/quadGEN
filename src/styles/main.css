@@ -479,7 +479,6 @@ textarea {
 
     /* Help overlay: ensure translucent backdrop in dark mode */
     [data-theme="dark"] #helpPopup { background-color: rgba(0,0,0,0.5) !important; }
-    [data-theme="dark"] #globalCorrectionHelpPopup { background-color: rgba(0,0,0,0.5) !important; }
     [data-theme="dark"] #intentHelpPopup { background-color: rgba(0,0,0,0.5) !important; }
 
     /* Help logo: apply dark-mode stroke/fill overrides like main logo */

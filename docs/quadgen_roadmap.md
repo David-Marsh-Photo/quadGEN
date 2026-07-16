@@ -121,8 +121,25 @@ and dark desktop modes plus narrow light mode, with no browser errors or viewpor
 overflow. Vitest passed (295/295), the 103-module build passed, smoke passed
 (1/1), the focused gate passed (4/4), and the full Playwright inventory passed
 (94/94 in 18.8 seconds). The change adds 63 net production lines and 1,169 raw /
-369 deterministic-gzip bundle bytes. Intent Help, Manual L*, Channel Builder,
-and other modal surfaces remain separate finding-driven candidates.
+369 deterministic-gzip bundle bytes. The remaining audited dialog surfaces were
+handled in the next finding-driven slice.
+
+**Completed slice (2026-07-16): Remaining audited dialog contract.** Manual L*,
+Channel Builder, and Intent Help now use one bounded focus controller to expose
+named modal semantics, focus the visible close control, contain forward and
+reverse Tab navigation, close by Escape, close control, or backdrop, and restore
+the exact opener. Manual L* and Channel Builder validation regions are polite
+atomic live statuses, and all three close controls are 44×44 px with visible
+focus treatment. The dead Global Correction popup and its sample-only wiring,
+state cache, peer entry, and theme selector were removed. A 12-case browser
+matrix and visual review covered light/dark themes at 390×844 and 1280×900 with
+no panel overflow or browser errors. The eight touched production source files
+remove 18 net lines; the rebuilt artifact shrank 3,862 raw / 822 deterministic-
+gzip bytes to 999,657 bytes. The focused dialog contract passed 3/3, Vitest
+passed 297/297, the 100-module build passed, smoke passed 2/2, the focused gate
+passed 4/4, history passed 7/7, the full Playwright inventory passed 100/100,
+and the pre-commit guard passed 12/12. This closes only the three dialog surfaces
+named by the audit; other overlays remain finding-driven work.
 
 ### 3. Lab Tech assistant — Shelved (2026-07-16)
 
