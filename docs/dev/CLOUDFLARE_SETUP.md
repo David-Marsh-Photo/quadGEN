@@ -1,5 +1,9 @@
 # Cloudflare Worker Setup Instructions for quadGEN
 
+> **Archived / disabled (2026-07-16):** Lab Tech is shelved and the production
+> and preview Worker URLs are disabled. These notes preserve the former setup;
+> do not redeploy or re-enable the route without a new product and security review.
+
 ## Prerequisites
 - Cloudflare account with Workers enabled
 - Worker already created: `sparkling-shape-8b5a`

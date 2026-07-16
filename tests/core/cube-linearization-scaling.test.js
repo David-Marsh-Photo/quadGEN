@@ -99,21 +99,42 @@ describe('global LUT application', () => {
     }
   });
 
-  it('keeps the applied curve monotonic when LUT samples are monotonic', () => {
+  it('converges omitted and legacy smooth interpolation labels to PCHIP', () => {
     const cubeText = loadText(IMAGE_ADJUSTMENT_CUBE_PATH);
     const cube = parseCube1D(cubeText, 'ImageAdjustment.cube');
     expect(cube.valid).toBe(true);
 
+    const entryWithoutInterpolation = { ...cube };
+    delete entryWithoutInterpolation.interpolationType;
+
     const ramp = Array.from({ length: 101 }, (_, index) => index);
     const result = apply1DLUT(
       ramp,
-      cube,
+      entryWithoutInterpolation,
+      cube.domainMin,
+      cube.domainMax,
+      100
+    );
+    const explicitPchip = apply1DLUT(
+      ramp,
+      entryWithoutInterpolation,
       cube.domainMin,
       cube.domainMax,
       100,
-      cube.interpolationType
+      'pchip'
     );
 
+    expect(result).toEqual(explicitPchip);
+    for (const legacyType of ['smooth', 'cubic', 'catmull', 'unexpected']) {
+      expect(apply1DLUT(
+        ramp,
+        entryWithoutInterpolation,
+        cube.domainMin,
+        cube.domainMax,
+        100,
+        legacyType
+      )).toEqual(explicitPchip);
+    }
     for (let i = 1; i < result.length; i++) {
       expect(result[i]).toBeGreaterThanOrEqual(result[i - 1]);
     }

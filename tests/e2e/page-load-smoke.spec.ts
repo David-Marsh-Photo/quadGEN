@@ -1,10 +1,12 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'path';
 import { pathToFileURL } from 'url';
 
 test.describe('Page load smoke check', () => {
-  test('loads index.html without console errors', async ({ page }) => {
-    const indexUrl = pathToFileURL(resolve('index.html')).href;
+  test('loads index.html without errors or an assistant surface', async ({ page }) => {
+    const indexPath = resolve('index.html');
+    const indexUrl = pathToFileURL(indexPath).href;
     const consoleErrors: string[] = [];
 
     page.on('pageerror', (error) => {
@@ -29,6 +31,22 @@ test.describe('Page load smoke check', () => {
     );
 
     await expect(page.locator('#autoBlackLimitToggle')).not.toBeChecked();
+    await expect(page.locator('.tab-nav .tab-btn')).toHaveCount(2);
+    await expect(page.locator('.tab-btn[data-tab="preview"]')).toBeVisible();
+    await expect(page.locator('.tab-btn[data-tab="lab"]')).toHaveCount(0);
+    await expect(page.locator('[data-tab-content="lab"]')).toHaveCount(0);
+    await expect(page.locator('#aiInputCompact')).toHaveCount(0);
+    await expect(page.locator('#sendMessageBtnCompact')).toHaveCount(0);
+
+    const assistantGlobals = await page.evaluate(() => {
+      return ['aiConfig', 'chatInterface', 'chatUI', 'sendChatMessage']
+        .filter((name) => name in window);
+    });
+
+    expect(assistantGlobals).toEqual([]);
+    expect(readFileSync(indexPath, 'utf8')).not.toContain(
+      'sparkling-shape-8b5a.marshmonkey.workers.dev'
+    );
     expect(consoleErrors).toEqual([]);
   });
 });

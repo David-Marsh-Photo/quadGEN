@@ -20,7 +20,7 @@ The quadGEN UI uses an **app layout** with main content area (chart + bottom tab
 │ ↕ Chart Divider (horizontal)     │ FULL HEIGHT                  │
 ├───────────────────────────────────┤ - Vertical tab navigation    │
 │ Bottom Tabs                       │ - Optimized narrow layouts   │
-│ (Channels │ Lab Tech │ Preview)  │                              │
+│ (Channels │ Preview)             │                              │
 │                                   │                              │
 └───────────────────────────────────┴──────────────────────────────┘
 ```
@@ -74,7 +74,7 @@ Manages both horizontal and vertical tab systems:
 
 #### Horizontal Tabs (Bottom)
 - **Elements**: `.tab-nav` with `.tab-btn`
-- **Tabs**: Channels, Lab Tech, Preview
+- **Tabs**: Channels, Preview
 - **Layout**: Horizontal row with icons and labels
 - **Keyboard**: Arrow left/right navigation
 
@@ -119,7 +119,6 @@ export function getActiveTab();                       // Get current active tab 
     <div id="toolTabs" class="tool-tabs-container">
       <div class="tab-nav">
         <button class="tab-btn active" data-tab="channels">...</button>
-        <button class="tab-btn" data-tab="lab">...</button>
         <button class="tab-btn" data-tab="preview">...</button>
       </div>
       <div class="tab-content-wrapper">...</div>

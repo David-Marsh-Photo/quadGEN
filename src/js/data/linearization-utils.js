@@ -705,7 +705,7 @@ export function getGlobalLinearizationInterpolationType(linearizationData, selec
         return selectedInterpolationType;
     }
 
-    return 'cubic'; // Default
+    return 'pchip'; // Mandatory smooth default
 }
 
 /**
@@ -719,7 +719,7 @@ export function createLinearizationData(samples, options = {}) {
         sourceSpace = DataSpace.SPACE.PRINTER,
         domainMin = 0,
         domainMax = 1,
-        interpolationType = 'cubic',
+        interpolationType = 'pchip',
         filename = 'generated',
         description = 'Generated linearization data'
     } = options;

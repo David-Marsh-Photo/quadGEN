@@ -160,12 +160,11 @@ Scope: This license applies to this HTML file (quadgen.html) only.
 <div class="chart-divider-grip"></div>
 </div>
 </div> <!-- Close chartPanel -->
-<!-- Tabbed Tool Area (Bottom: Channels, Lab Tech, Preview) -->
+<!-- Tabbed Tool Area (Bottom: Channels, Preview) -->
 <div class="tool-tabs-container" id="toolTabs">
 <!-- Tab Navigation -->
 <div class="tab-nav" role="tablist">
 <button aria-selected="true" class="tab-btn active" data-tab="channels" role="tab"><span class="tab-icon">🎛️</span><span class="tab-title">CHANNELS</span></button>
-<button aria-selected="false" class="tab-btn" data-tab="lab" role="tab"><span class="tab-icon">💬</span><span class="tab-title">LAB TECH</span></button>
 <button aria-selected="false" class="tab-btn" data-tab="preview" role="tab"><span class="tab-icon">📄</span><span class="tab-title">.QUAD PREVIEW</span></button>
 </div>
 <!-- Tab Content Areas -->
@@ -210,45 +209,6 @@ Scope: This license applies to this HTML file (quadgen.html) only.
 <tbody id="rows">
 </tbody>
 </table>
-</div>
-</div>
-<!-- Lab Tech Tab -->
-<div class="tab-content" data-tab-content="lab" hidden="" role="tabpanel">
-<div class="border border-gray-200 rounded-xl overflow-hidden">
-<div class="console-header bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 flex items-center justify-between">
-<span><span class="mr-1" id="labTechIcon">💬</span>Lab Tech</span>
-<div class="flex items-center gap-3">
-<label class="flex items-center gap-1 text-xs text-gray-700 hidden" title="Show assistant status messages in chat">
-<input checked="" class="rounded border-gray-300" id="aiShowStatusToggle" type="checkbox"/>
-<span>Show assistant status</span>
-</label>
-<button class="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded px-2 py-0.5 font-bold focus:outline-none focus:ring-0" id="clearChatBtn">Clear</button>
-</div>
-</div>
-<div class="font-mono p-2" id="labTechConsole">
-<!-- Chat History -->
-<div class="overflow-y-auto text-xs leading-4 mb-2" id="chatHistory" style="height:224px;">
-<div class="labtech-sample px-2 py-1 rounded mb-2">
-<strong>Try this:</strong> "Reduce all ink limits by 20%"<br/>
-<strong>or:</strong> "generate a curve with points 0,0 25,20 75,85 100,100"<br/>
-<strong>or:</strong> "apply a midtone lift"<br/>
-<strong>or:</strong> "delete the key point near 25%"<br/>
-<strong>or:</strong> "delete key point 2"
-                </div>
-</div>
-<!-- Resizer for Lab Tech console -->
-<div aria-orientation="horizontal" class="h-4 bg-gray-800/40 hover:bg-gray-700/60 cursor-row-resize mb-2 rounded relative" id="labTechResizer" role="separator" title="Drag to resize">
-<div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-<span class="inline-block w-10 h-[2px] bg-gray-400/80 rounded"></span>
-<span class="inline-block w-10 h-[2px] bg-gray-400/80 rounded ml-1"></span>
-</div>
-</div>
-<!-- Bottom input area -->
-<div class="flex items-center gap-2">
-<input class="flex-1 min-w-0 rounded border px-3 py-1 text-xs focus:outline-none focus:ring-2 placeholder-gray-400" id="aiInputCompact" placeholder="Ask Lab Tech… (Enter to send)" type="text"/>
-<button class="px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded font-bold focus:outline-none focus:ring-0" disabled="" id="sendMessageBtnCompact">Send</button>
-</div>
-</div>
 </div>
 </div>
 <!-- Preview Tab -->

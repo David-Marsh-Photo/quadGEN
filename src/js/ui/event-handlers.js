@@ -3040,7 +3040,7 @@ function rebaseChannelsToCorrectedCurves(channelNames = [], options = {}) {
         isLabLinearizationData(globalData)
     );
 
-    const interpolationType = elements.curveSmoothingMethod?.value || 'cubic';
+    const interpolationType = elements.curveSmoothingMethod?.value || 'pchip';
     let smoothingPercent = 0;
     if (compositeEligible) {
         if (globalData && typeof globalData.previewSmoothingPercent === 'number') {

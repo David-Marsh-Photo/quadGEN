@@ -22,6 +22,9 @@ This directory holds the reference material that ships with the modular quadGEN 
   - `lab-ingestion.md`, `manual-lstar.md`, `per-channel-measurements.md`
   - `channel-builder.md`, `smart-curve-engine.md`, `history-manager.md`, `global-correction-loaders.md`
 
+Some feature briefs retain Lab Tech command contracts as dormant implementation
+reference; the assistant itself is currently shelved and is not shipped.
+
 ## File Format Specs
 - `File_Specs/ACV_SPEC_SUMMARY.md`, `CGATS17_SPEC_SUMMARY.md`, `CUBE_LUT_SPEC_SUMMARY.md`, `LAB_TXT_SPEC_SUMMARY.md`, `QTR_QUAD_SPEC_SUMMARY.md` – parsing rules and edge cases for supported import/export formats.
 - `File_Specs/Quad-Ink-Descriptor-Spec-En.pdf` – vendor-provided reference for QuadToneRIP ink descriptors.
@@ -32,8 +35,8 @@ This directory holds the reference material that ships with the modular quadGEN 
 
 ## Developer Resources
 - `dev/BUILD_INSTRUCTIONS.md`, `dev/QUADGEN_DEVELOPMENT.md` – setup notes for local development and build process.
-- `dev/QUADGEN_DATA_TYPES.md`, `dev/QUADGEN_AI_INTEGRATION.md` – data contracts and Lab Tech automation hooks.
-- `dev/CLOUDFLARE_SETUP.md` – instructions for deploying the Cloudflare worker proxy used in production.
+- `dev/QUADGEN_DATA_TYPES.md` – data contracts; `dev/QUADGEN_AI_INTEGRATION.md` – archived Lab Tech automation contracts.
+- `dev/CLOUDFLARE_SETUP.md` – archived setup notes for the disabled Cloudflare Worker route.
 
 ## Testing & Tooling
 - `playwright_external_runner.md` – how to drive the MCP-adjacent Playwright harness.

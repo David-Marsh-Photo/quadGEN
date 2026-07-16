@@ -2,7 +2,7 @@
 
 Status: current
 
-Last reviewed: 2026-07-15
+Last reviewed: 2026-07-16
 
 quadGEN's roadmap is organized around operator outcomes, calibration fidelity, and
 small verified checkpoints. It is not a list of speculative rewrites. Product
@@ -122,12 +122,15 @@ overflow. Vitest passed (295/295), the 103-module build passed, smoke passed
 369 deterministic-gzip bundle bytes. Intent Help, Manual L*, Channel Builder,
 and other modal surfaces remain separate finding-driven candidates.
 
-### 3. Lab Tech model lifecycle — Current (2026-07-15)
+### 3. Lab Tech assistant — Shelved (2026-07-16)
 
-**Outcome:** Lab Tech uses a supported model through one explicit runtime
-configuration without changing its tool or operator contract accidentally.
+**Current decision:** Lab Tech is not part of the shipped product. Its tab and
+chat controls are removed, the app no longer starts the assistant configuration
+or chat runtime, and the public Worker route is disabled. The network-free
+programmatic action facade remains because core editing and compatibility callers
+still use it; dormant assistant source is retained for possible future work.
 
-**Completed slice:** The Anthropic runtime moved from Claude Sonnet 4.5 to
+**Historical completed slice (2026-07-15):** The Anthropic runtime moved from Claude Sonnet 4.5 to
 Claude Sonnet 5. Adaptive thinking is explicitly disabled so the existing
 1,000-token limit remains available for concise tool calls and operator guidance;
 the request continues to omit `temperature`, `top_p`, and `top_k`. Unused
@@ -142,8 +145,9 @@ Production source shrank by six net lines; the portable bundle changed by 25 raw
 / 9 deterministic-gzip bytes. Worker routing, provider selection, prompts, tool
 schemas, calibration behavior, interpolation, and PCHIP paths did not change.
 
-Future model changes should start from the provider's lifecycle documentation,
-verify request-parameter compatibility, and pass one non-mutating live canary.
+Any revival requires a fresh product decision, security and authentication
+review, deliberate route re-enablement, current provider validation, and a
+non-mutating live canary before the assistant returns to the UI.
 
 ### 4. Calibration fidelity and format compatibility — Ongoing
 
@@ -159,6 +163,16 @@ and exportable results across supported formats.
 - use deterministic or byte-level comparisons when consolidating equivalent
   processing paths
 - document user-visible numerical changes before release
+
+**Completed slice (2026-07-16): Mandatory PCHIP enforcement.** The shipped
+template has no interpolation selector, so Density Solver, CUBE/ACV correction,
+active-range correction, and retained summary paths had silently fallen back to
+cubic interpolation. The processing boundary now preserves only explicit Linear
+as a technical exception; missing, smooth, legacy Cubic/Catmull, and unknown
+labels all converge to PCHIP. The regression failed on the former default and
+passed after the fix. Focused correction/solver checks passed (26/26), Vitest
+passed (295/295), the 99-module build passed, smoke passed (1/1), and the focused
+browser gate passed (4/4).
 
 ### 5. State and architecture evolution — Triggered only
 

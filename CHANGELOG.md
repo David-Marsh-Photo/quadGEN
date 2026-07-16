@@ -9,14 +9,16 @@ This changelog follows a concise, user-facing format. Engineering details live i
 - _Nothing yet._
 
 ### Changed
-- Global Scale now uses one rollback-safe transaction and one canonical percent/baseline state for the Scale field, Lab Tech, history, and compatibility helpers; the unused rollout flags, mirrored state, subscriptions, and diagnostic queue/telemetry layers were removed.
-- Lab Tech's correction-method action now updates the same persisted Simple Scaling/Density Solver preference as the Options UI; two inert feature-flag adapters that never selected processing behavior were removed.
-- Lab Tech now uses Claude Sonnet 5 with adaptive thinking disabled, preserving its concise tool-oriented response budget while updating the underlying model.
+- Global Scale now uses one rollback-safe transaction and one canonical percent/baseline state for the Scale field, history, and compatibility helpers; the unused rollout flags, mirrored state, subscriptions, and diagnostic queue/telemetry layers were removed.
 
 ### Fixed
 - Density Solver no longer honors obsolete hidden weighting values from browser storage; LAB redistribution always uses the documented normalized path.
 - Global Scale remains the latest undoable action after a LAB or Manual correction; unchanged channel-enabled refreshes no longer consume Undo steps.
 - The main Help dialog now exposes a screen-reader name, contains keyboard focus, and returns focus to the control that opened it when closed with Escape.
+- Density Solver, CUBE/ACV correction, active-range correction, and retained summary paths now use mandatory PCHIP for every smooth interpolation fallback. Legacy Cubic/Catmull labels converge to PCHIP; explicit Linear remains available for technical use.
+
+### Removed
+- Lab Tech is shelved: the assistant tab, chat controls, startup runtime, configuration/chat compatibility globals, and public Worker route are disabled. Manual editing, correction, preview, and export workflows are unchanged.
 
 ### Docs
 - Consolidated the former scaling-orchestrator notes into the Global Scale specification and removed retired parity-harness instructions.

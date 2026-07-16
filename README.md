@@ -6,7 +6,7 @@ Repository: https://github.com/David-Marsh-Photo/quadGEN
 
 ## Features
 - Import `.quad`, LAB/CGATS/CTI3, Manual L*, LUT (`.cube` 1D/3D), and Photoshop `.acv` data.
-- Smart Edit Mode with undo/redo, key-point labels, recompute tolerances, and Lab Tech automation hooks.
+- Smart Edit Mode with undo/redo, key-point labels, and recompute tolerances.
 - Built-in contrast intents (Linear, Soft, Hard, Filmic, Gamma) with Apply-to-Loaded curve support.
 - Help popup with ReadMe, Glossary, Detailed Workflow, and Version History.
 - Automated smoke and Playwright parity tests covering the modular UI.
@@ -37,7 +37,7 @@ Key references live under `docs/`:
 - `docs/manual_tests.md` — regression checklist.
 - `docs/File_Specs/` — format summaries for `.quad`, `.cube`, `.acv`, LAB `.txt`, CGATS/CTI3.
 
-Developer notes live in `docs/dev/` (build instructions, AI integration, data types, Cloudflare worker setup).
+Developer notes live in `docs/dev/` (build instructions, data types, and archived assistant/Worker integration notes).
 
 ## Testing
 - `npm run test:smoke` — Playwright smoke test opening the built bundle.

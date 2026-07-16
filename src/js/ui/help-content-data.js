@@ -12,8 +12,12 @@ export const VERSION_HISTORY = {
       CHANGED: [
         'Auto Black Limit now defaults OFF for new browser profiles; saved preferences remain unchanged.'
       ],
-      FIXED: [],
-      REMOVED: [],
+      FIXED: [
+        'Smooth correction paths now enforce PCHIP when interpolation metadata is missing, legacy, or unknown; Linear remains the only technical exception.'
+      ],
+      REMOVED: [
+        'Lab Tech has been shelved: its tab, chat controls, assistant runtime, and production network route are no longer included in the app.'
+      ],
       DOCS: []
     },
     aboutDialog: []
@@ -1704,7 +1708,7 @@ Scope: This license applies to this HTML file (quadgen.html) only.</div>
       <p>
         <strong>quadGEN</strong> is a free, browser-based tool for generating and refining <code>.quad</code> files used with QuadToneRIP.  
         It supports LAB/LUT/ACV inputs, and an Edit Mode for precise, point-based curve edits.  
-        Core features work fully offline; the optional AI assistant requires network access.
+        Core editing and export features work fully offline. Lab Tech is currently shelved and is not included in this build.
       </p>
       <p>
         quadGEN is designed for photographers, printmakers, and alt-process practitioners who create digital negatives or monochrome prints and need reliable tonal calibration.
@@ -1734,7 +1738,7 @@ Scope: This license applies to this HTML file (quadgen.html) only.</div>
         <li><strong>Online:</strong> visit <a href="https://quadgen.ink/" target="_blank" rel="noopener">https://quadgen.ink/</a>.</li>
         <li><strong>Offline:</strong> right‑click and download this file: <a href="https://quadgen.ink/index.html" target="_blank" rel="noopener">https://quadgen.ink/index.html</a>, then open it locally (no install required).</li>
         <li><strong>Platforms:</strong> macOS, Windows, Linux (desktop recommended).</li>
-        <li><strong>Network note:</strong> AI assistant features require internet; manual editing and exports do not.</li>
+        <li><strong>Network note:</strong> editing and export do not depend on an assistant service.</li>
       </ul>
 
       <hr />
@@ -1772,7 +1776,6 @@ Scope: This license applies to this HTML file (quadgen.html) only.</div>
         <li>Undo/Redo: full history of edits, LAB/LUT loads, global scaling, and per-channel slider changes.</li>
         <li>Recompute key points: simplify Smart Curves with tolerance/max-point controls.</li>
         <li>Graph zoom: use the +/− control in the chart corner to rescale the Y-axis in 10% steps when working with low ink limits; when a channel peaks at 100% the chart keeps one highlight-inspection step and flattens anything above the displayed max while noting the clamp.</li>
-        <li>Lab Tech: AI assistant for Q&amp;A and automation.</li>
         <li>Contrast intent: presets or custom targets; shows Δ vs target; endpoints fixed (use ink limits to change).</li>
         <li>Auto endpoint rolloff: optional white/black soft knees that detect early plateau and ease into the ink limit with a smooth shoulder/toe (3% proximity threshold).</li>
         <li>Import ACV/LUT as target: in the Custom Intent modal, load <code>.acv</code>/<code>.cube</code> as a target intent (not a correction); includes endpoint anchoring, monotonic enforcement, and blend.</li>
@@ -1807,7 +1810,7 @@ Scope: This license applies to this HTML file (quadgen.html) only.</div>
 
       <h2 id="faq">Troubleshooting &amp; FAQ</h2>
       <ul>
-        <li><strong>Offline use:</strong> Lab Tech is unavailable offline; manual functions work fully.</li>
+        <li><strong>Lab Tech:</strong> the former assistant is currently shelved and is not included in this build.</li>
         <li><strong>Curve orientation:</strong> quadGEN plots input % (X) vs ink output % (Y), origin = white. Other tools may use tone curves with origin = black.</li>
         <li><strong>ACV parsing:</strong> Photoshop <code>.acv</code> files now load directly from the file picker. The old <code>TypeError: t.includes is not a function</code> error is resolved—no manual text conversion is required.</li>
         <li><strong>Corrections:</strong> Upward curve = more ink (darker); downward = less ink (lighter). Example: raise mids if midtones are too light.</li>
@@ -1825,8 +1828,6 @@ Scope: This license applies to this HTML file (quadgen.html) only.</div>
       <h2 id="credits">Credits / Attribution</h2>
       <ul>
         <li>Tailwind CSS — used via CDN (<code>cdn.tailwindcss.com</code>), MIT License.</li>
-        <li>Cloudflare Workers — used as an API proxy (rate-limited edge function).</li>
-        <li>Anthropic Claude</li>
         <li>OpenAI ChatGPT / Codex</li>
         <li>Prints on Paper Studio — contrast intent definitions and feature references used with permission under <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener">GNU Public License</a>.</li>
         <li>Easy Digital Negatives (EDN) — Copyright Peter Mrhar. EDN is a separate project for building correction LUTs for digital negatives.</li>
@@ -1988,7 +1989,7 @@ export function getHelpGlossaryHTML(){
         <dd>Data structure that maps input values to output values, used for color and tone transformations. quadGEN supports 1D and 3D <code>.cube</code> LUT files from tools like Easy Digital Negatives (EDN) and can extract neutral-axis corrections for linearization.</dd>
 
         <dt>Lab Tech</dt>
-        <dd>The built-in assistant in quadGEN that can answer questions and perform actions (when networked). Optional; core editing/export features work offline.</dd>
+        <dd>The former built-in assistant. It is currently shelved and is not included in this build; core editing and export features remain available offline.</dd>
 
         <dt>Log-density linearization</dt>
         <dd>Optional normalization mode that converts measured L* to optical density (−log<sub>10</sub>(Y)) before building the correction curve. Recommended for digital negatives and other through-light workflows where equal density steps translate to equal exposure. Enable it from the Options panel’s “Use log-density for LAB / Manual measurements” toggle (also available inside the Manual L* modal).</dd>

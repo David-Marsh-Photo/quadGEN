@@ -16,6 +16,8 @@ ALL smooth curve generation MUST use PCHIP (Piecewise Cubic Hermite Interpolatin
 - Prevents overshooting
 - Maintains monotonic curves
 - **Never** use smoothstep, cosine, Catmull-Rom, or cubic splines
+- Missing, unknown, or legacy Cubic/Catmull interpolation labels normalize to PCHIP at the processing boundary
+- Explicit Linear interpolation is the only supported technical exception
 
 ### Helper Function
 `buildInkInterpolatorFromMeasurements(points, options)` centralizes the inversion pipeline:
