@@ -103,6 +103,27 @@ test.describe('Options correction method', () => {
     });
   }
 
+  test('gives every Options help control an accessible description', async ({ page }) => {
+    await page.goto(INDEX_URL);
+    await page.locator('#optionsBtn').click();
+
+    const helpControls = [
+      ['What does the correction method control?', /Simple Scaling is the default/],
+      ['What does curve point dragging change?', /Enable to drag Smart key points directly/],
+      ['What does the correction overlay do?', /Displays the dashed global correction target overlay/],
+      ['What do measurement spot markers show?', /Displays an overlay of LAB measurement points/],
+      ['What does the light blocking overlay do?', /Displays the density-weighted blocking curve/],
+      ['What does the ink load overlay show?', /Displays a combined ink-percentage curve/],
+    ] as const;
+
+    for (const [name, description] of helpControls) {
+      await expect(page.getByRole('button', { name })).toHaveAccessibleDescription(description);
+    }
+
+    await page.getByRole('button', { name: helpControls[0][0] }).focus();
+    await expect(page.getByRole('tooltip')).toContainText('Choose the LAB correction pipeline');
+  });
+
   test('contains keyboard focus and restores the Options trigger on Escape', async ({ page }) => {
     await page.goto(INDEX_URL);
 

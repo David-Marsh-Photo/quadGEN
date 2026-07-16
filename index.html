@@ -1609,7 +1609,7 @@ ${b.join(`
 <fieldset aria-describedby="correctionMethodHelp" class="space-y-2 border-b border-gray-200 pb-3">
 <legend class="text-sm font-semibold text-gray-700">Correction method</legend>
 <div class="flex items-start gap-3">
-<button aria-label="What does the correction method control?" class="tooltip-trigger mt-0.5 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-200 text-xs font-semibold text-gray-400 hover:text-gray-600 hover:border-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" data-tooltip="Choose the LAB correction pipeline. Changing the method immediately reprocesses the active LAB or Manual dataset." type="button">
+<button aria-describedby="correctionMethodHelp" aria-label="What does the correction method control?" class="tooltip-trigger mt-0.5 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-200 text-xs font-semibold text-gray-400 hover:text-gray-600 hover:border-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" data-tooltip="Choose the LAB correction pipeline. Changing the method immediately reprocesses the active LAB or Manual dataset." type="button">
 <span aria-hidden="true">?</span>
 </button>
 <p class="text-xs text-gray-500" id="correctionMethodHelp">Simple Scaling is the default. Density Solver redistributes LAB corrections using measured channel reserves.</p>
@@ -1626,7 +1626,7 @@ ${b.join(`
 </div>
 </fieldset>
 <div class="flex items-start gap-3 pt-1">
-<button aria-label="What does curve point dragging change?" class="tooltip-trigger mt-0.5 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-200 text-xs font-semibold text-gray-400 hover:text-gray-600 hover:border-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" data-tooltip="Let Edit Mode Smart key points be dragged directly on the chart. Requires seeded Smart curves." type="button">
+<button aria-describedby="smartPointDragHelp" aria-label="What does curve point dragging change?" class="tooltip-trigger mt-0.5 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-200 text-xs font-semibold text-gray-400 hover:text-gray-600 hover:border-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" data-tooltip="Let Edit Mode Smart key points be dragged directly on the chart. Requires seeded Smart curves." type="button">
 <span aria-hidden="true">?</span>
 </button>
 <label aria-describedby="smartPointDragHelp" class="flex items-center gap-2 text-sm font-medium text-gray-800" for="smartPointDragToggle">
@@ -1636,7 +1636,7 @@ ${b.join(`
 </div>
 <span class="sr-only" id="smartPointDragHelp">Enable to drag Smart key points directly on the Edit Mode chart. Experimental: only affects channels with Smart curves and may be disabled for troubleshooting.</span>
 <div class="flex items-start gap-3 pt-1">
-<button aria-label="What does the correction overlay do?" class="tooltip-trigger mt-0.5 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-200 text-xs font-semibold text-gray-400 hover:text-gray-600 hover:border-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" data-tooltip="Show the dashed global correction target overlay on the chart for quick visual comparisons." type="button">
+<button aria-describedby="correctionOverlayHelp" aria-label="What does the correction overlay do?" class="tooltip-trigger mt-0.5 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-200 text-xs font-semibold text-gray-400 hover:text-gray-600 hover:border-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" data-tooltip="Show the dashed global correction target overlay on the chart for quick visual comparisons." type="button">
 <span aria-hidden="true">?</span>
 </button>
 <label aria-describedby="correctionOverlayHelp" class="flex items-center gap-2 text-sm font-medium text-gray-800" for="correctionOverlayToggle">
@@ -1646,7 +1646,7 @@ ${b.join(`
 </div>
 <span class="sr-only" id="correctionOverlayHelp">Displays the dashed global correction target overlay on the chart when a correction dataset is loaded.</span>
 <div class="flex items-start gap-3 pt-1">
-<button aria-label="What do measurement spot markers show?" class="tooltip-trigger mt-0.5 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-200 text-xs font-semibold text-gray-400 hover:text-gray-600 hover:border-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" data-tooltip="Mark each LAB measurement directly on the chart. Green checks show patches within tolerance; arrows call out where to darken or lighten." type="button">
+<button aria-describedby="labSpotMarkersHelp" aria-label="What do measurement spot markers show?" class="tooltip-trigger mt-0.5 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-200 text-xs font-semibold text-gray-400 hover:text-gray-600 hover:border-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" data-tooltip="Mark each LAB measurement directly on the chart. Green checks show patches within tolerance; arrows call out where to darken or lighten." type="button">
 <span aria-hidden="true">?</span>
 </button>
 <label aria-describedby="labSpotMarkersHelp" class="flex items-center gap-2 text-sm font-medium text-gray-800" for="labSpotMarkersToggle">
@@ -1656,7 +1656,7 @@ ${b.join(`
 </div>
 <span class="sr-only" id="labSpotMarkersHelp">Displays an overlay of LAB measurement points with pass/fail markers once LAB data is loaded. Toggle is enabled after a measurement dataset is active.</span>
 <div class="flex items-start gap-3 pt-1">
-<button aria-label="What does the light blocking overlay do?" class="tooltip-trigger mt-0.5 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-200 text-xs font-semibold text-gray-400 hover:text-gray-600 hover:border-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" data-tooltip="Show the combined density-weighted blocking curve so you can gauge where the print transitions to the next ink set." type="button">
+<button aria-describedby="lightBlockingOverlayHelp" aria-label="What does the light blocking overlay do?" class="tooltip-trigger mt-0.5 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-200 text-xs font-semibold text-gray-400 hover:text-gray-600 hover:border-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" data-tooltip="Show the combined density-weighted blocking curve so you can gauge where the print transitions to the next ink set." type="button">
 <span aria-hidden="true">?</span>
 </button>
 <label aria-describedby="lightBlockingOverlayHelp" class="flex items-center gap-2 text-sm font-medium text-gray-800" for="lightBlockingOverlayToggle">
@@ -1673,7 +1673,7 @@ ${b.join(`
             </button>
 </div>
 <div class="flex items-start gap-3 pt-3">
-<button aria-label="What does the ink load overlay show?" class="tooltip-trigger mt-0.5 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-200 text-xs font-semibold text-gray-400 hover:text-gray-600 hover:border-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" data-tooltip="Plot the summed ink percentage across every enabled channel. Helps spot input levels where total coverage exceeds your warning threshold." type="button">
+<button aria-describedby="inkLoadOverlayHelp" aria-label="What does the ink load overlay show?" class="tooltip-trigger mt-0.5 inline-flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-gray-200 text-xs font-semibold text-gray-400 hover:text-gray-600 hover:border-gray-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" data-tooltip="Plot the summed ink percentage across every enabled channel. Helps spot input levels where total coverage exceeds your warning threshold." type="button">
 <span aria-hidden="true">?</span>
 </button>
 <div aria-describedby="inkLoadOverlayHelp" class="flex flex-col gap-2">
