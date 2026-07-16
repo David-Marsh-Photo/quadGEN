@@ -137,7 +137,7 @@ function testParseLogic() {
 - Deletion: endpoints blocked by default; set allowEndpoint=true to permit. near_input uses ±tolerance (default 1.0%); return graceful error if no match
 
 **File Processing Issues**:
-- .quad files: Validate QuadToneRIP header format
+- .quad files: Validate the explicit QuadToneRIP channel declaration when present, exact 256-value channel blocks, integer range, and the documented headerless 8/10-channel layouts
 - .cube files: Check 1D vs 3D detection logic
 - LAB data: Verify L* value parsing and transformation
 - Orientation: Use the `DataSpace` helper (`convertSamples`, `convertControlPoints`) so imported data lands in printer space before downstream use.

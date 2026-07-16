@@ -193,6 +193,22 @@ passed after the fix. Focused correction/solver checks passed (26/26), Vitest
 passed (295/295), the 99-module build passed, smoke passed (1/1), and the focused
 browser gate passed (4/4).
 
+**Completed slice (2026-07-16): Canonical `.quad` parsing.** Editable and
+reference imports now share the dependency-free structural parser. Explicit
+channel declarations require unique, non-empty names and exactly 256 integer
+values per channel; headerless compatibility remains available only for the
+documented exact 8- and V/MK 10-channel layouts. Extra values or blocks,
+remainders, unsupported headerless counts, out-of-range values, and non-comment
+text are rejected rather than silently discarded. Reference import retains
+pre-parse file type/size guards and post-parse active-printer matching as workflow
+policy outside the structural parser. The consolidation
+removed 162 net production-source lines across three files and reduced the bundle
+by 2,284 raw bytes. The focused contract passed 20/20, a real generated-file
+round-trip remained bit-for-bit identical, all 15 tracked `.quad` fixtures parsed,
+Vitest passed 317/317, the 100-module build passed, smoke passed 2/2, the focused
+gate passed 4/4, history passed 7/7, the full Playwright inventory passed 101/101,
+and the pre-commit guard passed 12/12.
+
 ### 5. State and architecture evolution — Triggered only
 
 **Outcome:** A touched workflow has one understandable owner and no unnecessary

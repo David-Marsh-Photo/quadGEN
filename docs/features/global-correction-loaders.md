@@ -8,13 +8,14 @@
 - Global Corrections → `Load Data File` (accepts `.quad`, `.cube`, `.acv`).
 
 ## Core State & Helpers
-- Parsers: `src/js/parsers/file-parsers.js`, `src/js/data/quad-parser.js`, LUT/ACV helpers under `src/js/data/`.
+- Canonical `.quad` structure: `src/js/data/quad-parser.js`; `src/js/parsers/file-parsers.js` adapts its result for the editable load workflow. LUT/ACV helpers remain under `src/js/data/`.
 - State integration: `setLoadedQuadData`, overlay registries in `src/js/ui/chart-renderer.js`.
 - History: `history.recordGlobalLoad`.
 
 ## Expected Behavior
 1. **.quad Files**
-   - Parse ink curves, metadata, channel list; store raw curves in `loadedQuadData.curves`, keep immutable copy in `originalCurves` and `originalCurvesBaseline`.
+   - Require one exact 256-integer block per declared channel. Headerless input is accepted only for the documented 8- and 10-channel layouts; malformed structure is rejected before load-state mutation.
+   - Parse the channel list, per-channel maxima, and curves; store raw curves in `loadedQuadData.curves`, keep immutable copy in `originalCurves` and `originalCurvesBaseline`.
    - Capture ink limit baselines for global scale, auto limit, and revert integration.
    - Seed Smart curves from `.quad` data on first Edit Mode activation.
    - Update filename label, channel table, and revert/intent button states.

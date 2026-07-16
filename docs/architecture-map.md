@@ -1,6 +1,6 @@
 # quadGEN Architecture Map
 
-Generated on 2026-07-16T17:56:21.851Z
+Generated on 2026-07-16T23:40:12.413Z
 
 This diagram groups source modules by their primary directory and highlights cross-cluster dependencies.
 
@@ -15,7 +15,7 @@ flowchart TD
   G_js_legacy["Legacy\n(4 modules)"]
   G_js_math["Math\n(1 modules)"]
   G_js_parsers["Parsers\n(1 modules)"]
-  G_js_ui["UI\n(33 modules)"]
+  G_js_ui["UI\n(34 modules)"]
   G_js_utils["Utilities\n(3 modules)"]
   G_src["Entry & Root\n(1 modules)"]
   G_js_ai -->|7| G_js_core
@@ -44,13 +44,13 @@ flowchart TD
   G_js_files -->|3| G_js_data
   G_js_files -->|1| G_js_ui
   G_js_parsers -->|2| G_js_core
-  G_js_parsers -->|4| G_js_data
+  G_js_parsers -->|5| G_js_data
   G_js_parsers -->|1| G_js_math
   G_js_parsers -->|1| G_js_utils
   G_js_ui -->|70| G_js_core
   G_js_ui -->|7| G_js_curves
   G_js_ui -->|15| G_js_data
-  G_js_ui -->|6| G_js_files
+  G_js_ui -->|5| G_js_files
   G_js_ui -->|8| G_js_legacy
   G_js_ui -->|2| G_js_math
   G_js_ui -->|2| G_js_parsers
@@ -101,7 +101,7 @@ flowchart TD
   - src/js/math/interpolation.js
 - **Parsers** (1 modules)
   - src/js/parsers/file-parsers.js
-- **UI** (33 modules)
+- **UI** (34 modules)
   - src/js/ui/edit-mode.js
   - src/js/ui/status-service.js
   - src/js/ui/bell-shift-controls.js

@@ -3,6 +3,7 @@
 
 import { CURVE_RESOLUTION } from '../data/processing-utils.js';
 import { DataSpace } from '../data/processing-utils.js';
+import { parseQuadFile as parseCanonicalQuadFile } from '../data/quad-parser.js';
 import { anchorSamplesToUnitRange } from '../data/linearization-utils.js';
 import { isCubeEndpointAnchoringEnabled } from '../core/feature-flags.js';
 import {
@@ -32,12 +33,6 @@ export {
     parseCGATS17
 };
 
-// Default channel names by count (based on common QTR printer configurations)
-const DEFAULT_CHANNEL_NAMES = {
-    8: ['K', 'C', 'M', 'Y', 'LC', 'LM', 'LK', 'LLK'],           // P600/P800
-    10: ['K', 'C', 'M', 'Y', 'LC', 'LM', 'LK', 'LLK', 'V', 'MK'] // P700/P900
-};
-
 /**
  * Parse QuadToneRIP .quad file content
  * @param {string} content - File content
@@ -46,115 +41,14 @@ const DEFAULT_CHANNEL_NAMES = {
 export function parseQuadFile(content) {
     try {
         console.log('📄 parseQuadFile: parsing real .quad file data');
-
-        const lines = content.split('\n').map(line => line.trim());
-
-        // Look for the QuadToneRIP header line to extract channel names
-        let channels = [];
-        let headerFound = false;
-
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-
-            // Look for QuadToneRIP header: ## QuadToneRIP K,C,M,Y,LC,LM,LK,LLK
-            if (line.startsWith('## QuadToneRIP ')) {
-                const channelPart = line.substring('## QuadToneRIP '.length);
-                channels = channelPart.split(',').map(ch => ch.trim());
-                headerFound = true;
-                break;
-            }
-        }
-
-        // Collect all numeric values from the file (ignoring comments)
-        const numericLines = [];
-        let invalidDataLines = [];
-
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (line && !line.startsWith('#')) {
-                if (/^\d+$/.test(line)) {
-                    const value = parseInt(line, 10);
-
-                    // Validate reasonable value range for QuadToneRIP (0-65535)
-                    if (value < 0 || value > 65535) {
-                        throw new Error(`Invalid data value ${value} at line ${i + 1}. QuadToneRIP values must be 0-65535.`);
-                    }
-
-                    numericLines.push(value);
-                } else {
-                    // Track non-numeric, non-comment lines as potentially problematic
-                    invalidDataLines.push(`Line ${i + 1}: "${line}"`);
-                    if (invalidDataLines.length > 10) break; // Don't flood with errors
-                }
-            }
-        }
-
-        if (numericLines.length < 256) {
-            throw new Error(`Insufficient data: found only ${numericLines.length} values, need at least 256 for one channel`);
-        }
-
-        // Warn about mixed content if found
-        if (invalidDataLines.length > 0) {
-            const sampleLines = invalidDataLines.slice(0, 3).join(', ');
-            console.warn(`Found ${invalidDataLines.length} non-numeric lines in data section: ${sampleLines}`);
-        }
-
-        // If no header found, infer channel count from data
-        if (!headerFound || channels.length === 0) {
-            const inferredChannelCount = Math.floor(numericLines.length / 256);
-
-            if (inferredChannelCount === 0) {
-                throw new Error(`Insufficient data: found ${numericLines.length} values, need at least 256 for one channel`);
-            }
-
-            // Use default channel names if we have a known configuration
-            if (DEFAULT_CHANNEL_NAMES[inferredChannelCount]) {
-                channels = DEFAULT_CHANNEL_NAMES[inferredChannelCount];
-                console.log(`📄 parseQuadFile: no header found, inferred ${inferredChannelCount} channels using default names: ${channels.join(',')}`);
-            } else {
-                // Generate generic channel names for unknown configurations
-                channels = Array.from({ length: inferredChannelCount }, (_, i) => `CH${i + 1}`);
-                console.log(`📄 parseQuadFile: no header found, inferred ${inferredChannelCount} channels with generic names`);
-            }
-        }
-
-        // Each channel should have exactly 256 data points
-        const expectedDataPoints = channels.length * 256;
-        if (numericLines.length < expectedDataPoints) {
-            throw new Error(`Insufficient data: found ${numericLines.length} values, expected ${expectedDataPoints} (${channels.length} channels × 256 points each)`);
-        }
-
-        // Extract all 256 data points for each channel
-        const channelCurves = {};
-        const values = []; // Final values for UI display
-        const baselineEnd = {};
-
-        for (let channelIdx = 0; channelIdx < channels.length; channelIdx++) {
-            const channelName = channels[channelIdx];
-            const channelStartIdx = channelIdx * 256;
-            const channelEndIdx = channelStartIdx + 255; // 0-indexed, so 255 is the 256th value
-
-            if (channelEndIdx >= numericLines.length) {
-                throw new Error(`Not enough data for channel ${channelName}: need point ${channelEndIdx + 1}, have ${numericLines.length}`);
-            }
-
-            // Extract all 256 points for this channel
-            const curveData = numericLines.slice(channelStartIdx, channelStartIdx + 256);
-            channelCurves[channelName] = curveData;
-
-            // Store the maximum value for UI display (percentage calculation) and baseline
-            const maxValue = Math.max(...curveData);
-            values.push(maxValue);
-            baselineEnd[channelName] = maxValue;
-        }
-
-        console.log(`📄 parseQuadFile: successfully parsed ${channels.length} channels with ${numericLines.length} data points`);
+        const parsed = parseCanonicalQuadFile(content);
+        const baselineEnd = Object.fromEntries(
+            parsed.channels.map((channelName, index) => [channelName, parsed.values[index]])
+        );
 
         return {
-            curves: channelCurves,
+            ...parsed,
             baselineEnd,
-            channels,
-            values,
             filename: 'loaded.quad',
             valid: true
         };
@@ -840,13 +734,9 @@ export function validateFileFormat(content, filename) {
 
     // QuadToneRIP .quad files
     if (ext === 'quad') {
-        // Count numeric lines to validate - don't require header
-        const numericLines = content.split('\n').filter(line => {
-            const trimmed = line.trim();
-            return trimmed && /^\d+$/.test(trimmed);
-        });
+        const validation = validateQuadFile(content);
         return {
-            valid: numericLines.length >= 256,
+            ...validation,
             format: 'quad',
             parser: 'parseQuadFile'
         };
@@ -909,41 +799,18 @@ export function validateQuadFile(content) {
             };
         }
 
-        const lines = content.split('\n').map(line => line.trim()).filter(line => line);
-
-        // Look for header (optional)
-        const header = lines.find(line => line.startsWith('## QuadToneRIP'));
-        let channels = [];
-
-        if (header) {
-            // Extract channel names from header
-            channels = header.substring('## QuadToneRIP '.length).split(',').map(c => c.trim());
-        }
-
-        // Count numeric data lines
-        const numericLines = lines.filter(line => /^\d+$/.test(line));
-
-        if (numericLines.length < 256) {
+        const parsed = parseQuadFile(content);
+        if (!parsed.valid) {
             return {
                 valid: false,
-                error: `Insufficient data: found ${numericLines.length} values, need at least 256 for one channel`
+                error: parsed.error
             };
-        }
-
-        // If no header, infer channel count
-        if (channels.length === 0) {
-            const inferredChannelCount = Math.floor(numericLines.length / 256);
-            if (DEFAULT_CHANNEL_NAMES[inferredChannelCount]) {
-                channels = DEFAULT_CHANNEL_NAMES[inferredChannelCount];
-            } else {
-                channels = Array.from({ length: inferredChannelCount }, (_, i) => `CH${i + 1}`);
-            }
         }
 
         return {
             valid: true,
-            channels,
-            message: `Valid .quad file with ${channels.length} channels`
+            channels: parsed.channels,
+            message: `Valid .quad file with ${parsed.channels.length} channels`
         };
 
     } catch (error) {

@@ -173,9 +173,10 @@ LAB → Smart conversion preserves plotted shape:
 - Benefits: Visually identical handoff pre/post conversion; no path shifts between adjacent anchors.
 
 **`parseQuadFile(content)`**: Parses .quad file format
-- Extracts QuadToneRIP header: `## QuadToneRIP K,C,M,Y,LC,LM,LK,LLK`
-- Validates 256 data points per channel (0-65535 range)
-- Returns structured data with channel curves and metadata
+- Treats a non-empty, unique `## QuadToneRIP ...` channel declaration as authoritative; exact headerless 8- and 10-channel files use the documented standard layouts
+- Requires exactly 256 integer data points per channel in the 0–65535 range and rejects extra values, remainder data, or non-comment text
+- Owns structural validation for both editable and reference imports; reference-only size and active-printer matching remain workflow checks
+- Returns the channel order, each channel's maximum value, and its 256-point curve
 
 **`_pchipInterpolate(x, y, xi)`**: PCHIP implementation
 - Monotonic interpolation preserving curve characteristics

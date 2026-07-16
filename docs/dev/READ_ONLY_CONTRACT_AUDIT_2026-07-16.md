@@ -4,13 +4,14 @@ Audit date: July 16, 2026
 
 Source: Houston workspace `quadGEN`, session `dev`, session ID `84199578-bdc7-4e8b-96e4-32053ef04c77`, final report event sequence 5490.
 
-> **Post-audit remediation status (July 16, 2026):** Findings 1–3, 5, and 7 are
+> **Post-audit remediation status (July 16, 2026):** Findings 1–3, 5, 7, and 8 are
 > resolved for the audited contracts by mandatory PCHIP enforcement, an isolated
 > zero-skip history gate, preflight validation that preserves all prior state
 > when a correction import is rejected, a deterministic network-free portable
-> bundle, and complete dialog behavior for the three remaining audited surfaces.
+> bundle, complete dialog behavior for the three remaining audited surfaces, and
+> one exact structural parser for editable and reference `.quad` imports.
 > Findings 4 and 6 are operationally contained while Lab Tech remains shelved
-> and its public Worker route remains disabled. Findings 8–10 remain active.
+> and its public Worker route remains disabled. Findings 9–10 remain active.
 > Credential rotation is intentionally deferred to a separate session.
 
 All ten compound questions resolve to “No,” though several contain healthy subpaths. The highest-risk confirmed defects are the live cubic interpolation fallback, non-atomic correction imports, dormant history tests, false-success Lab Tech results, and non-atomic Worker quotas.
@@ -202,6 +203,27 @@ Exact headered/headerless 8- and 10-channel files work, and exported files re-im
 - Reference import adds size and current-printer filtering that editable import lacks.
 
 Export always canonicalizes to the current printer with 256 values per channel, so tolerated trailing imported data is discarded. This does not meet the exact-count contract in [/home/davidmarsh/Dropbox/Photography/quadGEN/docs/File_Specs/QTR_QUAD_SPEC_SUMMARY.md](/home/davidmarsh/Dropbox/Photography/quadGEN/docs/File_Specs/QTR_QUAD_SPEC_SUMMARY.md:14).
+
+**Post-audit remediation:** `data/quad-parser.js` now owns the sole structural
+interpretation. Explicit non-empty, unique channel declarations remain
+authoritative for six-, eight-, and alternate ten-channel printer layouts, while
+headerless compatibility is limited to the documented exact 8- and V/MK
+10-channel layouts. Every non-comment line must be an integer from 0–65535, and
+the parser rejects missing values, one extra value, a complete undeclared block,
+headerless remainder or unsupported counts, malformed declarations, and trailing
+text. The editable loader preserves its non-throwing result adapter; reference
+import retains pre-parse file type/size guards and post-parse active-printer
+matching as workflow checks outside the canonical parser.
+
+The regression failed 9 of 15 initial cases before the fix and passed 20/20 after
+it, covering both workflows and all audited malformed inputs. A browser-generated
+10-channel export re-imported and re-exported with identical channel samples and
+complete text. All 15 tracked `.quad` fixtures passed the canonical parser. Vitest
+passed 317/317, the 100-module build passed, smoke passed 2/2, the focused browser
+gate passed 4/4, history passed 7/7, the full Playwright inventory passed 101/101,
+and the pre-commit guard passed 12/12. Two builds produced identical 997,373-byte
+root and `dist` artifacts (274,335 deterministic gzip bytes) with SHA-256
+`7ae53555806c1fb9be31f7c81cfb855a874527882a7ed0a440c9888f61e80d2e`.
 
 ## 9. CUBE conformance
 
