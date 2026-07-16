@@ -14,6 +14,7 @@ This changelog follows a concise, user-facing format. Engineering details live i
 
 ### Fixed
 - Density Solver no longer honors obsolete hidden weighting values from browser storage; LAB redistribution always uses the documented normalized path.
+- Global Scale remains the latest undoable action after a LAB or Manual correction; unchanged channel-enabled refreshes no longer consume Undo steps.
 
 ### Docs
 - Consolidated the former scaling-orchestrator notes into the Global Scale specification and removed retired parity-harness instructions.

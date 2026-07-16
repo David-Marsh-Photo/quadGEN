@@ -207,6 +207,10 @@ export class HistoryManager {
             Object.assign(action, extras);
         }
 
+        if (actionType === 'enabled' && oldValue === newValue) {
+            return;
+        }
+
         if ((actionType === 'percentage' || actionType === 'endValue') && Number.isFinite(Number(oldValue)) && Number.isFinite(Number(newValue)) && Number(oldValue) === Number(newValue)) {
             return;
         }

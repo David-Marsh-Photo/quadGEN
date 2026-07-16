@@ -54,7 +54,7 @@ behavior-complete replacement.
 
 ## Current Roadmap
 
-### 1. Release-readiness acceptance — Next
+### 1. Release-readiness acceptance — Complete (2026-07-15)
 
 **Outcome:** Confirm that the remediated `main` branch supports the complete
 operator loop without a known release blocker.
@@ -74,6 +74,21 @@ operator loop without a known release blocker.
 **Exit:** The primary flow is accepted, required automated checks pass, the
 portable artifact opens correctly, and no known release-blocking discrepancy
 remains undocumented.
+
+**Acceptance result:** A composed browser flow imported a three-channel `.quad`,
+applied a valid 256-sample LAB correction through Simple Scaling, changed Global
+Scale from 100% to 90%, restored both states with one Undo and Redo, and
+downloaded a valid 5,879-byte `.quad` containing 2,048 numeric samples without a
+browser error. The exercise exposed one blocker: unchanged channel-enabled
+refreshes followed the Scale transaction in history, so Undo consumed a no-op.
+History now ignores only strict-equal `enabled` writes, keeping the Scale
+transaction latest. The failing browser flow and focused unit case were
+reproduced before the fix. Focused history checks passed (11/11), Vitest passed
+(295/295), the 103-module build passed, smoke passed (1/1), the focused gate
+passed (4/4), and the full Playwright inventory passed (93/93 in 18.9 seconds).
+The fix adds four production lines and 25 raw / 10 deterministic-gzip bundle
+bytes; no state owner, scaling or correction math, interpolation, or PCHIP path
+changed.
 
 ### 2. Operator clarity and accessibility — Finding-driven
 
