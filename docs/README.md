@@ -2,6 +2,11 @@
 
 This directory holds the reference material that ships with the modular quadGEN build. Use this guide to find the right document quickly.
 
+## Product, Design, and Planning
+- `../PRODUCT.md` – users, purpose, product principles, and accessibility baseline.
+- `../DESIGN.md` – the current visual system and component guidance.
+- `quadgen_roadmap.md` – completed foundations, current priorities, and roadmap entry criteria.
+
 ## Product Guides
 - `quadgen_user_guide.md` – user-facing overview of the app, including the Quick Start Workflow loop and daily terminology.
 - `manual_tests.md` – regression checklist the lab follows when exercising critical UI paths.

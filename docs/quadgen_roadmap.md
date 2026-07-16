@@ -1,56 +1,161 @@
 # quadGEN Development Roadmap
 
-This document outlines potential future goals and architectural strategies for the quadGEN project. These are ideas for consideration as the tool grows and evolves.
+Status: current
 
-## Architectural Goals
+Last reviewed: 2026-07-15
 
-### 1. Implement a Build Step for Development
+quadGEN's roadmap is organized around operator outcomes, calibration fidelity, and
+small verified checkpoints. It is not a list of speculative rewrites. Product
+direction comes from [PRODUCT.md](../PRODUCT.md), and interface work follows
+[DESIGN.md](../DESIGN.md).
 
-- **Goal:** Preserve the project's core strength of single-file portability for end-users while adopting a modern, modular development workflow.
+## Completed Foundations
 
-- **Current State:** The entire application (`HTML`, `CSS`, `JavaScript`) is contained in `quadgen.html`. This is excellent for user portability but can become difficult to maintain, test, and collaborate on as the project grows.
+### Modular development and portable delivery — Complete
 
-- **Proposed Strategy:**
-    1.  **Develop in Modules:** The source code would be split into logical, separate files (e.g., `src/main.js`, `src/interpolation.js`, `src/styles.css`, `src/index.html`). This makes the code easier to navigate, maintain, and test.
-    2.  **Introduce a Build Step:** Use a simple, modern build tool (like Vite or esbuild) to run a single command (e.g., `npm run build`).
-    3.  **Automate Bundling:** The build tool would automatically compile all JavaScript and CSS, minify it to reduce file size, and inject it into the HTML skeleton.
-    4.  **Distribute the Single File:** The output of the build process would be a single, self-contained, and optimized `quadgen.html` file, just like the one that exists now.
+- Application source is organized under `src/` as ES modules.
+- Vite and `vite-plugin-singlefile` produce the self-contained browser build.
+- `npm run build:agent` rebuilds `dist/index.html` and the root `index.html`.
+- The user-facing artifact remains a portable, offline-capable HTML file.
 
-- **Benefits:**
-    - **For Users:** The final product remains a single, portable file. They would see no change except for a potentially smaller file size.
-    - **For Developers:** The development experience becomes much cleaner and more aligned with modern standards. It enables easier collaboration, better source control management, and makes implementing automated tests feasible.
+This replaces the original roadmap proposal to introduce a build step.
 
-### 2. Centralize State Management
+### Automated verification — Complete
 
-- **Goal:** Improve the clarity, predictability, and traceability of data as it flows through the application.
+- Vitest covers stable mathematical, parsing, state, and processing contracts.
+- Playwright provides a one-test smoke check, a focused browser gate, and the
+  complete retained browser inventory.
+- Relevant fixture-backed parity checks protect calibration behavior when
+  production paths change.
+- The completed
+  [complexity-remediation roadmap](plans/complexity-remediation-roadmap.md)
+  records the test-baseline, gate, canonical-path, and workspace-hygiene work.
 
-- **Current State:** Application state (e.g., `linearizationData`, `loadedQuadData`, `perChannelLinearization`) is managed through several distinct global variables. While functional, this can make it difficult to track where and when data changes, especially as new features are added.
+This replaces the original roadmap proposal to introduce an automated test
+suite. New tests are added only when they prove a unique supported contract.
 
-- **Proposed Strategy:**
-    1. **Create a Single State Object:** Consolidate all dynamic application data into a single, comprehensive JavaScript object (e.g., `const quadgenState = { ... }`).
-    2. **Explicit State Updates:** Refactor functions to read from and write to this central state object, rather than modifying global variables directly. This makes the data flow explicit.
+### Product and visual contracts — Complete
 
-- **Benefits:**
-    - **Clarity & Debugging:** The entire state of the application can be inspected at any time by logging a single object (`console.log(quadgenState)`), providing a complete snapshot for debugging.
-    - **Traceability:** It becomes much easier to find where a piece of data is being modified, as all changes are channeled through the central state object.
-    - **Foundation for Future Features:** A centralized state is a prerequisite for advanced features like saving and loading user sessions.
+- [PRODUCT.md](../PRODUCT.md) defines users, purpose, product principles, and the
+  WCAG 2.2 AA accessibility baseline.
+- [DESIGN.md](../DESIGN.md) defines the light-first “Calibration Bench” visual
+  system and its component rules.
+- Feature and format documents under `docs/features/` and `docs/File_Specs/`
+  remain the durable behavior references.
 
-### 3. Implement an Automated Test Suite
+### State ownership foundation — In use
 
-- **Goal:** Increase code quality and developer confidence by creating a safety net that automatically verifies the correctness of core logic.
+The application already combines explicit module-owned state, `core/state.js`,
+`core/state-manager.js`, and a legacy bridge with active callers. Replacing all
+of that with one global object is not a standalone roadmap project. State is
+consolidated only when a concrete feature or reproduced defect identifies an
+ownership problem, and a bridge is removed only after a caller inventory and a
+behavior-complete replacement.
 
-- **Current State:** Testing relies on manual checks and isolated scripts. This is effective for targeted development but does not provide automated, comprehensive regression testing.
+## Current Roadmap
 
-- **Proposed Strategy:**
-    1. **Integrate a Testing Framework:** Introduce a lightweight, modern framework like **Vitest** or **Jest**. These tools are standard in the JavaScript ecosystem and provide a simple way to write and run tests.
-    2. **Start with Pure Functions:** Begin by writing **unit tests** for the core mathematical and data-processing functions that do not depend on the UI. These are the easiest to test and provide the highest value. Good candidates include:
-        - Interpolation algorithms (`createPCHIPSpline`, etc.)
-        - Color science conversions (`cieDensityFromLstar`)
-        - Coordinate space transformations (`DataSpace` object)
-        - File parsers (`parseCube1D`, `parseACVFile`)
-    3. **Expand Coverage:** Gradually add tests for more complex application logic.
+### 1. Release-readiness acceptance — Next
 
-- **Benefits:**
-    - **Confidence & Safety:** Developers can make significant changes and run the test suite to instantly verify that they haven't accidentally broken existing functionality.
-    - **Living Documentation:** Tests act as a form of documentation, showing exactly how a function is expected to behave with various inputs.
-    - **Easier Onboarding:** New contributors can use the tests to understand the codebase and can contribute changes more safely.
+**Outcome:** Confirm that the remediated `main` branch supports the complete
+operator loop without a known release blocker.
+
+**Work:**
+
+- exercise the primary flow: create or import curves, ingest measurements,
+  choose and apply correction, inspect or edit curves, undo or revert, and
+  export the intended `.quad` file
+- confirm a clean checkout builds the portable single-file artifact
+- run the proportionate automated gates and the relevant checks from
+  [manual_tests.md](manual_tests.md)
+- align current user guidance, the Unreleased changelog, and version notes with
+  behavior found during acceptance
+- fix only reproduced blockers in separate bounded checkpoints
+
+**Exit:** The primary flow is accepted, required automated checks pass, the
+portable artifact opens correctly, and no known release-blocking discrepancy
+remains undocumented.
+
+### 2. Operator clarity and accessibility — Finding-driven
+
+**Outcome:** Consequential calibration choices are visible, understandable, and
+operable without a mouse.
+
+**Work when evidence warrants it:**
+
+- repair concrete WCAG 2.2 AA failures in semantics, keyboard operation, focus,
+  text or control contrast, and non-color state communication
+- keep correction methods and persistent preferences named and explained near
+  their controls
+- verify affected interfaces in light and dark themes and at the relevant
+  narrow layout
+- reuse the existing design tokens, native controls, and in-place guidance
+
+This is incremental conformance work, not authorization for a broad visual
+redesign or a new component framework.
+
+### 3. Calibration fidelity and format compatibility — Ongoing
+
+**Outcome:** Imported measurements and curves produce predictable, reversible,
+and exportable results across supported formats.
+
+**Rules:**
+
+- preserve PCHIP wherever smooth interpolation is required
+- protect monotonicity, endpoints, channel limits, history, and export semantics
+- require a format specification and provenance-safe fixture for new parser or
+  exporter behavior
+- use deterministic or byte-level comparisons when consolidating equivalent
+  processing paths
+- document user-visible numerical changes before release
+
+### 4. State and architecture evolution — Triggered only
+
+**Outcome:** A touched workflow has one understandable owner and no unnecessary
+dual path.
+
+**Entry criteria:** A supported feature, reproduced defect, or measured change
+bottleneck demonstrates that the current ownership is inadequate.
+
+**Rules:**
+
+- inventory readers, writers, persistence, history, and compatibility callers
+  before changing ownership
+- migrate one behavior-complete slice at a time
+- remove superseded bridges or flags in the same checkpoint when safe
+- do not add a state framework, compatibility layer, cache, or telemetry path
+  without a current measured need and removal criteria
+
+Session save/load is a future product decision, not justification for a
+speculative state rewrite.
+
+### 5. Distribution and documentation integrity — Ongoing
+
+**Outcome:** Source, tests, reference material, and the portable artifact agree.
+
+**Rules:**
+
+- rebuild both generated HTML files whenever source changes affect the bundle
+- update the architecture map when module dependencies change
+- keep feature documents current rather than treating historical plans as live
+- publish only approved calibration fixtures; keep unrelated local process data
+  ignored
+- record user-facing changes under the Unreleased changelog before a release
+
+## Not Currently Committed
+
+The following require a new user outcome and explicit scope before entering the
+roadmap:
+
+- saveable or shareable calibration sessions
+- cloud accounts, synchronization, hosted storage, or telemetry
+- a framework migration or wholesale state-management rewrite
+- a broad interface redesign
+- additional correction modes, interpolation systems, or persistent settings
+
+## Checkpoint Contract
+
+Every implementation slice must state its intended behavior, allowed files,
+non-goals, and verification before code changes. Work stops after its acceptance
+criteria, required checks, documentation, and one final diff review. New work
+enters this roadmap only when it advances a documented operator outcome or
+repairs a reproduced defect.
