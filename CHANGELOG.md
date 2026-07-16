@@ -12,6 +12,7 @@ This changelog follows a concise, user-facing format. Engineering details live i
 - Global Scale now uses one rollback-safe transaction and one canonical percent/baseline state for the Scale field, history, and compatibility helpers; the unused rollout flags, mirrored state, subscriptions, and diagnostic queue/telemetry layers were removed.
 
 ### Fixed
+- `npm run test:history` now discovers and runs the seven retained undo/redo contracts in isolation; stale diagnostic, duplicate support checks, and skipped migration placeholders no longer inflate the gate.
 - Density Solver no longer honors obsolete hidden weighting values from browser storage; LAB redistribution always uses the documented normalized path.
 - Global Scale remains the latest undoable action after a LAB or Manual correction; unchanged channel-enabled refreshes no longer consume Undo steps.
 - The main Help dialog now exposes a screen-reader name, contains keyboard focus, and returns focus to the control that opened it when closed with Escape.

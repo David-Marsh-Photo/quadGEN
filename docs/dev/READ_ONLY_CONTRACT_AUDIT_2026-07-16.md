@@ -4,11 +4,12 @@ Audit date: July 16, 2026
 
 Source: Houston workspace `quadGEN`, session `dev`, session ID `84199578-bdc7-4e8b-96e4-32053ef04c77`, final report event sequence 5490.
 
-> **Post-audit remediation status (July 16, 2026):** Finding 1 is resolved by
-> mandatory PCHIP enforcement at the processing boundary. Findings 4 and 6 are
-> operationally contained while Lab Tech remains shelved and its public Worker
-> route remains disabled. Findings 2, 3, 5, and 7–10 remain active. Credential
-> rotation is intentionally deferred to a separate session.
+> **Post-audit remediation status (July 16, 2026):** Findings 1 and 2 are
+> resolved by mandatory PCHIP enforcement at the processing boundary and an
+> isolated, zero-skip history gate covering seven retained contracts. Findings
+> 4 and 6 are operationally contained while Lab Tech remains shelved and its
+> public Worker route remains disabled. Findings 3, 5, and 7–10 remain active.
+> Credential rotation is intentionally deferred to a separate session.
 
 All ten compound questions resolve to “No,” though several contain healthy subpaths. The highest-risk confirmed defects are the live cubic interpolation fallback, non-atomic correction imports, dormant history tests, false-success Lab Tech results, and non-atomic Worker quotas.
 

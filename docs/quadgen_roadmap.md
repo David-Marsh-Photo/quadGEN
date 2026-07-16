@@ -25,6 +25,8 @@ This replaces the original roadmap proposal to introduce a build step.
 - Vitest covers stable mathematical, parsing, state, and processing contracts.
 - Playwright provides a one-test smoke check, a focused browser gate, and the
   complete retained browser inventory.
+- `npm run test:history` provides an isolated, zero-skip gate for seven retained
+  undo/redo and snapshot-restoration contracts.
 - Relevant fixture-backed parity checks protect calibration behavior when
   production paths change.
 - The completed
