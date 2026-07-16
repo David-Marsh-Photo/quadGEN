@@ -12,12 +12,53 @@ import {
   getHelpWorkflowHTML
 } from './help-content.js';
 
+const FOCUSABLE_SELECTOR = [
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'a[href]',
+  '[tabindex]:not([tabindex="-1"])'
+].join(', ');
+
 let currentHelpTab = 'readme';
+let helpReturnFocusElement = null;
+
 function lockBodyScroll() {
   try {
     document.body.style.overflow = 'hidden';
   } catch (error) {
     if (console && console.warn) console.warn('Unable to lock body scroll', error);
+  }
+}
+
+function getFocusableElements(container) {
+  return Array.from(container.querySelectorAll(FOCUSABLE_SELECTOR))
+    .filter((element) => element.tabIndex >= 0 && element.getClientRects().length > 0);
+}
+
+function containHelpFocus(event) {
+  const popup = elements.helpPopup;
+  if (!popup || event.key !== 'Tab') return;
+
+  const focusableElements = getFocusableElements(popup);
+  if (!focusableElements.length) {
+    event.preventDefault();
+    return;
+  }
+
+  const firstElement = focusableElements[0];
+  const lastElement = focusableElements[focusableElements.length - 1];
+  const activeElement = document.activeElement;
+  const movingBackwardPastStart = event.shiftKey
+    && (activeElement === firstElement || !popup.contains(activeElement));
+  const movingForwardPastEnd = !event.shiftKey
+    && (activeElement === lastElement || !popup.contains(activeElement));
+
+  if (movingBackwardPastStart || movingForwardPastEnd) {
+    event.preventDefault();
+    const target = movingBackwardPastStart ? lastElement : firstElement;
+    target.focus({ preventScroll: true });
   }
 }
 
@@ -125,18 +166,33 @@ function setHelpActiveTab(tab) {
   }
 }
 
-function openHelpPopup(defaultTab = 'readme') {
+function openHelpPopup(defaultTab = 'readme', returnFocusTarget = document.activeElement) {
   populateHelp(defaultTab);
   if (elements.helpPopup) {
+    if (!elements.helpPopup.classList.contains('hidden')) {
+      elements.closeHelpBtn?.focus({ preventScroll: true });
+      return;
+    }
+
+    helpReturnFocusElement = returnFocusTarget;
     elements.helpPopup.classList.remove('hidden');
+    elements.helpPopup.setAttribute('aria-hidden', 'false');
     lockBodyScroll();
+    elements.closeHelpBtn?.focus({ preventScroll: true });
   }
 }
 
 function closeHelpPopup() {
   if (elements.helpPopup) {
     elements.helpPopup.classList.add('hidden');
+    elements.helpPopup.setAttribute('aria-hidden', 'true');
     unlockBodyScrollIfNoHelpOpen();
+
+    const focusTarget = helpReturnFocusElement?.isConnected
+      ? helpReturnFocusElement
+      : elements.helpBtn;
+    helpReturnFocusElement = null;
+    focusTarget?.focus({ preventScroll: true });
   }
 }
 
@@ -228,7 +284,7 @@ function wireIntentHelpContent() {
   if (workflowLink && !workflowLink.dataset.wired) {
     workflowLink.addEventListener('click', () => {
       closeIntentHelpPopup({ skipUnlock: true });
-      openHelpPopup('workflow');
+      openHelpPopup('workflow', elements.intentHelpBtn);
     });
     workflowLink.dataset.wired = 'true';
   }
@@ -332,11 +388,18 @@ export function initializeHelpSystem() {
   }
 
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-      if (elements.helpPopup && !elements.helpPopup.classList.contains('hidden')) {
+    if (elements.helpPopup && !elements.helpPopup.classList.contains('hidden')) {
+      if (event.key === 'Escape' || event.key === 'Esc') {
+        event.preventDefault();
         closeHelpPopup();
       }
+      containHelpFocus(event);
+      return;
+    }
+
+    if (event.key === 'Escape' || event.key === 'Esc') {
       if (elements.intentHelpPopup && !elements.intentHelpPopup.classList.contains('hidden')) {
+        event.preventDefault();
         closeIntentHelpPopup();
       }
     }

@@ -108,6 +108,20 @@ operable without a mouse.
 This is incremental conformance work, not authorization for a broad visual
 redesign or a new component framework.
 
+**Completed slice (2026-07-15): Main Help keyboard contract.** A targeted
+technical audit reproduced a WCAG modal failure in the shipped browser artifact:
+Help had no dialog semantics, opening left focus on the page behind it, Tab could
+escape to the document, and Escape left focus on the hidden close control. Help
+now exposes a named modal, moves focus to its close control, contains forward and
+reverse tabbing, and restores the actual opener. The regression failed before the
+fix and passed afterward at a 390×844 viewport. The same contract passed in light
+and dark desktop modes plus narrow light mode, with no browser errors or viewport
+overflow. Vitest passed (295/295), the 103-module build passed, smoke passed
+(1/1), the focused gate passed (4/4), and the full Playwright inventory passed
+(94/94 in 18.8 seconds). The change adds 63 net production lines and 1,169 raw /
+369 deterministic-gzip bundle bytes. Intent Help, Manual L*, Channel Builder,
+and other modal surfaces remain separate finding-driven candidates.
+
 ### 3. Calibration fidelity and format compatibility — Ongoing
 
 **Outcome:** Imported measurements and curves produce predictable, reversible,
