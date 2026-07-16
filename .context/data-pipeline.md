@@ -31,6 +31,16 @@ Options:
 
 ## LAB Data Lifecycle & State Management
 
+### Correction Import Atomicity
+
+- Global and per-channel correction files must report parser success and pass
+  shared validation before history capture or any state, curve, baseline, cache,
+  or UI mutation.
+- Imported corrections require at least two finite samples, a finite ascending
+  domain, and a recognized source space.
+- Rejecting an invalid file preserves the active correction and its history/UI
+  state; only the file input is reset and an error status is reported.
+
 ### Data Flow
 1. **Load .quad**: `baselineEnd` captured, `originalCurves` stored
 2. **Load LAB**: `linearizationData` set, `linearizationApplied = true`

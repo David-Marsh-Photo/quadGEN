@@ -4,12 +4,13 @@ Audit date: July 16, 2026
 
 Source: Houston workspace `quadGEN`, session `dev`, session ID `84199578-bdc7-4e8b-96e4-32053ef04c77`, final report event sequence 5490.
 
-> **Post-audit remediation status (July 16, 2026):** Findings 1 and 2 are
-> resolved by mandatory PCHIP enforcement at the processing boundary and an
-> isolated, zero-skip history gate covering seven retained contracts. Findings
-> 4 and 6 are operationally contained while Lab Tech remains shelved and its
-> public Worker route remains disabled. Findings 3, 5, and 7–10 remain active.
-> Credential rotation is intentionally deferred to a separate session.
+> **Post-audit remediation status (July 16, 2026):** Findings 1–3 are resolved
+> for the audited contracts by mandatory PCHIP enforcement, an isolated
+> zero-skip history gate, and preflight validation that preserves all prior
+> state when a correction import is rejected. Findings 4 and 6 are operationally
+> contained while Lab Tech remains shelved and its public Worker route remains
+> disabled. Findings 5 and 7–10 remain active. Credential rotation is
+> intentionally deferred to a separate session.
 
 All ten compound questions resolve to “No,” though several contain healthy subpaths. The highest-risk confirmed defects are the live cubic interpolation fallback, non-atomic correction imports, dormant history tests, false-success Lab Tech results, and non-atomic Worker quotas.
 
@@ -72,6 +73,14 @@ Per-channel imports are worse:
 - The catch path deletes the prior correction rather than restoring it.
 
 In a browser probe, loading an empty per-K file replaced the prior valid correction and increased history from 10 to 12. The existing validator in [linearization-utils.js](/home/davidmarsh/Dropbox/Photography/quadGEN/src/js/data/linearization-utils.js:749) would reject empty/non-finite samples, but neither loader calls it.
+
+**Post-audit remediation:** Both loaders now require explicit parser success and
+shared validation before history capture or mutation. Focused browser coverage
+proves that a duplicate-anchor ACV and an empty per-channel file preserve the
+active correction, curves, baselines, controls, and history while reporting the
+rejection. This remediation addresses invalid-file rejection; it does not claim
+transactional rollback for an unrelated exception after valid data begins
+applying.
 
 ## 4. Lab Tech tool/result integrity
 

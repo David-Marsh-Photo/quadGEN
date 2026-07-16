@@ -45,3 +45,8 @@ live canary before the assistant is restored to the UI.
 - Aligned Density Solver, generated-entry, retained-summary, and debug defaults.
 - Verification: focused correction/solver 26/26, Vitest 295/295, build 99 modules,
   smoke 1/1, and focused browser gate 4/4 passed.
+
+## Follow-on: atomic invalid-import rejection
+
+- Global/per-channel preflight now preserves prior state; focused 2/2, Vitest
+  297/297, history 7/7, and full Playwright 96/96 passed.

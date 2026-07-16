@@ -7,7 +7,6 @@
 ## User-Facing Entry Points
 - Channel table toggle (`.per-channel-toggle`) next to each channel’s End/percent fields.
 - Per-channel `↺` revert button (`.per-channel-revert`).
-- Lab Tech commands: `load_lab_data_per_channel`, `enable_channel(channel, enabled)`.
 
 ## Core State & Helpers
 - `LinearizationState.setPerChannelData`, `.clearPerChannel`, `.isPerChannelEnabled`.
@@ -37,8 +36,9 @@
 
 ## Edge Cases & Guards
 - Toggle hidden/disabled when no measurement exists.
+- Invalid correction files are rejected before history or channel state changes,
+  preserving the previously loaded measurement and controls.
 - Saved Smart metadata (`smartTouched`) prevents automatic re-seeding unless flagged.
-- Lab Tech commands follow same guardrails; improper channel names respond with status errors.
 
 ## Testing
 - Manual tests: `docs/manual_tests.md` (per-channel undo toggle matrix).

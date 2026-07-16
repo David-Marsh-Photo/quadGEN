@@ -46,6 +46,7 @@ Run focused tests while iterating. After a fix, run the complete Vitest suite an
 ## Specialized Contracts
 
 - Correction workflow: `tests/e2e/triforce-correction-audit.spec.ts`, using `tests/e2e/utils/lab-flow.ts`.
+- Correction import rejection: `tests/e2e/correction-import-atomicity.spec.ts`.
 - Composite solver: `tests/lab/composite-density-ladder.test.js` and `tests/lab/composite-negative-ease.test.js`.
 - History and undo/redo: the seven retained Playwright contracts under `tests/history/`, run with `npm run test:history`.
 - Smooth photography curves must retain PCHIP and monotonicity guarantees.

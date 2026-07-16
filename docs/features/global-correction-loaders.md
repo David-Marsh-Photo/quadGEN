@@ -6,7 +6,6 @@
 
 ## User-Facing Entry Points
 - Global Corrections → `Load Data File` (accepts `.quad`, `.cube`, `.acv`).
-- Lab Tech commands: `load_quad_file`, `load_lut_file`, `load_acv_file` (future expansions).
 
 ## Core State & Helpers
 - Parsers: `src/js/parsers/file-parsers.js`, `src/js/data/quad-parser.js`, LUT/ACV helpers under `src/js/data/`.
@@ -43,11 +42,15 @@
 
 ## Edge Cases & Guards
 - Non-grayscale channels: warn and ignore unsupported ones; maintain channel ordering consistent with current printer profile.
-- Incomplete data: fall back to linear ramp, inform user via status toast.
+- Invalid or incomplete correction data is rejected before history or application
+  state changes; the prior correction, curves, baselines, and controls remain
+  active and an error status explains the rejection.
 - Loading new `.quad` clears measurement state, history, and Smart metadata; user confirmation may be required (future enhancement).
 
 ## Testing
 - Manual matrix: load each format, verify overlays, Smart seeding, and Undo behavior.
+- Playwright: `tests/e2e/correction-import-atomicity.spec.ts` verifies rejected
+  global and per-channel imports preserve the active correction and history.
 - Scripts: `scripts/compare_quad_versions.py` validates parsing accuracy (internal tooling).
 
 ## Debugging Aids
