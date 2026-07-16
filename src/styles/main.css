@@ -1,3 +1,24 @@
+@import "tailwindcss/theme.css";
+@import "tailwindcss/preflight.css";
+@source "../index.template.html";
+@source "../js";
+@source inline("border-blue-400 border-green-400 border-orange-400");
+
+/* Preserve the Tailwind v3 reset behavior used by the former CDN build. */
+*,
+::after,
+::before,
+::backdrop,
+::file-selector-button {
+  border-color: var(--color-gray-200, currentColor);
+}
+
+input,
+select,
+textarea {
+  background-color: revert;
+}
+
     /* Theme tokens: light defaults */
     :root {
       color-scheme: light;            /* ensure light scrollbars/forms by default */
@@ -316,8 +337,8 @@
 
     /* Global color application (minimal override of Tailwind utility surfaces) */
     body { background-color: var(--bg); color: var(--text); }
-    .bg-white { background-color: var(--bg-elevated) !important; }
-    .bg-gray-50 { background-color: var(--bg) !important; }
+    :root .bg-white { background-color: var(--bg-elevated) !important; }
+    :root .bg-gray-50 { background-color: var(--bg) !important; }
     .bg-gray-100 { background-color: color-mix(in srgb, var(--bg-elevated) 92%, var(--text)) !important; }
     
     /* Override jarring light backgrounds in console headers for dark mode */
@@ -1609,3 +1630,5 @@
     [data-theme="dark"] .tab-btn:hover {
       background: color-mix(in srgb, var(--bg-elevated) 90%, var(--text));
     }
+
+@tailwind utilities source(none);

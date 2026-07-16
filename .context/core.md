@@ -24,7 +24,9 @@ quadGEN is a web-based tool for creating and editing QuadToneRIP .quad files use
 ### Build System
 - **Framework:** Vite
 - **Build command:** `npm run build:agent`
-- **Output:** Single-file HTML bundle
+- **Output:** Portable single-file HTML bundle at `dist/index.html` and `index.html`
+- **Styling:** Tailwind utilities and authored CSS compile locally through PostCSS and are inlined
+- **Offline contract:** Startup and core calibration workflows require no runtime network request
 
 ## Technology Stack
 
@@ -50,6 +52,10 @@ For full stack details, see `.planning/codebase/STACK.md`.
 **Local Storage:**
 - Theme preference, chart divider positions
 - No IndexedDB or server-side storage
+
+**External links:**
+- Documentation, source, and product links navigate only when an operator activates them
+- The shipped bundle does not fetch external scripts, styles, fonts, or images at startup
 
 For full integration audit, see `.planning/codebase/INTEGRATIONS.md`.
 

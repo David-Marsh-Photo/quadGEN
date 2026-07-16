@@ -59,7 +59,7 @@ quadGEN/
 - Purpose: HTML template for Vite build
 - Single-page structure with semantic HTML
 - Links to `/src/main.js` as ES6 module
-- Contains Tailwind CSS CDN and custom CSS
+- Links the authored stylesheet; Tailwind utilities compile locally through PostCSS
 - Build output: `dist/index.html` → `index.html` (root)
 
 **src/js/ai/:**

@@ -12,6 +12,7 @@ This changelog follows a concise, user-facing format. Engineering details live i
 - Global Scale now uses one rollback-safe transaction and one canonical percent/baseline state for the Scale field, history, and compatibility helpers; the unused rollout flags, mirrored state, subscriptions, and diagnostic queue/telemetry layers were removed.
 
 ### Fixed
+- The portable `index.html` now compiles and inlines Tailwind CSS locally, retaining desktop/narrow and light/dark layout when every HTTP(S) request is blocked.
 - Invalid global and per-channel correction files are now rejected before history or application state changes, preserving the active correction, curves, baselines, and controls while reporting the validation error.
 - `npm run test:history` now discovers and runs the seven retained undo/redo contracts in isolation; stale diagnostic, duplicate support checks, and skipped migration placeholders no longer inflate the gate.
 - Density Solver no longer honors obsolete hidden weighting values from browser storage; LAB redistribution always uses the documented normalized path.
@@ -21,9 +22,11 @@ This changelog follows a concise, user-facing format. Engineering details live i
 
 ### Removed
 - Lab Tech is shelved: the assistant tab, chat controls, startup runtime, configuration/chat compatibility globals, and public Worker route are disabled. Manual editing, correction, preview, and export workflows are unchanged.
+- The stale root `index.template.html` duplicate was removed; `src/index.template.html` is the sole build template.
 
 ### Docs
 - Consolidated the former scaling-orchestrator notes into the Global Scale specification and removed retired parity-harness instructions.
+- Clarified canonical template ownership and the network-free single-file build contract.
 
 ## [5.1.0] — 2026-02-06
 ### Added

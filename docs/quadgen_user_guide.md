@@ -74,7 +74,7 @@ Typical production sequence:
 You can run quadGEN directly from the hosted build or work offline with a downloaded copy.
 
 - **Hosted (recommended)**: Visit [https://quadgen.ink/](https://quadgen.ink/) in a modern browser. The page serves the latest modular `index.html`. Keep DevTools handy—you can toggle `DEBUG_LOGS = true` or `DEBUG_AI = true` in the console whenever you need deeper traces.
-- **Offline reference**: Download `https://quadgen.ink/index.html` and save it alongside the project assets (or use “Save Page As → Webpage, Complete” to capture dependencies). Open the saved file in your browser when you need to inspect the UI without network access. If you need the retired single-file build for historical comparison, copies now live under `archives/legacy-singlefile/` in the repo.
+- **Offline use**: Download `https://quadgen.ink/index.html` and open that file in a modern browser. Application code and styling are already contained in the one HTML file, so no companion asset folder or network connection is required for calibration workflows.
 
 ## 5. Interface Tour
 quadGEN’s UI is organized around a few panels:

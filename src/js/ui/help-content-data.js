@@ -1827,7 +1827,7 @@ Scope: This license applies to this HTML file (quadgen.html) only.</div>
 
       <h2 id="credits">Credits / Attribution</h2>
       <ul>
-        <li>Tailwind CSS — used via CDN (<code>cdn.tailwindcss.com</code>), MIT License.</li>
+        <li>Tailwind CSS — compiled locally into the single-file build, MIT License.</li>
         <li>OpenAI ChatGPT / Codex</li>
         <li>Prints on Paper Studio — contrast intent definitions and feature references used with permission under <a href="https://www.gnu.org/licenses/gpl-3.0.html" target="_blank" rel="noopener">GNU Public License</a>.</li>
         <li>Easy Digital Negatives (EDN) — Copyright Peter Mrhar. EDN is a separate project for building correction LUTs for digital negatives.</li>

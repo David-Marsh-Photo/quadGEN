@@ -13,7 +13,8 @@ quadGEN now ships from the modular Vite build. Authoring happens in `src/`, orga
 - `src/styles/main.css` is the only authored stylesheet—treat it as the single source of truth.
 - `src/js/ui/help-content-data.js` centralises Help/Version History copy consumed by the Help popup.
 - `dist/index.html` is generated via `npm run build`; copy it to the repository root when publishing.
-- `index.template.html` is the markup-only development shell that imports `src/main.js`; build scripts hydrate it into `index.html` before bundling.
+- `src/index.template.html` is the sole markup development shell; build scripts copy it to the generated root `index.html` before bundling.
+- Tailwind utilities are generated from `src/index.template.html` and `src/js/` at build time, then inlined with `src/styles/main.css`; the shipped file does not load a styling CDN.
 - The outer layout width is handled by `.main-container` in `main.css`; avoid re-introducing Tailwind `max-w-*` helpers or the app shell will collapse on larger viewports.
 
 For build and deployment details (dev server, production build, preview, and copy step), follow `BUILD_INSTRUCTIONS.md`.

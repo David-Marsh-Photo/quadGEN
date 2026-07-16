@@ -76,7 +76,7 @@
 - `vite.config.js` - Vite configuration with plugin settings
 - `vitest.config.js` - Vitest unit test configuration
 - `playwright.config.ts` - Playwright E2E test configuration
-- `tailwind.config.js` - Tailwind CSS content scanning and theme extension
+- `src/styles/main.css` - Authored CSS, local Tailwind imports, and explicit source scanning
 - `postcss.config.cjs` - PostCSS plugins for Tailwind and autoprefixer
 
 **Application Configuration:**
@@ -106,7 +106,7 @@
 **Result:**
 - Single-file HTML bundle containing all CSS and JavaScript
 - No external dependencies at runtime
-- ~1MB+ compressed single-file application
+- Current raw and gzip sizes are reported by Vite at build time
 
 ---
 

@@ -4,13 +4,14 @@ Audit date: July 16, 2026
 
 Source: Houston workspace `quadGEN`, session `dev`, session ID `84199578-bdc7-4e8b-96e4-32053ef04c77`, final report event sequence 5490.
 
-> **Post-audit remediation status (July 16, 2026):** Findings 1–3 are resolved
-> for the audited contracts by mandatory PCHIP enforcement, an isolated
-> zero-skip history gate, and preflight validation that preserves all prior
-> state when a correction import is rejected. Findings 4 and 6 are operationally
-> contained while Lab Tech remains shelved and its public Worker route remains
-> disabled. Findings 5 and 7–10 remain active. Credential rotation is
-> intentionally deferred to a separate session.
+> **Post-audit remediation status (July 16, 2026):** Findings 1–3 and 5 are
+> resolved for the audited contracts by mandatory PCHIP enforcement, an isolated
+> zero-skip history gate, preflight validation that preserves all prior state
+> when a correction import is rejected, and a deterministic network-free
+> portable bundle. Findings 4 and 6 are operationally contained while Lab Tech
+> remains shelved and its public Worker route remains disabled. Findings 7–10
+> remain active. Credential rotation is intentionally deferred to a separate
+> session.
 
 All ten compound questions resolve to “No,” though several contain healthy subpaths. The highest-risk confirmed defects are the live cubic interpolation fallback, non-atomic correction imports, dormant history tests, false-success Lab Tech results, and non-atomic Worker quotas.
 
@@ -119,6 +120,19 @@ All four outputs were 1,021,088 bytes with SHA-256:
 However, [src/index.template.html](/home/davidmarsh/Dropbox/Photography/quadGEN/src/index.template.html:35) automatically requests `https://cdn.tailwindcss.com`. Denying network produced a console error and loss of Tailwind utility layout. Lab Tech also requires the Worker, although I treated offline Lab Tech as separate from the core calibration workflow.
 
 Template ownership is ambiguous: the build uses `/home/davidmarsh/Dropbox/Photography/quadGEN/src/index.template.html`, while the stale tracked `/home/davidmarsh/Dropbox/Photography/quadGEN/index.template.html` differs by roughly 1,750 diff lines. [/home/davidmarsh/Dropbox/Photography/quadGEN/docs/dev/BUILD_INSTRUCTIONS.md](/home/davidmarsh/Dropbox/Photography/quadGEN/docs/dev/BUILD_INSTRUCTIONS.md:73) also describes template ownership inconsistently.
+
+**Post-audit remediation:** Tailwind now compiles locally from the canonical
+template and runtime UI sources, and Vite inlines the generated utilities with
+the authored CSS. The smoke gate blocks every HTTP(S) request while checking
+initialization, locally generated dynamic utilities, modal/form compatibility,
+and desktop/narrow light/dark layout; both tests pass. A side-by-side browser
+comparison against the prior CDN build matched all measured geometry,
+visibility, spacing, form, border, and theme values. Two consecutive builds
+produced identical 1,003,519-byte root and `dist` artifacts with SHA-256
+`8dc8c7be11f4059c65ff8ad5bf6213ef13444438135cb268377e058c568fb624`.
+The unused root template was removed, leaving `src/index.template.html` as the
+sole source. This remediation resolves the shipped quadGEN bundle contract;
+standalone repository tools remain outside that artifact.
 
 ## 6. AI Worker boundary
 

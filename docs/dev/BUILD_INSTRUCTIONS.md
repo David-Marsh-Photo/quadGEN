@@ -4,7 +4,7 @@ This document explains how to use the new modular build system for quadGEN devel
 
 ## Overview
 
-quadGEN now uses a modern build system that allows modular development while maintaining the single-file output for GitHub Pages hosting. The build system uses Vite with custom configuration to create a self-contained HTML file.
+quadGEN uses Vite for modular development while retaining one portable HTML file for local use or static hosting. JavaScript, authored CSS, and build-time Tailwind utilities are all inlined; the shipped application does not require a runtime styling request.
 
 ## Prerequisites
 
@@ -41,7 +41,7 @@ npm run build:agent
   ```bash
   npm run test:smoke
   ```
-  The smoke test opens `index.html` in Playwright and fails if any console errors fire during load.
+  The smoke test opens `index.html` in Playwright with HTTP(S) requests blocked. It fails on external runtime requests, console/page errors, missing local utilities, or desktop/narrow and light/dark layout regressions.
 - You can extend this script with lint or additional tests before `vite build` if you want a stricter gate before shipping
 
 ### 3. Preview Built File
@@ -57,22 +57,22 @@ npm run preview
 ### Source Files (Edit These)
 ```
 src/
+├── index.template.html           # Sole HTML template used by every build
+├── main.js                       # Entry point and app initialization
 ├── js/
-│   ├── core/
-│   │   └── version.js         # App version and configuration
-│   ├── data/                  # File parsers (future)
-│   ├── math/                  # PCHIP, interpolation (future)
-│   ├── ui/                    # Chart, controls (future)
-│   ├── ai/                    # Smart Curves, Lab Tech (future)
-│   └── utils/                 # Helper functions (future)
+│   ├── core/                     # State, processing, and configuration
+│   ├── data/                     # Data models and conversion helpers
+│   ├── math/                     # PCHIP and numerical helpers
+│   ├── ui/                       # Chart, controls, dialogs, and help
+│   ├── ai/                       # Shelved assistant source, not shipped
+│   └── utils/                    # Shared helpers
 ├── styles/
-│   └── main.css               # Custom CSS styles (single source of truth)
-├── main.js                    # Entry point and app initialization
+│   └── main.css                  # Authored CSS plus local Tailwind build entry
 ```
 
 ### Output Files
-- `dist/index.html` - Built production file (89.95 kB, 19.31 kB gzipped)
-- `index.template.html` - Style-free development shell that loads `src/main.js`
+- `dist/index.html` - Generated single-file production bundle
+- `index.html` - Generated root copy of `dist/index.html`
 
 ## GitHub Deployment Workflow
 
@@ -105,16 +105,16 @@ npm run build && cp dist/index.html . && git add index.html && git commit -m "�
 
 > **Token setup:** `scripts/push-with-token.sh` reads `githubtoken.md` (username on line 1, personal access token on line 2). The script force-pushes to `main`, so confirm your local branch is ready before running it.
 
-> **Template note:** The build scripts automatically copy `index.template.html` to `index.html` before invoking Vite. Treat `index.html` as generated output—edit the template and source files in `src/` instead.
+> **Template note:** The build scripts copy `src/index.template.html` to `index.html` before invoking Vite. Treat both output files as generated—edit the template and source files in `src/` instead.
 
 ## Build System Details
 
 ### What the Build Does
 - ✅ Bundles all JavaScript modules into a single script
-- ✅ Inlines all CSS from `src/styles/main.css`
+- ✅ Compiles Tailwind utilities locally from the canonical template and runtime UI sources
+- ✅ Inlines the generated utilities and authored `src/styles/main.css`
 - ✅ Minifies and optimizes all code
-- ✅ Preserves Tailwind CSS via CDN link
-- ✅ Creates single self-contained HTML file
+- ✅ Creates one self-contained HTML file with no required runtime asset request
 - ✅ Maintains all original functionality
 
 ### Build Output Structure
@@ -122,14 +122,11 @@ npm run build && cp dist/index.html . && git add index.html && git commit -m "�
 <!doctype html>
 <html>
 <head>
-  <!-- Tailwind CSS CDN (loads dynamically) -->
-  <script src="https://cdn.tailwindcss.com"></script>
-
   <!-- Build system inlined JavaScript (minified) -->
   <script type="module" crossorigin>/* App code */</script>
 
   <!-- Build system inlined CSS (minified) -->
-  <style rel="stylesheet" crossorigin>/* Custom styles */</style>
+  <style rel="stylesheet" crossorigin>/* Tailwind utilities + authored styles */</style>
 </head>
 <body>
   <!-- App content -->
@@ -138,9 +135,10 @@ npm run build && cp dist/index.html . && git add index.html && git commit -m "�
 ```
 
 ### CSS Authoring
-- Edit styles exclusively in `src/styles/main.css` (light/dark tokens, components, overrides).
-- Vite inlines that file into the bundled `dist/index.html`; no other CSS sources are consulted.
-- `index.template.html` intentionally contains no `<style>` blocks—keep it markup-only so the bundle always reflects `main.css`.
+- Edit theme tokens, components, and overrides in `src/styles/main.css`.
+- The same file scopes Tailwind's build-time scan to `src/index.template.html` and `src/js/`, then emits utilities after authored rules to preserve the established cascade.
+- Keep `src/index.template.html` markup-only so the generated bundle always reflects the canonical stylesheet.
+- Dynamically constructed utility names must appear as complete class strings or in the explicit inline source list in `main.css`.
 - Layout width is now controlled by the `.main-container` helper in `main.css`; we no longer rely on Tailwind’s `max-w-*` utilities for the app shell.
 
 ## Configuration Files
@@ -177,14 +175,12 @@ Scripts available:
 - Try `npm install` to ensure dependencies are installed
 
 **Built file doesn't work:**
-- Verify `dist/index.html` was copied to root correctly
-- Check that Tailwind CSS CDN is accessible
-- Test with `npm run preview` first
+- Run `npm run build:agent` and verify `dist/index.html` matches root `index.html`
+- Run `npm run test:smoke`; it blocks network access while checking startup and utility-dependent layout
+- Test with `npm run preview` when HTTP-hosted behavior is relevant
 
 ### File Sizes
-- Original `quadgen.html`: ~1MB (21,773 lines)
-- Built `index.html`: 89.95 kB (19.31 kB gzipped)
-- Size reduction achieved through minification
+- Vite reports the current raw and gzip sizes after each build; do not rely on a fixed historical size.
 
 ## Browser Testing with Shell Playwright
 
