@@ -60,8 +60,8 @@ The AI computes explicit numeric key points and applies them via the functions a
 - KV storage tracks usage (`quadgen_rate_limits` namespace)
 - Graceful fallback if KV unavailable
 
-**AI Model**: Claude Sonnet 4 (`claude-sonnet-4-0`)
-- Latest snapshot alias - automatically uses newest Sonnet 4 version
+**AI Model**: Claude Sonnet 5 (`claude-sonnet-5`)
+- Adaptive thinking is disabled in the request so the existing 1,000-token output budget remains available for tool calls and concise operator guidance.
 - Focused on numeric key‑point computation; natural‑language preset curve generation is deprecated
 
 ## Canned LAB Linearization Explanation (for assistant responses)

@@ -11,6 +11,7 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Changed
 - Global Scale now uses one rollback-safe transaction and one canonical percent/baseline state for the Scale field, Lab Tech, history, and compatibility helpers; the unused rollout flags, mirrored state, subscriptions, and diagnostic queue/telemetry layers were removed.
 - Lab Tech's correction-method action now updates the same persisted Simple Scaling/Density Solver preference as the Options UI; two inert feature-flag adapters that never selected processing behavior were removed.
+- Lab Tech now uses Claude Sonnet 5 with adaptive thinking disabled, preserving its concise tool-oriented response budget while updating the underlying model.
 
 ### Fixed
 - Density Solver no longer honors obsolete hidden weighting values from browser storage; LAB redistribution always uses the documented normalized path.

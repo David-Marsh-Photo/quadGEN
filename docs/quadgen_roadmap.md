@@ -122,7 +122,30 @@ overflow. Vitest passed (295/295), the 103-module build passed, smoke passed
 369 deterministic-gzip bundle bytes. Intent Help, Manual L*, Channel Builder,
 and other modal surfaces remain separate finding-driven candidates.
 
-### 3. Calibration fidelity and format compatibility — Ongoing
+### 3. Lab Tech model lifecycle — Current (2026-07-15)
+
+**Outcome:** Lab Tech uses a supported model through one explicit runtime
+configuration without changing its tool or operator contract accidentally.
+
+**Completed slice:** The Anthropic runtime moved from Claude Sonnet 4.5 to
+Claude Sonnet 5. Adaptive thinking is explicitly disabled so the existing
+1,000-token limit remains available for concise tool calls and operator guidance;
+the request continues to omit `temperature`, `top_p`, and `top_k`. Unused
+provider and model constants were removed from the version module, leaving
+`AI_CONFIG` as the runtime owner. A request-payload contract failed on the old
+model and passed after the migration. A live worker canary returned HTTP 200,
+identified Anthropic and `claude-sonnet-5`, and stopped on exactly one
+`get_current_state` tool call without executing it. The 103-module build passed,
+focused AI checks passed (4/4), Vitest passed (295/295), smoke passed (1/1), the
+focused browser gate passed (4/4), and Playwright passed (94/94 in 19.2 seconds).
+Production source shrank by six net lines; the portable bundle changed by 25 raw
+/ 9 deterministic-gzip bytes. Worker routing, provider selection, prompts, tool
+schemas, calibration behavior, interpolation, and PCHIP paths did not change.
+
+Future model changes should start from the provider's lifecycle documentation,
+verify request-parameter compatibility, and pass one non-mutating live canary.
+
+### 4. Calibration fidelity and format compatibility — Ongoing
 
 **Outcome:** Imported measurements and curves produce predictable, reversible,
 and exportable results across supported formats.
@@ -137,7 +160,7 @@ and exportable results across supported formats.
   processing paths
 - document user-visible numerical changes before release
 
-### 4. State and architecture evolution — Triggered only
+### 5. State and architecture evolution — Triggered only
 
 **Outcome:** A touched workflow has one understandable owner and no unnecessary
 dual path.
@@ -157,7 +180,7 @@ bottleneck demonstrates that the current ownership is inadequate.
 Session save/load is a future product decision, not justification for a
 speculative state rewrite.
 
-### 5. Distribution and documentation integrity — Ongoing
+### 6. Distribution and documentation integrity — Ongoing
 
 **Outcome:** Source, tests, reference material, and the portable artifact agree.
 

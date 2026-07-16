@@ -12,7 +12,7 @@ export const AI_CONFIG = {
     WORKER_URL: 'https://sparkling-shape-8b5a.marshmonkey.workers.dev',
 
     // Model configurations
-    ANTHROPIC_MODEL: 'claude-sonnet-4-5',
+    ANTHROPIC_MODEL: 'claude-sonnet-5',
     OPENAI_MODEL: 'gpt-5-mini', // Use 'gpt-5' if available, 'gpt-4o' is safe default
 
     // Debug flags

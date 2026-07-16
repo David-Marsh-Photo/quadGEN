@@ -3,7 +3,7 @@
 // Extracted from quadgen.html reference implementation
 
 /**
- * Claude Sonnet 4 API function definitions for quadGEN operations
+ * Claude API function definitions for quadGEN operations
  * This array defines all the functions that the AI can call to interact with the application
  */
 export const CLAUDE_FUNCTIONS = [

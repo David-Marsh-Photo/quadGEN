@@ -12,13 +12,6 @@ export const ENABLE_DARK_MODE = true;
 // Global debug logging toggle for non-AI logs
 export let DEBUG_LOGS = false;
 
-// AI provider selection (code-level switch, no UI): 'anthropic' or 'openai'
-export const AI_PROVIDER = 'anthropic';
-export const WORKER_URL = 'https://sparkling-shape-8b5a.marshmonkey.workers.dev';
-export const ANTHROPIC_MODEL = 'claude-sonnet-4-5';
-// Set OPENAI_MODEL to 'gpt-5' if you have access; 'gpt-4o' is a safe default
-export const OPENAI_MODEL = 'gpt-5-mini';
-
 // Debug flag for AI logs
 export const DEBUG_AI = false;
 // Temporary alias during terminology transition (AI → Smart)

@@ -100,7 +100,8 @@ Lab Tech functions, tool contracts, and documentation policy.
 - Worker: `cloudflare-worker.js` with KV rate limits
 - Environment: `CLAUDE_API_KEY` must be set
 - Default limits: 10/minute, 100/hour, 500/day per IP
-- Model: Claude Sonnet 4 (`claude-sonnet-4-5`)
+- Model: Claude Sonnet 5 (`claude-sonnet-5`)
+- Thinking: explicitly disabled to preserve the concise 1,000-token tool-response budget
 
 ## Security
 
