@@ -39,7 +39,7 @@ Direct Playwright runs (for example `node tests/playwright-global-revert.cjs`) n
    ```bash
    node runner/watch-runner.mjs
    ```
-   The script prints `watch-runner is running` once it is ready. Leave this process running; it listens for triggers written to `runner/trigger.json` and executes `npm run test:e2e` (which runs `node run-playwright-test.js`).
+   The script prints `watch-runner is running` once it is ready. Leave this process running; it listens for triggers written to `runner/trigger.json` and executes `npm run test:e2e:gate` through `scripts/test-tools/run-playwright-test.js`.
 
 ## Triggering tests from Codex
 From the Codex CLI (or any other process writing in the repo), drop a timestamp into the trigger file:
@@ -85,11 +85,11 @@ node runner/wait-for-status.mjs --timeout=240000 --interval=500 --quiet
 ```
 `--follow` streams `runner/results/last-run.txt` while the run is in flight.
 
-## Default script
-`scripts/test-tools/run-playwright-test.js` defaults to `tests/playwright-edit-mode-seeding.cjs`. That script launches the app, toggles Edit Mode, loads `Color-Muse-Data.txt`, and asserts that Smart key points are reseeded from measurement data. On failure it saves a full-page screenshot under `runner/results/artifacts/`. Override the script via the trigger `args` field if you need different coverage.
+## Default gate
+With no arguments, `scripts/test-tools/run-playwright-test.js` runs the four retained `tests/e2e/global-scale-*.spec.ts` cases with three workers. Measurement-based Smart reseeding is covered with synthetic samples at the stable unit layer. Pass a standalone Node/Playwright script through the trigger `args` field only when a separate diagnostic is genuinely needed.
 
 ## Notes
 - Prefer direct `node tests/...` runs with `with_escalated_permissions` whenever approvals allow; use the watcher only for the cases above
 - The watcher executes tests in the environment in which it is launched. Run it outside Codex’s sandbox so browsers can start normally.
-- `npm run test:e2e` is the entry point. Update this script if you add a higher-level Playwright test harness.
+- `npm run test:e2e:gate` is the focused runner entry point; `npm run test:e2e` runs the complete retained Playwright suite.
 - The watcher throttles triggers: if one run is in progress while another timestamp arrives, it queues a single follow-up run when the current job finishes.

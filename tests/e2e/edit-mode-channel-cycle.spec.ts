@@ -56,6 +56,11 @@ test.describe('Edit Mode channel navigation', () => {
 
     await page.locator('#editChannelNext').click();
 
+    await page.waitForFunction((expected) => {
+      const select = document.getElementById('editChannelSelect') as HTMLSelectElement | null;
+      return window.EDIT?.selectedChannel === expected && select?.value === expected;
+    }, expectedNext);
+
     const after = await page.evaluate(() => {
       const select = document.getElementById('editChannelSelect') as HTMLSelectElement | null;
       return {
@@ -67,7 +72,10 @@ test.describe('Edit Mode channel navigation', () => {
     expect(after.selectedChannel).toBe(expectedNext);
     expect(after.dropdownValue).toBe(expectedNext);
 
-    await page.waitForFunction(() => Array.isArray((window as any).__chartDrawMeta) && (window as any).__chartDrawMeta.length > 1);
+    await page.waitForFunction((expected) => {
+      const meta = (window as any).__chartDrawMeta as Array<{ channelName: string; isSelected: boolean }> | undefined;
+      return Array.isArray(meta) && meta.some(entry => entry.channelName === expected && entry.isSelected);
+    }, expectedNext);
     const drawMeta = await page.evaluate(() => {
       const meta = (window as any).__chartDrawMeta;
       return Array.isArray(meta) ? meta as Array<{ channelName: string; alpha: number; isSelected: boolean }> : [];

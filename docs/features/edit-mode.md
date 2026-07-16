@@ -47,7 +47,8 @@
 - Auto-seeded overlays align with measurement patches when counts ≤25 to avoid mid-edit jumps.
 
 ## Testing
-- Playwright: `tests/e2e/edit-mode-keypoint-scaling.spec.ts` covers insertion, recompute, and global-scale interactions while Edit Mode is active.
+- Playwright: `tests/e2e/edit-mode-drag-smart-point.spec.ts`, `tests/e2e/edit-mode-delete.spec.ts`, `tests/e2e/edit-mode-scale.spec.ts`, and `tests/e2e/edit-mode-ink-limit-raise.spec.ts` cover editing, deletion, scaling, and low-ink-limit interactions.
+- Unit: `tests/ui/edit-mode-persist-seeding.test.js` covers measurement-based reseeding with synthetic samples.
 - Manual: `docs/manual_tests.md` (Edit Mode section) outlines nudge behavior, tooltip locking, and overlay expectations.
 
 ## Debugging Aids

@@ -8,7 +8,7 @@ const labPath = resolve('data/TRIFORCE_V3.txt');
 
 async function gotoApp(page) {
   await page.goto(indexUrl);
-  await page.waitForSelector('#globalLinearizationBtn', { timeout: 15000 });
+  await page.waitForSelector('#globalLinearizationBtn', { state: 'attached', timeout: 15000 });
 }
 
 async function ensureChannelVisible(page, channel) {

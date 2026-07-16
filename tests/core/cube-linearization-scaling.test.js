@@ -35,7 +35,7 @@ describe('global LUT application', () => {
     resetFeatureFlags();
   });
 
-  it('scales master.quad curves when negative.cube is applied with unclamped endpoints', () => {
+  it('reshapes master.quad while preserving its peak with unclamped endpoints', () => {
     const quadText = loadText(MASTER_PATH);
     const cubeText = loadText(NEGATIVE_CUBE_PATH);
 
@@ -52,8 +52,8 @@ describe('global LUT application', () => {
     const maxOriginal = Math.max(...kCurve);
     const maxScaled = Math.max(...scaled);
 
-    expect(maxScaled).toBeLessThan(maxOriginal);
-    expect(maxScaled / maxOriginal).toBeCloseTo(0.86792, 4);
+    expect(maxScaled).toBe(maxOriginal);
+    expect(scaled).not.toEqual(kCurve);
   });
 
   it('returns to the legacy behavior when cube endpoint anchoring is enabled', () => {
@@ -70,7 +70,7 @@ describe('global LUT application', () => {
     setCubeEndpointAnchoringEnabled(true);
     const clamped = apply1DLUT(kCurve, cube, cube.domainMin, cube.domainMax, kEnd, cube.interpolationType);
 
-    expect(Math.max(...clamped)).toBe(maxOriginal);
+    expect(clamped).toEqual(kCurve);
   });
 
   it('applies a 1D LUT to a default 0-100 ramp using printer-space orientation', () => {
@@ -91,12 +91,12 @@ describe('global LUT application', () => {
     expect(result.length).toBe(ramp.length);
     expect(result[0]).toBe(0);
 
-    const expectedFactor = cube.samples[cube.samples.length - 1];
-    expect(expectedFactor).toBeGreaterThan(0);
-    expect(expectedFactor).toBeLessThan(1);
-
-    const expected = ramp.map(value => Math.round(value * expectedFactor));
-    expect(result).toEqual(expected);
+    expect(cube.sourceSpace).toBe('printer');
+    expect(cube.interpolationType).toBe('pchip');
+    expect(result[result.length - 1]).toBe(100);
+    for (let i = 1; i < result.length; i++) {
+      expect(result[i]).toBeGreaterThanOrEqual(result[i - 1]);
+    }
   });
 
   it('keeps the applied curve monotonic when LUT samples are monotonic', () => {

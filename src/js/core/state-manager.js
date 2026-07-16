@@ -106,18 +106,8 @@ export class QuadGenStateManager {
                 lastSaveTime: null
             },
 
-            scaling: {
-                globalPercent: 100,
-                baselines: null,
-                maxAllowed: 1000
-            },
-
-            // Computed values (populated via addComputed)
-            computed: {
-                scaling: {
-                    isActive: false
-                }
-            }
+            // Computed values are populated via addComputed().
+            computed: {}
         };
     }
 

@@ -59,7 +59,7 @@ Deliverable: inline docstring or ADR-style comment summarizing the API contract.
    - Regression check for locked channel scenario (drag attempt fails with status message).
 3. **Manual/QA:**
    - Load TRIFORCE data, trigger drag to fill bell-top, observe smooth transition.
-   - Verify per-channel debug panel and composite overlays still behave.
+   - Verify channel curves and undo behavior remain correct.
 
 ### Phase 4 – Documentation & Flagging
 1. **Docs Update:** Record behavior in:

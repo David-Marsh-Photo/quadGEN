@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import {
@@ -10,21 +10,10 @@ import {
   registerCompositeLabBase,
   finalizeCompositeLabRedistribution
 } from '../../src/js/core/processing-pipeline.js';
-import {
-  setCompositeWeightingMode
-} from '../../src/js/core/composite-settings.js';
-import {
-  setCompositeDebugEnabled,
-  getCompositeDebugState
-} from '../../src/js/core/composite-debug.js';
+import { getCompositeDebugState } from '../../src/js/core/composite-debug.js';
 
 const QUAD_PATH = path.resolve('data/P800_K36C26LK25_V6.quad');
 const LAB_PATH = path.resolve('data/P800_K36C26LK25_V6.txt');
-
-beforeEach(() => {
-  setCompositeDebugEnabled(true);
-  setCompositeWeightingMode('normalized');
-});
 
 describe('Composite ladder blend window [solver-overhaul-blend]', () => {
   it('keeps channel shares from jumping more than 0.1 between snapshots 16-20', () => {
@@ -48,8 +37,7 @@ describe('Composite ladder blend window [solver-overhaul-blend]', () => {
     const active = beginCompositeLabRedistribution({
       channelNames,
       endValues,
-      labEntry,
-      weightingMode: 'normalized'
+      labEntry
     });
     expect(active).toBe(true);
 

@@ -2,7 +2,10 @@ node_modules/
 test-*.js
 *.log
 .DS_Store
+# Local calibration workspace; approved test fixtures are tracked explicitly.
 data/
+!src/js/data/
+!src/js/data/*.js
 data-samples/
 targets/
 .playwright-mcp/
@@ -28,6 +31,17 @@ jan/
 
 # Local agent logs
 logs/
+
+# Local AI histories and raw comparison output
+.aider.chat.history.md
+.aider.input.history
+.aider.tags.cache.v4/
+agent-logs/compare/
+
+# Superseded local backups and one-off diagnostics
+*.bak
+debug-parent.cjs
+scripts/sync-html-section.js
 
 # Local scratch artifacts
 .venv/

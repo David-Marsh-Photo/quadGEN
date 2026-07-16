@@ -9,16 +9,6 @@ import { ensureBellShiftContainer, syncBellShiftFromMeta, clearBellShiftEntry } 
 
 const legacyBridge = getLegacyStateBridge();
 
-if (typeof window !== 'undefined') {
-    if (typeof window.__USE_SCALING_COORDINATOR === 'undefined') {
-        window.__USE_SCALING_COORDINATOR = false;
-    }
-
-    if (typeof window.__USE_SCALING_STATE === 'undefined') {
-        window.__USE_SCALING_STATE = true;
-    }
-}
-
 /**
  * Printer configurations for different Epson models
  */
@@ -75,7 +65,6 @@ export const elements = {
     chartCursorTooltip: null,
     chartZoomInBtn: null,
     chartZoomOutBtn: null,
-    snapshotFlagOverlay: null,
 
     // File and input controls
     filenameInput: null,
@@ -283,10 +272,7 @@ export const elements = {
     lightBlockingOverlayToggle: null,
     inkLoadOverlayToggle: null,
     inkLoadThresholdInput: null,
-    compositeWeightingSelect: null,
-    compositeDebugToggle: null,
     autoRaiseInkToggle: null,
-    redistributionSmoothingToggle: null,
 
     // L* modal elements
     lstarModal: null,
@@ -325,7 +311,6 @@ export function initializeElements() {
 
     // Chart elements
     elements.inkChart = document.getElementById('inkChart');
-    elements.snapshotFlagOverlay = document.getElementById('snapshotFlagOverlay');
     elements.chartCursorTooltip = document.getElementById('chartCursorTooltip');
     elements.chartZoomInBtn = document.getElementById('chartZoomInBtn');
     elements.chartZoomOutBtn = document.getElementById('chartZoomOutBtn');
@@ -498,10 +483,7 @@ export function initializeElements() {
     elements.lightBlockingOverlayToggle = document.getElementById('lightBlockingOverlayToggle');
     elements.inkLoadOverlayToggle = document.getElementById('inkLoadOverlayToggle');
     elements.inkLoadThresholdInput = document.getElementById('inkLoadThresholdInput');
-    elements.compositeWeightingSelect = document.getElementById('compositeWeightingSelect');
-    elements.compositeDebugToggle = document.getElementById('compositeDebugToggle');
     elements.autoRaiseInkToggle = document.getElementById('autoRaiseInkToggle');
-    elements.redistributionSmoothingToggle = document.getElementById('redistributionSmoothingToggle');
 
     // L* modal elements
     elements.lstarModal = document.getElementById('lstarModal');
@@ -1053,10 +1035,6 @@ export function resetAppState() {
     appState.correctionMethod = getCorrectionMethod();
     appState.correctionGain = 1;
 
-    // Scaling state
-    appState.scaleAllPercent = 100;
-    appState.scaleBaselineEnds = null;
-
     // Sync legacy bridges
     syncWindowLoadedQuadData();
     notifyLoadedQuadListeners(null, null);
@@ -1066,16 +1044,6 @@ export function resetAppState() {
         const globalScope = typeof globalThis !== 'undefined' ? globalThis : {};
         if (globalScope.LinearizationState?.clear) {
             globalScope.LinearizationState.clear();
-        }
-    } catch (err) {
-        // Silently ignore if not available
-    }
-
-    // Invalidate curve cache (if available)
-    try {
-        const globalScope = typeof globalThis !== 'undefined' ? globalThis : {};
-        if (typeof globalScope.invalidateMake256Cache === 'function') {
-            globalScope.invalidateMake256Cache();
         }
     } catch (err) {
         // Silently ignore if not available

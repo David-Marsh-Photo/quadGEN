@@ -17,7 +17,6 @@ describe('composite slope limiter integration', () => {
       resolve('scripts/capture-composite-debug.mjs'),
       '--quad', QUAD_PATH,
       '--lab', LAB_PATH,
-      '--mode', 'normalized',
       '--output', outputPath,
     ], { cwd: resolve('.') });
 
@@ -34,4 +33,3 @@ describe('composite slope limiter integration', () => {
     expect(Object.keys(computedFlags)).toHaveLength(0);
   });
 });
-

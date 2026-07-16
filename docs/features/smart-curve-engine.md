@@ -46,7 +46,8 @@
 - Metadata accuracy critical for double-apply guard (prevents global correction from reapplying over baked Smart curves).
 
 ## Testing
-- Playwright: `tests/e2e/edit-mode-keypoint-scaling.spec.ts`, recompute regression, insertion accuracy with low ink limits.
+- Playwright: `tests/e2e/edit-mode-drag-smart-point.spec.ts`, `tests/e2e/edit-mode-scale.spec.ts`, and `tests/e2e/edit-mode-ink-limit-raise.spec.ts` cover point editing, global scaling, and low-ink-limit behavior.
+- Unit: `tests/ui/edit-mode-persist-seeding.test.js` covers Smart-point persistence and measurement reseeding.
 - Manual matrix: `docs/manual_tests.md` → Smart curves section (insert/move/delete, recompute, undo/redo).
 
 ## Debugging Aids

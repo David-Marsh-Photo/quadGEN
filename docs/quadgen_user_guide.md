@@ -209,7 +209,7 @@ EDN `.acv` files and LUTs can seed corrections or intents once a baseline is est
 
 ## 11. Auto Endpoint Rolloff & Intents
 - **Auto White Limit** (`autoWhiteLimitToggle`): Adds a soft shoulder to highlight zones when the curve clips early. Default OFF.
-- **Auto Black Limit** (`autoBlackLimitToggle`): Adds a toe to protect deep shadows. Default ON.
+- **Auto Black Limit** (`autoBlackLimitToggle`): Adds a toe to protect deep shadows. Default OFF.
 - **Persistence**: User preferences store as `autoWhiteLimitV1` / `autoBlackLimitV1`. Recompute with an active rolloff bakes metadata (`bakedAutoWhite` / `bakedAutoBlack`).
 - **Contrast Intents**: Switch via the Intent dropdown. Linear is baseline; Soft, Hard, Filmic, and Gamma preset tone shaping. Custom slider or paste actions can create bespoke looks. Applying intents is undoable and updates filename tags to reflect the chosen intent.
 - **Stacking Strategy**: Keep measurement-based linearization as the foundation. Apply intents afterward, and reprint a proof if the intent significantly changes tonal balance.

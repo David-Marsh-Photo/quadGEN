@@ -98,9 +98,9 @@
 ### Revert Control State Machine
 
 **Files:** `src/js/ui/revert-controls.js`, `src/js/ui/event-handlers.js` (revert handler section)
-- Why fragile: Revert button enabled/disabled state depends on complex guard logic checking measurement status, edit state, global scale application, and per-channel edits. Per CLAUDE.md guardrails, the revert operation must clear `linearizationData = null` completely or LAB data remains active and causes scaling artifacts.
-- Safe modification: When touching revert logic, trace full data lifecycle via DEBUG_LOGS (`[DEBUG REVERT]` logs). Verify `linearizationData` is fully cleared (not just `linearizationData.edited = false`). Test revert after loading LAB, scaling, editing Smart curves, then reverting — chart must return to baseline not scaled state.
-- Test coverage: `tests/e2e/edit-mode-kclk-plateau.spec.ts`, `tests/ui/edit-mode-measurement-seed.test.js` cover partial revert workflows; add test for "load LAB → scale → revert → verify curves are baseline not scaled"
+- Why fragile: Revert button enabled/disabled state depends on complex guard logic checking measurement status, edit state, global scale application, and per-channel edits. Revert must clear Smart/edited/baked state while preserving and re-enabling the loaded measurement.
+- Safe modification: When touching revert logic, trace the full data lifecycle via DEBUG_LOGS (`[DEBUG REVERT]` logs). Verify the measurement remains applied and the restored curves and baselines match the measurement state after scaling and Smart edits.
+- Test coverage: `tests/e2e/global-scale-measurement-revert.spec.ts` covers the global measurement/scaling interaction; `tests/e2e/per-channel-revert.spec.ts` covers per-channel measurement Revert.
 
 ### Bell Curve Scaling Interactions
 

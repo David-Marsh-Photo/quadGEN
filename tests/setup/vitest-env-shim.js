@@ -39,3 +39,11 @@ if (!globalThis.importMetaEnvShim) {
     SSR: true
   };
 }
+
+if (typeof globalThis.requestAnimationFrame !== 'function') {
+  globalThis.requestAnimationFrame = (callback) => setTimeout(() => callback(Date.now()), 0);
+}
+
+if (typeof globalThis.cancelAnimationFrame !== 'function') {
+  globalThis.cancelAnimationFrame = (id) => clearTimeout(id);
+}

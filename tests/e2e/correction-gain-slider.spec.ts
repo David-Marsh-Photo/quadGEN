@@ -1,31 +1,33 @@
 import { expect, test } from '@playwright/test';
 import { resolve } from 'path';
 import { pathToFileURL } from 'url';
+import { openGlobalCorrectionTab } from '../utils/history-helpers';
 
 test.describe('Correction gain slider', () => {
   test('mixes correction strength and updates overlays', async ({ page }) => {
     const indexUrl = pathToFileURL(resolve('index.html')).href;
     await page.goto(indexUrl);
+    await openGlobalCorrectionTab(page);
 
     const optionsBtn = page.locator('#optionsBtn');
     await expect(optionsBtn).toBeVisible();
-    await optionsBtn.click();
-
     const optionsModal = page.locator('#optionsModal');
-    await expect(optionsModal).toBeVisible();
 
     const gainSlider = page.locator('input#correctionGainSlider');
-    const gainValueLabel = page.locator('#correctionGainValue');
+    const gainInput = page.locator('#correctionGainInput');
     await gainSlider.waitFor({ state: 'attached' });
     await expect(gainSlider).toBeVisible();
     await expect(gainSlider).toHaveValue('100');
-    await expect(gainValueLabel).toHaveText('100%');
+    await expect(gainInput).toHaveValue('100');
 
     const quadPath = resolve('data/P800_K36C26LK25_V19.quad');
     await page.setInputFiles('input#quadFile', quadPath);
 
     const labPath = resolve('data/P800_K36C26LK25_V19.txt');
     await page.setInputFiles('input#linearizationFile', labPath);
+
+    await optionsBtn.click();
+    await expect(optionsModal).toBeVisible();
 
     const overlayToggle = page.locator('input#labSpotMarkersToggle');
     await expect(overlayToggle).toBeEnabled({ timeout: 10000 });
@@ -42,6 +44,9 @@ test.describe('Correction gain slider', () => {
       const overlay = helpers?.getLastCorrectionOverlay?.();
       return overlay && Array.isArray(overlay.samples) && overlay.samples.length > 0;
     }, { timeout: 5000 });
+
+    await page.locator('#closeOptionsBtn').click();
+    await expect(optionsModal).toBeHidden();
 
     const readMarkers = async () => page.evaluate(() => {
       const helpers = window.__quadDebug?.chartDebug;
@@ -94,7 +99,7 @@ test.describe('Correction gain slider', () => {
       return helpers?.getCorrectionGainPercent?.() === 0;
     }, { timeout: 3000 });
 
-    await expect(gainValueLabel).toHaveText('0%');
+    await expect(gainInput).toHaveValue('0');
 
     await page.waitForTimeout(200);
 
@@ -137,7 +142,7 @@ test.describe('Correction gain slider', () => {
       return helpers?.getCorrectionGainPercent?.() === 75;
     }, { timeout: 3000 });
 
-    await expect(gainValueLabel).toHaveText('75%');
+    await expect(gainInput).toHaveValue('75');
 
     await page.waitForTimeout(200);
 

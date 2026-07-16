@@ -1,7 +1,5 @@
 /** @vitest-environment jsdom */
 import { describe, it, beforeEach, afterEach, expect, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 
 vi.mock('../../src/js/ui/ui-hooks.js', () => ({
   registerInkChartHandler: vi.fn(),
@@ -45,31 +43,27 @@ vi.mock('../../src/js/core/history-manager.js', async () => {
 });
 
 import { elements, ensureLoadedQuadData, setLoadedQuadData } from '../../src/js/core/state.js';
+import { LinearizationState } from '../../src/js/data/linearization-utils.js';
 import { ControlPoints, createDefaultKeyPoints, toAbsoluteOutput } from '../../src/js/curves/smart-curves.js';
-import { __TEST_ONLY__ } from '../../src/js/ui/edit-mode.js';
+import { setEditMode, reinitializeChannelSmartCurves, __TEST_ONLY__ } from '../../src/js/ui/edit-mode.js';
+import { getDebugRegistry } from '../../src/js/utils/debug-registry.js';
 
 const { seedChannelFromSamples } = __TEST_ONLY__;
 
 const CURVE_RESOLUTION = 256;
 
-function readKChannelSamples() {
-  const lines = readFileSync(resolve('data/KCLK.quad'), 'utf8').split(/\r?\n/);
-  const values = [];
-  for (const line of lines) {
-    if (line.startsWith('# C curve')) break;
-    const trimmed = line.trim();
-    if (/^\d+$/.test(trimmed)) {
-      values.push(Number(trimmed));
-    }
+function buildPlateauCurve(endValue, plateauEndIndex = 155) {
+  const samples = new Array(CURVE_RESOLUTION).fill(0);
+  for (let i = plateauEndIndex; i < CURVE_RESOLUTION; i += 1) {
+    const progress = (i - plateauEndIndex) / (CURVE_RESOLUTION - 1 - plateauEndIndex);
+    samples[i] = Math.round(endValue * progress);
   }
-  if (values.length !== CURVE_RESOLUTION) {
-    throw new Error(`Unexpected sample count ${values.length}`);
-  }
-  return values;
+  samples[CURVE_RESOLUTION - 1] = endValue;
+  return samples;
 }
 
 describe('Edit Mode Smart seeding preserves absolute amplitudes', () => {
-  const plateauSamples = readKChannelSamples();
+  const plateauSamples = buildPlateauCurve(9175);
 
   beforeEach(() => {
     document.body.innerHTML = `
@@ -78,6 +72,7 @@ describe('Edit Mode Smart seeding preserves absolute amplitudes', () => {
           <tr class="channel-row" data-channel="K">
             <td><input class="percent-input" value="14" data-base-percent="14" /></td>
             <td><input class="end-input" value="9175" data-base-end="9175" /></td>
+            <td><input type="checkbox" class="per-channel-toggle" checked /></td>
           </tr>
         </tbody>
       </table>
@@ -94,6 +89,11 @@ describe('Edit Mode Smart seeding preserves absolute amplitudes', () => {
     elements.editRecomputeBtn = document.createElement('button');
     elements.editPointIndex = document.createElement('span');
 
+    const option = document.createElement('option');
+    option.value = 'K';
+    option.textContent = 'K';
+    elements.editChannelSelect.appendChild(option);
+
     const loaded = ensureLoadedQuadData(() => ({
       curves: {},
       sources: {},
@@ -109,10 +109,16 @@ describe('Edit Mode Smart seeding preserves absolute amplitudes', () => {
     loaded.baselineEnd.K = plateauSamples[plateauSamples.length - 1];
     loaded.sources.K = 'quad';
 
+    LinearizationState.clear();
+    setEditMode(false);
     ControlPoints.persist('K', createDefaultKeyPoints());
   });
 
   afterEach(() => {
+    setEditMode(false);
+    const registry = getDebugRegistry();
+    delete registry.processingPipeline;
+    LinearizationState.clear();
     ControlPoints.persist('K', createDefaultKeyPoints());
     setLoadedQuadData(null);
     elements.rows = null;
@@ -146,5 +152,33 @@ describe('Edit Mode Smart seeding preserves absolute amplitudes', () => {
     const channelPercent = 14;
     expect(absolute).toBeCloseTo(channelPercent, 3);
     expect(absolute).toBeLessThanOrEqual(channelPercent + 0.01);
+  });
+
+  it('rebuilds measurement-based Smart points without disturbing the loaded baseline', () => {
+    const normalizedPlateau = plateauSamples.map((value) => (value > 0 ? value / 9175 : 0));
+    LinearizationState.setGlobalData({
+      format: 'LAB TXT',
+      filename: 'global-measurements.txt',
+      originalData: Array.from({ length: 6 }, (_, index) => ({ input: index * 20 })),
+      samples: normalizedPlateau
+    }, true);
+
+    getDebugRegistry().processingPipeline = {
+      make256: vi.fn(() => null)
+    };
+
+    setEditMode(true);
+    ControlPoints.persist('K', createDefaultKeyPoints());
+
+    const data = ensureLoadedQuadData();
+    data.keyPointsMeta.K = { interpolationType: 'smooth' };
+    reinitializeChannelSmartCurves('K', { forceIfEditModeEnabling: true });
+
+    const { points } = ControlPoints.get('K');
+    expect(points.length).toBeGreaterThan(2);
+    expect(points.at(-1).output).toBeCloseTo(100, 5);
+    expect(data.baselineEnd.K).toBe(9175);
+    expect(data.keyPointsMeta.K?.smartTouched).toBeUndefined();
+    expect(elements.rows.querySelector('.end-input').value).toBe('9175');
   });
 });

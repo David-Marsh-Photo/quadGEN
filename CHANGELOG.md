@@ -9,13 +9,14 @@ This changelog follows a concise, user-facing format. Engineering details live i
 - _Nothing yet._
 
 ### Changed
-- _Nothing yet._
+- Global Scale now uses one rollback-safe transaction and one canonical percent/baseline state for the Scale field, Lab Tech, history, and compatibility helpers; the unused rollout flags, mirrored state, subscriptions, and diagnostic queue/telemetry layers were removed.
+- Lab Tech's correction-method action now updates the same persisted Simple Scaling/Density Solver preference as the Options UI; two inert feature-flag adapters that never selected processing behavior were removed.
 
 ### Fixed
-- _Nothing yet._
+- Density Solver no longer honors obsolete hidden weighting values from browser storage; LAB redistribution always uses the documented normalized path.
 
 ### Docs
-- _Nothing yet._
+- Consolidated the former scaling-orchestrator notes into the Global Scale specification and removed retired parity-harness instructions.
 
 ## [5.1.0] — 2026-02-06
 ### Added

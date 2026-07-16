@@ -15,7 +15,7 @@ This directory holds the reference material that ships with the modular quadGEN 
   - `global-scale.md`, `auto-limit-rolloff.md`, `edit-mode.md`, `revert-controls.md`
   - `contrast-intents.md`, `correction-vs-intent.md`, `apply-intent-to-quad.md`
   - `lab-ingestion.md`, `manual-lstar.md`, `per-channel-measurements.md`
-  - `smart-curve-engine.md`, `history-manager.md`, `global-correction-loaders.md`
+  - `channel-builder.md`, `smart-curve-engine.md`, `history-manager.md`, `global-correction-loaders.md`
 
 ## File Format Specs
 - `File_Specs/ACV_SPEC_SUMMARY.md`, `CGATS17_SPEC_SUMMARY.md`, `CUBE_LUT_SPEC_SUMMARY.md`, `LAB_TXT_SPEC_SUMMARY.md`, `QTR_QUAD_SPEC_SUMMARY.md` – parsing rules and edge cases for supported import/export formats.

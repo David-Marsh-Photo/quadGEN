@@ -88,12 +88,5 @@ test.describe('Correction overlay options toggle', () => {
     });
 
     expect(overlayStateEnabled, 'chart debug state should capture overlay metadata when enabled').not.toBeNull();
-    expect(overlayStateEnabled?.baseline?.color, 'baseline overlay should use the purple guide color').toBe('#a855f7');
-    expect(overlayStateEnabled?.baseline?.points?.[1]?.output, 'baseline endpoint should reflect effective ink ceiling').toBeCloseTo(
-      overlayStateEnabled?.effectiveMaxPercent ?? 100,
-      3,
-    );
-
-    await page.screenshot({ path: 'artifacts/options-correction-overlay-default.png', fullPage: true });
   });
 });

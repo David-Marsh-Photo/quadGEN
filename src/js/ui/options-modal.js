@@ -1,7 +1,46 @@
 import { elements } from '../core/state.js';
 
+const FOCUSABLE_SELECTOR = [
+    'button:not([disabled])',
+    'input:not([disabled])',
+    'select:not([disabled])',
+    'textarea:not([disabled])',
+    'a[href]',
+    '[tabindex]:not([tabindex="-1"])'
+].join(', ');
+
 function isElementVisible(el) {
     return !!el && !el.classList.contains('hidden');
+}
+
+function getFocusableElements(container) {
+    return Array.from(container.querySelectorAll(FOCUSABLE_SELECTOR))
+        .filter((element) => element.tabIndex >= 0 && element.getClientRects().length > 0);
+}
+
+function containOptionsFocus(event) {
+    const { optionsModal } = elements;
+    if (!optionsModal || event.key !== 'Tab') return;
+
+    const focusableElements = getFocusableElements(optionsModal);
+    if (!focusableElements.length) {
+        event.preventDefault();
+        return;
+    }
+
+    const firstElement = focusableElements[0];
+    const lastElement = focusableElements[focusableElements.length - 1];
+    const activeElement = document.activeElement;
+    const movingBackwardPastStart = event.shiftKey
+        && (activeElement === firstElement || !optionsModal.contains(activeElement));
+    const movingForwardPastEnd = !event.shiftKey
+        && (activeElement === lastElement || !optionsModal.contains(activeElement));
+
+    if (movingBackwardPastStart || movingForwardPastEnd) {
+        event.preventDefault();
+        const target = movingBackwardPastStart ? lastElement : firstElement;
+        target.focus({ preventScroll: true });
+    }
 }
 
 function getModalPeers() {
@@ -79,7 +118,9 @@ function openOptionsModal() {
             if (event.key === 'Escape' || event.key === 'Esc') {
                 event.preventDefault();
                 closeOptionsModal();
+                return;
             }
+            containOptionsFocus(event);
         };
         document.addEventListener('keydown', optionsKeydownHandler);
     }

@@ -20,6 +20,11 @@ export async function waitForAppReady(page: Page, options: { timeout?: number } 
   await waitForUndoRedoReady(page, { timeout });
 }
 
+export async function openGlobalCorrectionTab(page: Page): Promise<void> {
+  await page.locator('.tab-btn-vertical[data-tab="global"]').click();
+  await page.waitForSelector('.tab-content[data-tab-content="global"]', { state: 'visible' });
+}
+
 export async function waitForUndoRedoReady(page: Page, options: { timeout?: number } = {}): Promise<void> {
   const { timeout = 10000 } = options;
   await Promise.all([

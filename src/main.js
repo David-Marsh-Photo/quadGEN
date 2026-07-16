@@ -75,7 +75,6 @@ import { initializeManualLstar } from './js/ui/manual-lstar.js';
 import { initializeOptionsModal } from './js/ui/options-modal.js';
 import { initChannelBuilderModal, openChannelBuilderModal } from './js/ui/channel-builder-modal.js';
 import { initializeTooltipSystem } from './js/ui/tooltips.js';
-import { initializeCompositeDebugPanel } from './js/ui/composite-debug-panel.js';
 import { initializeTabs } from './js/ui/tab-manager.js';
 import { initChartDivider, initPanelDivider } from './js/ui/chart-divider.js';
 
@@ -204,13 +203,11 @@ import {
 
 // Import scaling utilities
 import {
-    applyGlobalScale,
     scaleChannelEndsByPercent,
     reapplyCurrentGlobalScale,
     updateScaleBaselineForChannel,
     resetGlobalScale,
-    getCurrentScale,
-    setScalingStateEnabled
+    getCurrentScale
 } from './js/core/scaling-utils.js';
 
 // Import Chat Interface
@@ -304,8 +301,6 @@ import {
     redo,
     clearHistory
 } from './js/core/history-manager.js';
-
-import scalingCoordinator from './js/core/scaling-coordinator.js';
 
 // Import file operations
 import {
@@ -872,7 +867,6 @@ function initializeApplication() {
     initializeTooltipSystem();
     initializeEditMode();
     initializeChart();
-    initializeCompositeDebugPanel();
     setupStateSynchronization();
     initializePrinterUI();
     updateCompactChannelsList();
@@ -1062,13 +1056,11 @@ function initializeApplication() {
     };
 
     const scalingUtilsCompat = {
-        applyGlobalScale,
         scaleChannelEndsByPercent,
         reapplyCurrentGlobalScale,
         updateScaleBaselineForChannel,
         resetGlobalScale,
-        getCurrentScale,
-        setScalingStateEnabled
+        getCurrentScale
     };
 
     const chartManagerCompat = {
@@ -1196,7 +1188,6 @@ function initializeApplication() {
         getPresetDefaults,
         stateManager: stateManagerCompat,
         historyManager: historyManagerCompat,
-        scalingCoordinator,
         scalingUtils: scalingUtilsCompat,
         eventHandlers: eventHandlersCompat,
     chartManager: chartManagerCompat,
@@ -1238,17 +1229,11 @@ function initializeApplication() {
             ...(existingCompat.scalingUtils || {})
         };
 
-        compatScalingUtils.setScalingStateEnabled = setScalingStateEnabled;
-
         debugRoot.compat = {
             ...compatExports,
             ...existingCompat,
             scalingUtils: compatScalingUtils
         };
-
-        if (typeof windowRef.setScalingStateEnabled !== 'function') {
-            windowRef.setScalingStateEnabled = setScalingStateEnabled;
-        }
     }
 
     if (windowRef && !Object.getOwnPropertyDescriptor(windowRef, 'chartZoomIndex')) {

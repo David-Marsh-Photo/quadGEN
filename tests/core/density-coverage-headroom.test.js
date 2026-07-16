@@ -61,8 +61,6 @@ let registerCompositeLabBase;
 let finalizeCompositeLabRedistribution;
 let getCompositeDebugState;
 let resetCompositeDebugState;
-let setCompositeDebugEnabled;
-let setCompositePerSampleCeilingEnabled;
 let TOTAL;
 
 beforeAll(async () => {
@@ -76,16 +74,13 @@ beforeAll(async () => {
   } = await import('../../src/js/core/processing-pipeline.js'));
   ({
     getCompositeDebugState,
-    resetCompositeDebugState,
-    setCompositeDebugEnabled
+    resetCompositeDebugState
   } = await import('../../src/js/core/composite-debug.js'));
-  ({ setCompositePerSampleCeilingEnabled } = await import('../../src/js/core/feature-flags.js'));
   ({ TOTAL } = await import('../../src/js/core/state.js'));
 });
 
 afterEach(() => {
-  setCompositePerSampleCeilingEnabled(true);
-  resetCompositeDebugState({ keepEnabled: false });
+  resetCompositeDebugState();
 });
 
 describe('density coverage ceilings', () => {
@@ -102,14 +97,10 @@ describe('density coverage ceilings', () => {
     const labEntry = parseLabData(labContent, 'P800_K36C26LK25_V6.txt');
     expect(labEntry?.valid).toBe(true);
 
-    setCompositePerSampleCeilingEnabled(true);
-    setCompositeDebugEnabled(true);
-
     beginCompositeLabRedistribution({
       channelNames: quadData.channels,
       endValues: quadData.baselineEnd,
-      labEntry,
-      weightingMode: 'normalized'
+      labEntry
     });
 
     quadData.channels.forEach((channel) => {

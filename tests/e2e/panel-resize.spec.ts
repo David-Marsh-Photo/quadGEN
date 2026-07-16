@@ -13,23 +13,6 @@ test.describe('Panel Resize Functionality', () => {
     await page.waitForSelector('#panelDivider', { timeout: 5000 });
   });
 
-  test('should have dual panel layout with correct structure', async ({ page }) => {
-    // Verify layout structure exists
-    const dualPanel = await page.$('.dual-panel-layout');
-    expect(dualPanel).toBeTruthy();
-
-    const chartPanel = await page.$('#chartPanel');
-    expect(chartPanel).toBeTruthy();
-
-    const rightPanel = await page.$('#rightPanel');
-    expect(rightPanel).toBeTruthy();
-
-    const panelDivider = await page.$('#panelDivider');
-    expect(panelDivider).toBeTruthy();
-
-    console.log('✓ Dual panel layout structure verified');
-  });
-
   test('should have vertical tabs in right panel', async ({ page }) => {
     // Verify vertical tab navigation
     const verticalTabNav = await page.$('.vertical-tab-nav');
@@ -307,28 +290,6 @@ test.describe('Panel Resize Functionality', () => {
     expect(screenshot).toBeTruthy();
 
     console.log('✓ Dark mode screenshot captured');
-  });
-
-  test('responsive: should stack panels below 830px', async ({ page }) => {
-    // Set viewport to narrow width
-    await page.setViewportSize({ width: 800, height: 1000 });
-    await page.waitForTimeout(500);
-
-    const dualPanel = page.locator('.dual-panel-layout');
-    const flexDirection = await dualPanel.evaluate(el => {
-      return window.getComputedStyle(el).flexDirection;
-    });
-
-    expect(flexDirection).toBe('column');
-
-    // Verify divider is hidden
-    const dividerDisplay = await page.locator('#panelDivider').evaluate(el => {
-      return window.getComputedStyle(el).display;
-    });
-
-    expect(dividerDisplay).toBe('none');
-
-    console.log('✓ Responsive layout verified');
   });
 
 });

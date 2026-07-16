@@ -50,14 +50,6 @@ vi.mock('../../src/js/core/processing-pipeline.js', () => ({
   }
 }));
 
-vi.mock('../../src/js/core/scaling-utils.js', () => ({
-  getCurrentScale: () => ({ percent: 100 })
-}));
-
-vi.mock('../../src/js/core/scaling-constants.js', () => ({
-  SCALING_STATE_FLAG_EVENT: 'scaling-event'
-}));
-
 const mockControlPoints = {
   get: () => ({ points: [] }),
   set: () => {},
@@ -115,11 +107,6 @@ vi.mock('../../src/js/ui/drag-utils.js', () => ({
 vi.mock('../../src/js/ui/processing-status.js', () => ({
   updateProcessingDetail: () => {},
   updateAllProcessingDetails: () => {}
-}));
-
-vi.mock('../../src/js/core/composite-debug.js', () => ({
-  subscribeCompositeDebugState: () => () => {},
-  getCompositeDebugState: () => null
 }));
 
 vi.mock('../../src/js/core/light-blocking.js', () => ({

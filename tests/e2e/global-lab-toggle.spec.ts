@@ -1,13 +1,15 @@
 import { test, expect } from '@playwright/test';
 import { resolve } from 'path';
 import { pathToFileURL } from 'url';
+import { openGlobalCorrectionTab } from '../utils/history-helpers';
 
 test.describe('Global LAB toggle', () => {
   test('enabling and disabling global correction updates application state', async ({ page }) => {
     const indexUrl = pathToFileURL(resolve('index.html')).href;
     await page.goto(indexUrl);
+    await openGlobalCorrectionTab(page);
 
-    await page.waitForSelector('#globalLinearizationBtn');
+    await page.waitForSelector('#globalLinearizationBtn', { state: 'attached' });
 
     const quadPath = resolve('data/P800_K37_C26_LK25_V1.quad');
     await page.setInputFiles('input#quadFile', quadPath);
@@ -26,7 +28,7 @@ test.describe('Global LAB toggle', () => {
       { timeout: 15000 },
     );
 
-    const toggleSlider = page.locator('label.slider-toggle span.slider').first();
+    const toggleSlider = page.locator('label.slider-toggle[title="Enable/disable global correction"] .slider');
     await toggleSlider.click();
 
     await page.waitForFunction(

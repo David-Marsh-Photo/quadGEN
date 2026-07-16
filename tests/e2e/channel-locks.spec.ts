@@ -207,7 +207,7 @@ test.describe('Channel lock controls', () => {
 
         const coordinatorResult = await page.evaluate(async () => {
             try {
-                await window.scalingCoordinator.scale(120, 'test-lock-check', { priority: 'high' });
+                await window.scalingCoordinator.scale(120);
                 return { success: true };
             } catch (error) {
                 return { success: false, message: error?.message || String(error) };
@@ -235,7 +235,7 @@ test.describe('Channel lock controls', () => {
         await expect(globalScaleInput).toBeDisabled();
     });
 
-    test('locked channel clamps Smart point edits to ink limit', async ({ page }) => {
+    test('locked channel rejects Smart point dragging', async ({ page }) => {
         await gotoApp(page);
         await activateChannel(page, 'MK');
         await loadManualLab(page);
@@ -297,7 +297,7 @@ test.describe('Channel lock controls', () => {
 
         const after = await getSelectedPoint(page);
         expect(after.channel).toBe('MK');
-        expect(after.absoluteOutput).toBeLessThanOrEqual(60.5);
+        expect(after.absoluteOutput).toBeCloseTo(before.absoluteOutput, 6);
     });
 
     test('channel lock toggles are undoable/redone via history controls', async ({ page }) => {

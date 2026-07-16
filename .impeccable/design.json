@@ -1,0 +1,305 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-07-15T20:05:05Z",
+  "title": "Design System: quadGEN",
+  "extensions": {
+    "colorMeta": {
+      "canvas-light": {
+        "role": "neutral",
+        "displayName": "Proofing Canvas",
+        "canonical": "#f9fafb",
+        "tonalRamp": ["#171717", "#262626", "#404040", "#737373", "#a3a3a3", "#d4d4d4", "#e5e5e5", "#fafafa"]
+      },
+      "surface-light": {
+        "role": "neutral",
+        "displayName": "Clean Surface",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#171717", "#262626", "#404040", "#737373", "#a3a3a3", "#d4d4d4", "#e5e5e5", "#ffffff"]
+      },
+      "surface-subtle-light": {
+        "role": "neutral",
+        "displayName": "Soft Instrument Surface",
+        "canonical": "#f3f4f6",
+        "tonalRamp": ["#111827", "#1f2937", "#374151", "#4b5563", "#6b7280", "#9ca3af", "#d1d5db", "#f3f4f6"]
+      },
+      "ink-light": {
+        "role": "neutral",
+        "displayName": "Ink",
+        "canonical": "#111827",
+        "tonalRamp": ["#0f172a", "#1e293b", "#334155", "#475569", "#64748b", "#94a3b8", "#cbd5e1", "#f1f5f9"]
+      },
+      "muted-light": {
+        "role": "neutral",
+        "displayName": "Graphite",
+        "canonical": "#374151",
+        "tonalRamp": ["#111827", "#1f2937", "#374151", "#4b5563", "#6b7280", "#9ca3af", "#d1d5db", "#f3f4f6"]
+      },
+      "line-light": {
+        "role": "neutral",
+        "displayName": "Paper Hairline",
+        "canonical": "#e5e7eb",
+        "tonalRamp": ["#111827", "#1f2937", "#374151", "#4b5563", "#6b7280", "#9ca3af", "#d1d5db", "#e5e7eb"]
+      },
+      "canvas-dark": {
+        "role": "neutral",
+        "displayName": "Darkroom Canvas",
+        "canonical": "#0a0a0a",
+        "tonalRamp": ["#0a0a0a", "#171717", "#262626", "#404040", "#737373", "#a3a3a3", "#d4d4d4", "#f5f5f5"]
+      },
+      "surface-dark": {
+        "role": "neutral",
+        "displayName": "Raised Darkroom Surface",
+        "canonical": "#171717",
+        "tonalRamp": ["#0a0a0a", "#171717", "#262626", "#404040", "#737373", "#a3a3a3", "#d4d4d4", "#f5f5f5"]
+      },
+      "ink-dark": {
+        "role": "neutral",
+        "displayName": "Silver Text",
+        "canonical": "#e5e5e5",
+        "tonalRamp": ["#171717", "#262626", "#404040", "#737373", "#a3a3a3", "#d4d4d4", "#e5e5e5", "#fafafa"]
+      },
+      "muted-dark": {
+        "role": "neutral",
+        "displayName": "Meter Gray",
+        "canonical": "#9ca3af",
+        "tonalRamp": ["#111827", "#1f2937", "#374151", "#4b5563", "#6b7280", "#9ca3af", "#d1d5db", "#f3f4f6"]
+      },
+      "line-dark": {
+        "role": "neutral",
+        "displayName": "Dark Divider",
+        "canonical": "#262626",
+        "tonalRamp": ["#0a0a0a", "#171717", "#262626", "#404040", "#737373", "#a3a3a3", "#d4d4d4", "#f5f5f5"]
+      },
+      "action-slate": {
+        "role": "primary",
+        "displayName": "Tool Slate",
+        "canonical": "#475569",
+        "tonalRamp": ["#0f172a", "#1e293b", "#334155", "#475569", "#64748b", "#94a3b8", "#cbd5e1", "#f1f5f9"]
+      },
+      "focus-blue": {
+        "role": "primary",
+        "displayName": "Precision Blue",
+        "canonical": "#2563eb",
+        "tonalRamp": ["#172554", "#1e3a8a", "#1e40af", "#2563eb", "#3b82f6", "#60a5fa", "#bfdbfe", "#eff6ff"]
+      },
+      "focus-blue-dark": {
+        "role": "primary",
+        "displayName": "Low-Light Precision Blue",
+        "canonical": "#60a5fa",
+        "tonalRamp": ["#172554", "#1e3a8a", "#1e40af", "#2563eb", "#3b82f6", "#60a5fa", "#bfdbfe", "#eff6ff"]
+      },
+      "confirm-green": {
+        "role": "secondary",
+        "displayName": "Confirmation Green",
+        "canonical": "#10b981",
+        "tonalRamp": ["#022c22", "#064e3b", "#047857", "#10b981", "#34d399", "#6ee7b7", "#a7f3d0", "#ecfdf5"]
+      },
+      "process-cyan": {
+        "role": "tertiary",
+        "displayName": "Process Cyan",
+        "canonical": "#00b5e2",
+        "tonalRamp": ["#06202a", "#083847", "#065b72", "#0088aa", "#00b5e2", "#4bcce9", "#9ce8f4", "#e7faff"]
+      },
+      "process-magenta": {
+        "role": "tertiary",
+        "displayName": "Process Magenta",
+        "canonical": "#ff2a8a",
+        "tonalRamp": ["#2a0718", "#520b2c", "#8a124a", "#c91f6d", "#ff2a8a", "#ff6ca8", "#ffb5d0", "#fff0f6"]
+      },
+      "process-yellow": {
+        "role": "tertiary",
+        "displayName": "Process Yellow",
+        "canonical": "#ffd400",
+        "tonalRamp": ["#2b2400", "#554500", "#8f7300", "#c9a400", "#ffd400", "#ffe04d", "#ffec99", "#fff9d9"]
+      },
+      "process-key": {
+        "role": "tertiary",
+        "displayName": "Process Key",
+        "canonical": "#1a1a1a",
+        "tonalRamp": ["#0a0a0a", "#1a1a1a", "#303030", "#525252", "#737373", "#a3a3a3", "#d4d4d4", "#f5f5f5"]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Product Display",
+        "purpose": "The quadGEN name and rare top-level headings."
+      },
+      "title": {
+        "displayName": "Workspace Title",
+        "purpose": "Uppercase tab labels and strong panel navigation."
+      },
+      "body": {
+        "displayName": "Interface Body",
+        "purpose": "Descriptions, help text, and routine form content."
+      },
+      "label": {
+        "displayName": "Instrument Label",
+        "purpose": "Buttons, field labels, compact state, and table headings."
+      },
+      "mono": {
+        "displayName": "Data Mono",
+        "purpose": "Quad previews, measurements, and machine-readable content."
+      }
+    },
+    "shadows": [
+      {
+        "name": "dialog-lift",
+        "value": "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+        "purpose": "Light-theme dialogs and the Options panel."
+      },
+      {
+        "name": "dialog-lift-dark",
+        "value": "0 16px 48px rgba(0, 0, 0, 0.60)",
+        "purpose": "Dark-theme modal surfaces."
+      },
+      {
+        "name": "tooltip-lift",
+        "value": "0 8px 16px rgba(0, 0, 0, 0.18)",
+        "purpose": "Small transient explanations above the working plane."
+      }
+    ],
+    "motion": [
+      {
+        "name": "press-feedback",
+        "value": "50ms ease-out",
+        "purpose": "Immediate button press displacement only."
+      },
+      {
+        "name": "state-standard",
+        "value": "150ms cubic-bezier(0.4, 0, 0.2, 1)",
+        "purpose": "Hover, focus, selection, and compact control state."
+      },
+      {
+        "name": "panel-reveal",
+        "value": "200ms cubic-bezier(0.16, 1, 0.3, 1)",
+        "purpose": "Short tab and panel reveal without choreography."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      },
+      {
+        "name": "workspace-stack",
+        "value": "830px"
+      },
+      {
+        "name": "lg",
+        "value": "1024px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Action Button",
+      "kind": "button",
+      "refersTo": "button-action",
+      "description": "Compact slate action for routine calibration commands.",
+      "html": "<button class=\"ds-btn-action\">Load Data File</button>",
+      "css": ".ds-btn-action { background: #475569; color: #ffffff; border: 0; border-radius: 4px; padding: 8px 12px; font: 700 12px/16px ui-sans-serif, system-ui, sans-serif; transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1), transform 50ms ease-out; } .ds-btn-action:hover { background: #374151; } .ds-btn-action:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; } .ds-btn-action:active { transform: translateY(2px); }"
+    },
+    {
+      "name": "Secondary Button",
+      "kind": "button",
+      "refersTo": "button-secondary",
+      "description": "Quiet utility action for Options, Close, and related secondary commands.",
+      "html": "<button class=\"ds-btn-secondary\">Options</button>",
+      "css": ".ds-btn-secondary { background: #f3f4f6; color: #374151; border: 0; border-radius: 4px; padding: 6px 12px; font: 700 12px/16px ui-sans-serif, system-ui, sans-serif; transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-btn-secondary:hover { background: #e5e7eb; } .ds-btn-secondary:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Field",
+      "kind": "input",
+      "refersTo": "input-light",
+      "description": "Familiar rounded field for filenames, numeric values, and concise technical input.",
+      "html": "<label class=\"ds-field-label\" for=\"ds-field\">Filename</label><input class=\"ds-field\" id=\"ds-field\" value=\"P900_K33_C33_M33\" />",
+      "css": ".ds-field-label { display: block; margin-bottom: 4px; color: #374151; font: 700 12px/16px ui-sans-serif, system-ui, sans-serif; } .ds-field { width: 280px; background: #ffffff; color: #111827; border: 1px solid #e5e7eb; border-radius: 8px; padding: 6px 12px; font: 400 14px/21px ui-sans-serif, system-ui, sans-serif; } .ds-field:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; border-color: #93c5fd; } .ds-field:disabled { background: #f3f4f6; color: #6b7280; cursor: not-allowed; }"
+    },
+    {
+      "name": "Workspace Tab",
+      "kind": "nav",
+      "refersTo": "tab-active-light",
+      "description": "Flat task navigation with one explicit active indicator.",
+      "html": "<nav class=\"ds-tabs\" aria-label=\"Workspace\"><button class=\"ds-tab ds-tab-active\">CHANNELS</button><button class=\"ds-tab\">LAB TECH</button><button class=\"ds-tab\">.QUAD PREVIEW</button></nav>",
+      "css": ".ds-tabs { display: flex; background: #f3f4f6; border-bottom: 2px solid #e5e7eb; } .ds-tab { flex: 1; background: transparent; color: #374151; border: 0; border-bottom: 3px solid transparent; padding: 6px 12px; font: 600 13px/20px \"Segoe UI\", ui-sans-serif, system-ui, sans-serif; letter-spacing: 0.03em; } .ds-tab:hover { background: #e5e7eb; color: #111827; } .ds-tab:focus-visible { outline: 2px solid #2563eb; outline-offset: -2px; } .ds-tab-active { background: #ffffff; border-bottom-color: #374151; }"
+    },
+    {
+      "name": "Working Panel",
+      "kind": "card",
+      "refersTo": "panel-light",
+      "description": "Flat bordered surface that groups one coherent calibration task.",
+      "html": "<section class=\"ds-panel\"><strong>Plot smoothing</strong><p>Adjust the computed correction curve.</p></section>",
+      "css": ".ds-panel { width: 280px; background: #ffffff; color: #111827; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px; font: 400 14px/21px ui-sans-serif, system-ui, sans-serif; } .ds-panel strong { display: block; margin-bottom: 4px; font-weight: 600; } .ds-panel p { margin: 0; color: #374151; }"
+    },
+    {
+      "name": "Channel Chip",
+      "kind": "chip",
+      "description": "Compact channel selector with both a process swatch and a text label.",
+      "html": "<button class=\"ds-channel-chip\"><span class=\"ds-channel-swatch\" aria-hidden=\"true\"></span><span>Cyan</span></button>",
+      "css": ".ds-channel-chip { display: inline-flex; align-items: center; gap: 4px; background: #ffffff; color: #374151; border: 0; border-radius: 6px; padding: 3px 8px; font: 600 12px/16px ui-sans-serif, system-ui, sans-serif; transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1); } .ds-channel-chip:hover { background: #f3f4f6; } .ds-channel-chip:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; } .ds-channel-swatch { width: 12px; height: 12px; background: #00b5e2; border: 1px solid #9ca3af; border-radius: 2px; }"
+    },
+    {
+      "name": "Technical Tooltip",
+      "kind": "custom",
+      "description": "Concise explanation for advanced calibration controls.",
+      "html": "<span class=\"ds-tooltip\" role=\"tooltip\">Applies smoothing to the plotted and exported curve.</span>",
+      "css": ".ds-tooltip { display: inline-block; max-width: 320px; background: #111111; color: #ffffff; border-radius: 6px; padding: 6px 10px; font: 400 12px/17px ui-sans-serif, system-ui, sans-serif; box-shadow: 0 8px 16px rgba(0, 0, 0, 0.18); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Calibration Bench",
+    "overview": "quadGEN should feel like the clean working surface beside a controlled-light viewing booth: precise, calm, and arranged around the proof under inspection. The default light theme supports a printmaker comparing paper and screen in a lit studio; the dark theme is an explicit low-light alternative, not the product's assumed personality.\n\nThe curve and its measured evidence remain visually primary. Panels are compact, familiar, and mostly flat, with borders and tonal layers establishing structure. The system rejects generic SaaS gloss, consumer photo-filter styling, novelty laboratory chrome, and inconsistent custom controls.",
+    "keyCharacteristics": [
+      "Light-first, with a complete neutral dark counterpart.",
+      "Dense enough for expert calibration, but divided into legible workflow regions.",
+      "Restrained graphite and slate controls with process color reserved for data and identity.",
+      "Familiar browser affordances, visible focus, and state-only motion.",
+      "Flat working surfaces, with elevation reserved for transient overlays."
+    ],
+    "rules": [
+      {
+        "name": "The Process Color Rule",
+        "body": "CMYK colors identify channels and the product mark. They never become generic card fills, decorative gradients, or unlabeled status colors.",
+        "section": "colors"
+      },
+      {
+        "name": "The Restrained Accent Rule",
+        "body": "Outside charts and channel indicators, saturated color occupies no more than ten percent of a screen.",
+        "section": "colors"
+      },
+      {
+        "name": "The Instrument Label Rule",
+        "body": "Labels are short and literal. Uppercase is reserved for workspace navigation, never for paragraphs or routine form labels.",
+        "section": "typography"
+      },
+      {
+        "name": "The Data Type Rule",
+        "body": "Monospace signals data that benefits from character alignment. It is forbidden as a general technical aesthetic.",
+        "section": "typography"
+      },
+      {
+        "name": "The Bench Surface Rule",
+        "body": "Persistent panels remain flat. If a static panel needs a large shadow to read as a region, its border, spacing, or tonal hierarchy is wrong.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do keep the curve and measured evidence visually primary.",
+      "Do use Tool Slate for ordinary actions and reserve saturated color for focus, confirmation, process channels, and consequential state.",
+      "Do preserve native radio, checkbox, range, select, number, and text-field behavior.",
+      "Do pair every channel color, warning, and selection with a label, symbol, position, or text state.",
+      "Do use visible two-pixel focus treatment and maintain WCAG 2.2 AA contrast.",
+      "Do keep transitions between 150 and 200ms, state-driven, and removable under reduced motion."
+    ],
+    "donts": [
+      "Don't introduce generic SaaS gloss: promotional dashboards, hero metrics, decorative gradients, glass effects, or visual noise that competes with the curve.",
+      "Don't imitate consumer photo-filter apps that reduce calibration to presets or hide meaningful processing choices.",
+      "Don't imitate novelty laboratory interfaces with dense chrome, tiny labels, theatrical gauges, or instrument cosplay.",
+      "Don't create inconsistent custom controls that replace familiar browser affordances without improving the workflow.",
+      "Don't extend the current Download button's blue-to-violet gradient. It is a legacy exception, not a reusable design token.",
+      "Don't use a colored side stripe wider than one pixel as a card or navigation accent. Existing instances are remediation targets, not precedent.",
+      "Don't use process color as decoration or communicate a state through color alone.",
+      "Don't add shadows to persistent panels, animate layout properties, or choreograph page-load motion."
+    ]
+  }
+}

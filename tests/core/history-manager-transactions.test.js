@@ -118,7 +118,6 @@ describe('HistoryManager transactions', () => {
       removeEventListener: vi.fn(),
       dispatchEvent: vi.fn()
     };
-    global.window.__USE_SCALING_STATE = false;
     global.document = {
       getElementById: vi.fn(() => null)
     };

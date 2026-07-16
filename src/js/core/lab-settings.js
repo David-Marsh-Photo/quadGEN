@@ -1,7 +1,6 @@
 // Runtime setting for LAB linearization normalization mode (L* vs density)
 
 import { registerDebugNamespace } from '../utils/debug-registry.js';
-import { isLabBaselineSmoothingEnabled as featureLabBaseline } from './feature-flags.js';
 
 export const LAB_NORMALIZATION_MODES = Object.freeze({
     LSTAR: 'lstar',
@@ -176,10 +175,6 @@ export function setLabSmoothingPercent(percent) {
     return currentSmoothingPercent;
 }
 
-export function isLabBaselineSmoothingEnabled() {
-    return featureLabBaseline?.() ?? true;
-}
-
 export function subscribeLabSmoothingPercent(listener) {
     if (typeof listener !== 'function') {
         return () => {};
@@ -201,8 +196,7 @@ registerDebugNamespace('labSettings', {
     subscribeLabSmoothingPercent,
     getLabWidenFactor,
     mapSmoothingPercentToWiden,
-    DEFAULT_LAB_SMOOTHING_PERCENT,
-    isLabBaselineSmoothingEnabled
+    DEFAULT_LAB_SMOOTHING_PERCENT
 }, {
     exposeOnWindow: typeof window !== 'undefined',
     windowAliases: ['setLabNormalizationMode', 'toggleLabNormalizationMode']

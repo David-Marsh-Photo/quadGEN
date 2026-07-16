@@ -3,10 +3,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 vi.mock('../../src/js/core/scaling-utils.js', () => {
   const mocks = {
-    getCurrentScale: vi.fn(() => 100),
-    getLegacyScalingSnapshot: vi.fn(() => ({ percent: 100 })),
-    restoreLegacyScalingState: vi.fn(),
-    validateScalingStateSync: vi.fn(),
+    getScalingSnapshot: vi.fn(() => ({ percent: 100 })),
+    restoreScalingState: vi.fn(),
     updateScaleBaselineForChannel: vi.fn()
   };
   globalThis.__scalingMocks = mocks;

@@ -113,17 +113,14 @@ describe('QuadGenActions.scaleChannelEndsByPercent', () => {
     vi.restoreAllMocks();
   });
 
-  it('routes scaling requests through the coordinator with high priority and metadata', async () => {
+  it('routes scaling requests through the canonical global scaler', async () => {
     scaleMock.mockResolvedValue({ success: true, message: 'ok' });
     const actions = new QuadGenActions();
     vi.spyOn(actions, '_updateGraphStatus').mockImplementation(() => {});
 
     const result = await actions.scaleChannelEndsByPercent(125);
 
-    expect(scaleMock).toHaveBeenCalledWith(125, 'ai', expect.objectContaining({
-      priority: 'high',
-      metadata: expect.objectContaining({ trigger: 'ai-scale_command' }),
-    }));
+    expect(scaleMock).toHaveBeenCalledWith(125);
     expect(result).toEqual({ success: true, message: 'ok', details: undefined });
   });
 
@@ -136,5 +133,23 @@ describe('QuadGenActions.scaleChannelEndsByPercent', () => {
 
     expect(result.success).toBe(false);
     expect(result.message).toBe('nope');
+  });
+});
+
+describe('QuadGenActions.setCorrectionMethod', () => {
+  it('updates the canonical correction-method preference', async () => {
+    const { QuadGenActions } = await import('../src/js/ai/ai-actions.js');
+    const correctionMethod = await import('../src/js/core/correction-method.js');
+    correctionMethod.setCorrectionMethod(correctionMethod.CORRECTION_METHODS.SIMPLE_SCALING);
+
+    const actions = new QuadGenActions();
+    const densityResult = actions.setCorrectionMethod('density_solver');
+
+    expect(densityResult).toMatchObject({ success: true, method: 'density_solver', enabled: false });
+    expect(correctionMethod.getCorrectionMethod()).toBe(correctionMethod.CORRECTION_METHODS.DENSITY_SOLVER);
+
+    const simpleResult = actions.setCorrectionMethod('simple');
+    expect(simpleResult).toMatchObject({ success: true, method: 'simple', enabled: true });
+    expect(correctionMethod.getCorrectionMethod()).toBe(correctionMethod.CORRECTION_METHODS.SIMPLE_SCALING);
   });
 });

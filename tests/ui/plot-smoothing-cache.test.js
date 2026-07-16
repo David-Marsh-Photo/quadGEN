@@ -78,13 +78,11 @@ vi.mock('../../src/js/core/scaling-utils.js', () => ({
   getCurrentScale: () => 100,
   reapplyCurrentGlobalScale: vi.fn(),
   updateScaleBaselineForChannel: vi.fn(),
-  updateScaleBaselineForChannelCore: vi.fn(),
-  validateScalingStateSync: () => true
+  updateScaleBaselineForChannelCore: vi.fn()
 }));
 
 vi.mock('../../src/js/core/scaling-coordinator.js', () => ({
-  setEnabled: vi.fn(),
-  withLock: async (fn) => (typeof fn === 'function' ? fn() : undefined)
+  default: { scale: vi.fn() }
 }));
 
 vi.mock('../../src/js/ui/compact-channels.js', () => ({
@@ -199,7 +197,6 @@ vi.mock('../../src/js/core/processing-pipeline.js', () => ({
   beginCompositeLabRedistribution: vi.fn(),
   finalizeCompositeLabRedistribution: vi.fn(() => ({})),
   replayCompositeLabRedistribution: vi.fn(),
-  replayCompositeDebugSessionFromCache: vi.fn(),
   getCompositeCoverageSummary: vi.fn()
 }));
 
@@ -222,23 +219,8 @@ vi.mock('../../src/js/data/lab-legacy-bypass.js', () => ({
 vi.mock('../../src/js/core/feature-flags.js', () => ({
   isSmartPointDragEnabled: () => true,
   setSmartPointDragEnabled: vi.fn(),
-  isRedistributionSmoothingWindowEnabled: () => false,
-  setRedistributionSmoothingWindowEnabled: vi.fn(),
   isAutoRaiseInkLimitsEnabled: () => true,
   setAutoRaiseInkLimitsEnabled: vi.fn()
-}));
-
-vi.mock('../../src/js/core/composite-settings.js', () => ({
-  setCompositeWeightingMode: vi.fn(),
-  getCompositeWeightingMode: () => 'normalized',
-  subscribeCompositeWeightingMode: () => () => {},
-  COMPOSITE_WEIGHTING_MODES: { normalized: 'normalized' }
-}));
-
-vi.mock('../../src/js/core/composite-debug.js', () => ({
-  setCompositeDebugEnabled: vi.fn(),
-  isCompositeDebugEnabled: () => false,
-  subscribeCompositeDebugState: () => () => {}
 }));
 
 vi.mock('../../src/js/core/channel-densities.js', () => ({

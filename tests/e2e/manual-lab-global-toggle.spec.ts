@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { resolve } from 'path';
 import { pathToFileURL } from 'url';
 import { existsSync } from 'fs';
+import { openGlobalCorrectionTab } from '../utils/history-helpers';
 
 test.describe('Manual LAB global toggle', () => {
   test('loading LAB measurement keeps global correction unbaked', async ({ page }) => {
@@ -133,6 +134,7 @@ test.describe('Manual LAB global toggle', () => {
     expect(postLoadState.toggleDisabled).toBe(false);
     expect(postLoadState.toggleDatasetBaked).toBeNull();
 
+    await openGlobalCorrectionTab(page);
     const globalSlider = page.locator('label.slider-toggle[title="Enable/disable global correction"] .slider');
     await expect(globalSlider).toBeVisible();
     await globalSlider.click();

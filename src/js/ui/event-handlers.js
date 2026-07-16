@@ -25,8 +25,7 @@ import {
 } from './chart-manager.js';
 import { setInkLoadThreshold, getInkLoadThreshold } from '../core/ink-load.js';
 import { clearLightBlockingCache } from '../core/light-blocking.js';
-import { getCurrentScale, reapplyCurrentGlobalScale, updateScaleBaselineForChannel as updateScaleBaselineForChannelCore, validateScalingStateSync } from '../core/scaling-utils.js';
-import { SCALING_STATE_FLAG_EVENT } from '../core/scaling-constants.js';
+import { getCurrentScale, reapplyCurrentGlobalScale, updateScaleBaselineForChannel as updateScaleBaselineForChannelCore } from '../core/scaling-utils.js';
 import scalingCoordinator from '../core/scaling-coordinator.js';
 import { updateCompactChannelsList, updateChannelCompactState, updateNoChannelsMessage } from './compact-channels.js';
 import { registerChannelRow, getChannelRow } from './channel-registry.js';
@@ -50,7 +49,7 @@ import {
 import { showStatus } from './status-service.js';
 import { initializeHelpSystem } from './help-system.js';
 import { setPrinter, registerChannelRowSetup, syncPrinterForQuadData } from './printer-manager.js';
-import { make256, invalidateMake256Cache, beginCompositeLabRedistribution, finalizeCompositeLabRedistribution, replayCompositeDebugSessionFromCache, getCompositeCoverageSummary } from '../core/processing-pipeline.js';
+import { make256, beginCompositeLabRedistribution, finalizeCompositeLabRedistribution, getCompositeCoverageSummary } from '../core/processing-pipeline.js';
 import {
     getLabNormalizationMode,
     setLabNormalizationMode,
@@ -64,14 +63,7 @@ import {
 } from '../core/lab-settings.js';
 import { rebuildLabSamplesFromOriginal } from '../data/lab-parser.js';
 import { isLabLinearizationData } from '../data/lab-legacy-bypass.js';
-import { isSmartPointDragEnabled, setSmartPointDragEnabled, isRedistributionSmoothingWindowEnabled, setRedistributionSmoothingWindowEnabled, isAutoRaiseInkLimitsEnabled, setAutoRaiseInkLimitsEnabled } from '../core/feature-flags.js';
-import {
-    setCompositeWeightingMode,
-    getCompositeWeightingMode,
-    subscribeCompositeWeightingMode,
-    COMPOSITE_WEIGHTING_MODES
-} from '../core/composite-settings.js';
-import { setCompositeDebugEnabled, isCompositeDebugEnabled, subscribeCompositeDebugState } from '../core/composite-debug.js';
+import { isSmartPointDragEnabled, setSmartPointDragEnabled, isAutoRaiseInkLimitsEnabled, setAutoRaiseInkLimitsEnabled } from '../core/feature-flags.js';
 import {
     setManualChannelDensity,
    setSolverChannelDensity,
@@ -192,15 +184,10 @@ function isBakedMeasurement(entry) {
     return false;
 }
 
-let unsubscribeScalingStateInput = null;
 let unsubscribeLabNormalizationMode = null;
 let unsubscribeLabSmoothingPercent = null;
-let unsubscribeCompositeDebugState = null;
-let unsubscribeCompositeWeightingMode = null;
 let unsubscribeChannelDensityStore = null;
 let unsubscribeCorrectionMethod = null;
-let scalingStateFlagListenerAttached = false;
-let lastScalingStateValue = null;
 let scaleHandlerRetryCount = 0;
 const SCALE_HANDLER_MAX_RETRIES = 5;
 
@@ -405,90 +392,6 @@ function collectCurveWarnings(entries) {
     });
 
     return warnings;
-}
-
-function syncScaleInputFromStateValue(value) {
-    if (!elements.scaleAllInput) return;
-
-    const numeric = Number(value);
-    const fallback = getCurrentScale();
-    const target = Number.isFinite(numeric) && numeric > 0 ? numeric : fallback;
-    const formatted = formatScalePercent(target);
-
-    if (elements.scaleAllInput.value !== formatted) {
-        elements.scaleAllInput.value = formatted;
-    }
-
-    lastScalingStateValue = target;
-}
-
-function configureScalingStateSubscription() {
-    if (!elements.scaleAllInput) {
-        return;
-    }
-
-    if (unsubscribeScalingStateInput) {
-        try {
-            unsubscribeScalingStateInput();
-        } catch (err) {
-            console.warn('Failed to remove scaling state subscription', err);
-        }
-        unsubscribeScalingStateInput = null;
-        if (isBrowser) {
-            globalScope.__scalingStateSubscribed = false;
-        }
-    }
-
-    const enabled = !!(isBrowser && globalScope.__USE_SCALING_STATE);
-    if (!enabled) {
-        lastScalingStateValue = null;
-        syncScaleInputFromStateValue(getCurrentScale());
-        return;
-    }
-
-    let stateManager;
-    try {
-        stateManager = getStateManager();
-    } catch (error) {
-        console.warn('Scaling state manager unavailable:', error);
-        return;
-    }
-
-    if (!stateManager || typeof stateManager.subscribe !== 'function') {
-        return;
-    }
-
-    try {
-        syncScaleInputFromStateValue(stateManager.get('scaling.globalPercent'));
-    } catch (readError) {
-        console.warn('Unable to read scaling.globalPercent from state', readError);
-    }
-
-    unsubscribeScalingStateInput = stateManager.subscribe(['scaling.globalPercent'], (_, newValue) => {
-        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-            console.log('🔁 [SCALE STATE] scaling.globalPercent changed', newValue);
-        }
-        if (!elements.scaleAllInput) return;
-
-        if (lastScalingStateValue != null) {
-            const numeric = Number(newValue);
-            if (Number.isFinite(numeric) && Math.abs(numeric - lastScalingStateValue) < 1e-6) {
-                return;
-            }
-        }
-
-        syncScaleInputFromStateValue(newValue);
-    });
-
-    if (isBrowser) {
-        globalScope.__scalingStateSubscribed = true;
-    }
-
-    try {
-        validateScalingStateSync({ reason: 'subscription:resync', throwOnMismatch: false });
-    } catch (validationError) {
-        console.warn('Scaling state validation failed after subscription resync', validationError);
-    }
 }
 
 function setRevertInProgress(active) {
@@ -1169,15 +1072,6 @@ function applyPlotSmoothingToLoadedChannels(percent) {
             }
         }
     }
-    try {
-        if (typeof invalidateMake256Cache === 'function') {
-            invalidateMake256Cache();
-        }
-    } catch (cacheErr) {
-        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-            console.warn('[PlotSmoothing] Failed to invalidate make256 cache:', cacheErr);
-        }
-    }
     try { updateInkChart(); } catch (error) { console.warn(error); }
     try { debouncedPreviewUpdate(); } catch (error) { console.warn(error); }
     try {
@@ -1197,31 +1091,6 @@ function applyPlotSmoothingToLoadedChannels(percent) {
 const schedulePlotSmoothingRefresh = debounce(() => {
     applyPlotSmoothingToLoadedChannels(getPlotSmoothingPercent());
 }, 250);
-
-const scheduleCompositeWeightingRefresh = debounce(() => {
-    try {
-        if (!LinearizationState?.isGlobalEnabled?.()) {
-            return;
-        }
-        const globalData = LinearizationState.getGlobalData?.();
-        if (!globalData || !isLabLinearizationData(globalData)) {
-            return;
-        }
-        const printer = getCurrentPrinter();
-        const channelNames = Array.isArray(printer?.channels) ? printer.channels.slice() : [];
-        if (!channelNames.length) {
-            return;
-        }
-        rebaseChannelsToCorrectedCurves(channelNames, {
-            source: 'compositeWeightingChange',
-            useOriginalBaseline: true
-        });
-    } catch (error) {
-        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-            console.warn('[CompositeWeighting] Failed to refresh after weighting change:', error);
-        }
-    }
-}, 200);
 
 function resetPlotSmoothingCaches() {
     const loadedData = getLoadedQuadData?.();
@@ -2109,64 +1978,6 @@ function initializeInkLoadThresholdOption() {
     });
 }
 
-function syncCompositeDebugToggle() {
-    if (!elements.compositeDebugToggle) {
-        return;
-    }
-    const enabled = isCompositeDebugEnabled();
-    elements.compositeDebugToggle.checked = enabled;
-    elements.compositeDebugToggle.setAttribute('aria-checked', String(enabled));
-}
-
-function initializeCompositeDebugOption() {
-    syncCompositeDebugToggle();
-    if (!elements.compositeDebugToggle) {
-        return;
-    }
-    if (unsubscribeCompositeDebugState) {
-        unsubscribeCompositeDebugState();
-        unsubscribeCompositeDebugState = null;
-    }
-    unsubscribeCompositeDebugState = subscribeCompositeDebugState(() => {
-        syncCompositeDebugToggle();
-    });
-    elements.compositeDebugToggle.addEventListener('change', (event) => {
-        const next = !!event.target.checked;
-        setCompositeDebugEnabled(next);
-        syncCompositeDebugToggle();
-        if (next) {
-            try {
-                replayCompositeDebugSessionFromCache();
-            } catch (error) {
-                console.warn('[CompositeDebug] Failed to replay cached session:', error);
-            }
-        }
-        showStatus(next ? 'Composite debug overlay enabled.' : 'Composite debug overlay disabled.');
-    });
-}
-
-function syncRedistributionSmoothingToggle() {
-    if (!elements.redistributionSmoothingToggle) {
-        return;
-    }
-    const enabled = isRedistributionSmoothingWindowEnabled();
-    elements.redistributionSmoothingToggle.checked = enabled;
-    elements.redistributionSmoothingToggle.setAttribute('aria-checked', String(enabled));
-}
-
-function initializeRedistributionSmoothingOption() {
-    syncRedistributionSmoothingToggle();
-    if (!elements.redistributionSmoothingToggle) {
-        return;
-    }
-    elements.redistributionSmoothingToggle.addEventListener('change', (event) => {
-        const next = !!event.target.checked;
-        setRedistributionSmoothingWindowEnabled(next);
-        syncRedistributionSmoothingToggle();
-        showStatus(next ? 'Redistribution smoothing window enabled.' : 'Redistribution smoothing window disabled.');
-    });
-}
-
 function syncAutoRaiseInkToggle() {
     if (!elements.autoRaiseInkToggle) {
         return;
@@ -2186,48 +1997,6 @@ function initializeAutoRaiseInkOption() {
         setAutoRaiseInkLimitsEnabled(next);
         syncAutoRaiseInkToggle();
         showStatus(next ? 'Auto-raise ink limits enabled.' : 'Auto-raise ink limits disabled.');
-    });
-}
-
-function syncCompositeWeightingSelect() {
-    if (!elements.compositeWeightingSelect) {
-        return;
-    }
-    const mode = getCompositeWeightingMode();
-    elements.compositeWeightingSelect.value = mode;
-}
-
-function initializeCompositeWeightingOption() {
-    syncCompositeWeightingSelect();
-    if (!elements.compositeWeightingSelect) {
-        return;
-    }
-    if (unsubscribeCompositeWeightingMode) {
-        unsubscribeCompositeWeightingMode();
-        unsubscribeCompositeWeightingMode = null;
-    }
-    unsubscribeCompositeWeightingMode = subscribeCompositeWeightingMode(() => {
-        syncCompositeWeightingSelect();
-        resetPlotSmoothingCaches();
-        schedulePlotSmoothingRefresh();
-        scheduleCompositeWeightingRefresh();
-    });
-
-    elements.compositeWeightingSelect.addEventListener('change', (event) => {
-        const selection = typeof event.target?.value === 'string' ? event.target.value : '';
-        const applied = setCompositeWeightingMode(selection);
-        syncCompositeWeightingSelect();
-        resetPlotSmoothingCaches();
-        schedulePlotSmoothingRefresh();
-        scheduleCompositeWeightingRefresh();
-        const labelMap = {
-            [COMPOSITE_WEIGHTING_MODES.ISOLATED]: 'Isolated',
-            [COMPOSITE_WEIGHTING_MODES.NORMALIZED]: 'Normalized',
-            [COMPOSITE_WEIGHTING_MODES.MOMENTUM]: 'Momentum',
-            [COMPOSITE_WEIGHTING_MODES.EQUAL]: 'Equal'
-        };
-        const label = labelMap[applied] || 'Isolated';
-        showStatus(`Composite weighting set to ${label}.`);
     });
 }
 
@@ -2342,10 +2111,6 @@ function initializeCorrectionMethodOption() {
 export function initializeEventHandlers() {
     console.log('🎛️ Initializing UI event handlers...');
 
-    if (typeof window !== 'undefined') {
-        scalingCoordinator.setEnabled(!!window.__USE_SCALING_COORDINATOR);
-    }
-
     // Core UI handlers
     initializeUndoRedoHandlers();
     initializeDownloadHandlers();
@@ -2370,10 +2135,7 @@ export function initializeEventHandlers() {
     initializeLightBlockingOverlayOption();
     initializeInkLoadOverlayOption();
     initializeInkLoadThresholdOption();
-    initializeCompositeWeightingOption();
-    initializeRedistributionSmoothingOption();
     initializeAutoRaiseInkOption();
-    initializeCompositeDebugOption();
 
     console.log('✅ UI event handlers initialized');
 }
@@ -2561,23 +2323,13 @@ function initializeScaleHandlers() {
                 initializeScaleHandlers();
             }, 50 * scaleHandlerRetryCount);
         } else {
-            console.warn('Scale handlers unable to locate #scaleAllInput element. Dual-read subscription not initialized.');
+            console.warn('Scale handlers unable to locate #scaleAllInput element.');
         }
         return;
     }
 
     scaleHandlerRetryCount = 0;
-
-    if (isBrowser && !scalingStateFlagListenerAttached) {
-        globalScope.addEventListener(SCALING_STATE_FLAG_EVENT, () => {
-            console.log('🔁 [SCALE STATE] flag event received', globalScope.__USE_SCALING_STATE);
-            configureScalingStateSubscription();
-        });
-        scalingStateFlagListenerAttached = true;
-        globalScope.__scalingStateListenerReady = true;
-    }
-
-    configureScalingStateSubscription();
+    elements.scaleAllInput.value = formatScalePercent(getCurrentScale());
     refreshGlobalScaleLockState();
 
     const MIN_SCALE = 1;
@@ -2651,29 +2403,29 @@ function initializeScaleHandlers() {
         elements.scaleAllInput.value = parsed.toString();
         console.log(`🔍 [SCALE DEBUG] Input value updated to:`, parsed.toString());
 
-        const handleCoordinatorError = (error) => {
-            console.error('Scaling coordinator error:', error);
+        const handleScaleError = (error) => {
+            console.error('Global scaling error:', error);
             if (elements.scaleAllInput) {
                 elements.scaleAllInput.value = formatScalePercent(getCurrentScale());
             }
         };
 
         if (immediate) {
-            console.log(`🔍 [SCALE DEBUG] Executing immediate scaling via coordinator (${parsed})`);
+            console.log(`🔍 [SCALE DEBUG] Executing immediate scaling (${parsed})`);
             scalingCoordinator
-                .scale(parsed, 'ui', { priority: 'high', metadata: { trigger: 'commitScaleAllImmediate' } })
+                .scale(parsed)
                 .then(() => refreshEffectiveInkDisplays())
-                .catch(handleCoordinatorError);
+                .catch(handleScaleError);
         } else {
-            console.log(`🔍 [SCALE DEBUG] Setting up debounced coordinator scaling for:`, parsed);
+            console.log(`🔍 [SCALE DEBUG] Setting up debounced scaling for:`, parsed);
             scaleDebounceTimeout = setTimeout(() => {
-                console.log(`🔍 [SCALE DEBUG] Executing debounced coordinator scaling (${parsed})`);
+                console.log(`🔍 [SCALE DEBUG] Executing debounced scaling (${parsed})`);
                 scalingCoordinator
-                    .scale(parsed, 'ui', { metadata: { trigger: 'commitScaleAllDebounce' } })
+                    .scale(parsed)
                     .then(() => refreshEffectiveInkDisplays())
-                    .catch(handleCoordinatorError);
+                    .catch(handleScaleError);
             }, 100);
-            console.log(`🔍 [SCALE DEBUG] Coordinator debounce timeout set:`, scaleDebounceTimeout);
+            console.log(`🔍 [SCALE DEBUG] Debounce timeout set:`, scaleDebounceTimeout);
         }
     };
 
@@ -2774,9 +2526,9 @@ function initializeScaleHandlers() {
                 console.log(`🔍 [EVENT DEBUG] Debounced input scaling - value:`, value);
 
                 scalingCoordinator
-                    .scale(value, 'ui-input', { metadata: { trigger: 'inputDebounce' } })
+                    .scale(value)
                     .catch((error) => {
-                        console.error('Scaling coordinator input error:', error);
+                        console.error('Global scaling input error:', error);
                         if (elements.scaleAllInput) {
                             elements.scaleAllInput.value = formatScalePercent(getCurrentScale());
                         }
@@ -4243,14 +3995,9 @@ function handlePercentInput(input, options = {}) {
     const currentScalePercent = Number(currentScalePercentRaw);
     if (Number.isFinite(currentScalePercent) && Math.abs(currentScalePercent - 100) > 1e-6) {
         scalingCoordinator
-            .scale(currentScalePercent, 'ui-resync', {
-                metadata: {
-                    trigger: 'percentInputResync',
-                    skipHistory: true
-                }
-            })
+            .scale(currentScalePercent, { skipHistory: true })
             .catch((err) => {
-                console.warn('[SCALE] Coordinator resync after percent edit failed:', err);
+                console.warn('[SCALE] Resync after percent edit failed:', err);
             });
     }
 
@@ -4489,14 +4236,9 @@ function handleEndInput(input, options = {}) {
     const currentScalePercent = Number(currentScalePercentRaw);
     if (Number.isFinite(currentScalePercent) && Math.abs(currentScalePercent - 100) > 1e-6) {
         scalingCoordinator
-            .scale(currentScalePercent, 'ui-resync', {
-                metadata: {
-                    trigger: 'endInputResync',
-                    skipHistory: true
-                }
-            })
+            .scale(currentScalePercent, { skipHistory: true })
             .catch((err) => {
-                console.warn('[SCALE] Coordinator resync after end edit failed:', err);
+                console.warn('[SCALE] Resync after end edit failed:', err);
             });
     }
 
@@ -4525,7 +4267,7 @@ function handleEndInput(input, options = {}) {
  * Initialize handlers for auto white/black limit toggles
  */
 export function initializeAutoLimitHandlers() {
-    // Initialize toggle state from storage (defaults: white OFF, black ON)
+    // Initialize toggle state from storage (defaults: OFF)
     try {
         if (elements.autoWhiteLimitToggle) {
             const stored = localStorage.getItem('autoWhiteLimitV1');
@@ -4533,7 +4275,7 @@ export function initializeAutoLimitHandlers() {
         }
         if (elements.autoBlackLimitToggle) {
             const stored = localStorage.getItem('autoBlackLimitV1');
-            elements.autoBlackLimitToggle.checked = stored === null ? true : stored === '1';
+            elements.autoBlackLimitToggle.checked = stored === null ? false : stored === '1';
         }
     } catch (err) {
         // Ignore storage read errors (private mode, etc.)

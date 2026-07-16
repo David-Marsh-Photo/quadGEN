@@ -17,25 +17,11 @@ import { registerDebugNamespace } from '../utils/debug-registry.js';
 import { getLegacyLinearizationBridge } from '../legacy/linearization-bridge.js';
 import {
     isActiveRangeLinearizationEnabled,
-    isCompositeLabRedistributionEnabled,
-    isCompositeHighlightGuardEnabled,
-    isCubeEndpointAnchoringEnabled,
-    isRedistributionSmoothingWindowEnabled,
-    getRedistributionSmoothingWindowConfig,
-    isCompositePerSampleCeilingEnabled,
-    isSlopeKernelSmoothingEnabled
+    isCubeEndpointAnchoringEnabled
 } from './feature-flags.js';
-import {
-    isCompositeDebugEnabled,
-    storeCompositeDebugSession
-} from './composite-debug.js';
+import { storeCompositeDebugSession } from './composite-debug.js';
 import { getAutoRaiseAuditState } from './auto-raise-on-import.js';
-import {
-    getCompositeWeightingMode,
-    COMPOSITE_WEIGHTING_MODES
-} from './composite-settings.js';
-import { computeChannelMomentum } from './composite-momentum.js';
-import { getLabSmoothingPercent, mapSmoothingPercentToWiden, isLabBaselineSmoothingEnabled } from './lab-settings.js';
+import { getLabSmoothingPercent, mapSmoothingPercentToWiden } from './lab-settings.js';
 import { DEFAULT_CHANNEL_DENSITIES } from './channel-densities.js';
 import { computeSnapshotFlags, SNAPSHOT_FLAG_THRESHOLD_PERCENT } from './snapshot-flags.js';
 import {
@@ -52,27 +38,6 @@ const GAIN_TARGET_NEUTRAL = 0.45;  // Midtone anchor point for neutral detection
 const GAIN_WINDOW_WIDTH = 0.2;    // Search window around target neutral
 const GAIN_MIN = 0.05;            // Minimum allowed gain (prevents divide-by-zero effects)
 const GAIN_MAX = 20;              // Maximum allowed gain (prevents extreme corrections)
-
-// Feature flag for legacy LUT mapping (direct interpolation without gain correction)
-let useLegacyLUTMapping = false;
-
-/**
- * Enable/disable legacy LUT mapping mode.
- * Legacy mode uses direct interpolation without gain-based correction.
- * @param {boolean} enabled - True to use legacy mode, false for gain-based mode
- */
-export function setLegacyLUTMappingEnabled(enabled) {
-    useLegacyLUTMapping = !!enabled;
-    console.log(`[LUT] Legacy mapping mode ${useLegacyLUTMapping ? 'enabled' : 'disabled'}`);
-}
-
-/**
- * Check if legacy LUT mapping mode is enabled
- * @returns {boolean}
- */
-export function isLegacyLUTMappingEnabled() {
-    return useLegacyLUTMapping;
-}
 
 function computeEffectiveHeadroom(info) {
     if (!info) {
@@ -297,14 +262,6 @@ function ensureLadderBlendTracker() {
     return compositeLabSession.ladderBlendTracker;
 }
 
-function clearLadderBlendTracker() {
-    if (compositeLabSession.ladderBlendTracker instanceof Map) {
-        compositeLabSession.ladderBlendTracker.clear();
-    } else {
-        compositeLabSession.ladderBlendTracker = new Map();
-    }
-}
-
 function ensureShadowBlendTracker() {
     if (!(compositeLabSession.shadowBlendTracker instanceof Map)) {
         compositeLabSession.shadowBlendTracker = new Map();
@@ -402,26 +359,17 @@ const DENOM = CURVE_RESOLUTION - 1;
 const COMPOSITE_SATURATION_THRESHOLD = 0.995;
 
 const COMPOSITE_DENSITY_REGULARIZATION = 1e-4;
-const DENSITY_DOMINANCE_THRESHOLD = 0.9;
-const DENSITY_SUPPORT_THRESHOLD = 0.2;
 const DENSITY_MIN_SHARE = 0.01;
 const DENSITY_EPSILON = 1e-6;
 const DENSITY_MAX_ITERATIONS = 8;
 const HIGHLIGHT_DENSITY_NORMALIZED_THRESHOLD = 0.12;
 const HIGHLIGHT_POSITIVE_DELTA_TOLERANCE = 0.005;
-const REGION_PRIMARY_BIAS = 4;
-const REGION_SECONDARY_SCALE = 0.1;
 const REGION_BLEND_MARGIN = 3;
-const ISOLATED_BASELINE_RETENTION = 0.08;
 const SINGLE_PEAK_LOCK_RATIO = 0.32;
 const PEAK_RISE_EPSILON = 5e-4;
 const PEAK_DROP_TOLERANCE = 0.015;
 const PEAK_MIN_NORMALIZED = 0.05;
 const PEAK_REEVAL_WINDOW_RATIO = 0.15;
-const MOMENTUM_WINDOW_RADIUS = 3;
-const MOMENTUM_SIGMA = 1.25;
-const MOMENTUM_GAIN = 1.5;
-const MOMENTUM_SHARE_FLOOR = 0.02;
 const FRONT_RESERVE_MAX_NORMALIZED = 0.035;
 const FRONT_RESERVE_RELEASE_START = 0.1;
 const FRONT_RESERVE_RELEASE_END = 0.2;
@@ -482,14 +430,7 @@ const compositeLabSession = {
     smoothingPercent: 0,
     warnings: [],
     preparedContext: null,
-    weightingMode: COMPOSITE_WEIGHTING_MODES.NORMALIZED,
-    weightingStrength: 1,
-    momentumByChannel: new Map(),
-    momentumSummary: {},
-    momentumOptions: null,
-    lastDebugSession: null,
     autoComputeDensity: true,
-    autoRaiseAdjustments: [],
     autoRaiseContext: null,
     densityLadder: [],
     densityLadderIndex: new Map(),
@@ -499,7 +440,7 @@ const compositeLabSession = {
 
 export function beginCompositeLabRedistribution(config = {}) {
     const { channelNames = [], endValues = {}, labEntry = null } = config;
-    if (!isCompositeLabRedistributionEnabled() || !labEntry) {
+    if (!labEntry) {
         compositeLabSession.active = false;
         compositeLabSession.channels = [];
         compositeLabSession.baseCurves = {};
@@ -521,13 +462,7 @@ export function beginCompositeLabRedistribution(config = {}) {
         compositeLabSession.densitySources = new Map();
         compositeLabSession.preparedContext = null;
         compositeLabSession.warnings = [];
-        compositeLabSession.weightingMode = COMPOSITE_WEIGHTING_MODES.NORMALIZED;
-        compositeLabSession.lastDebugSession = null;
-        compositeLabSession.momentumByChannel = new Map();
-        compositeLabSession.momentumSummary = {};
-        compositeLabSession.momentumOptions = null;
         compositeLabSession.autoComputeDensity = true;
-        compositeLabSession.autoRaiseAdjustments = [];
         compositeLabSession.autoRaiseContext = null;
         compositeLabSession.analysisOnly = false;
         compositeLabSession.densityLadder = [];
@@ -562,13 +497,7 @@ export function beginCompositeLabRedistribution(config = {}) {
         compositeLabSession.densitySources = new Map();
         compositeLabSession.preparedContext = null;
         compositeLabSession.warnings = [];
-        compositeLabSession.weightingMode = COMPOSITE_WEIGHTING_MODES.NORMALIZED;
-        compositeLabSession.lastDebugSession = null;
-        compositeLabSession.momentumByChannel = new Map();
-        compositeLabSession.momentumSummary = {};
-        compositeLabSession.momentumOptions = null;
         compositeLabSession.autoComputeDensity = true;
-        compositeLabSession.autoRaiseAdjustments = [];
         compositeLabSession.autoRaiseContext = null;
         compositeLabSession.analysisOnly = false;
         compositeLabSession.densityLadder = [];
@@ -604,10 +533,6 @@ export function beginCompositeLabRedistribution(config = {}) {
     compositeLabSession.smoothingPercent = Number.isFinite(config.smoothingPercent) ? Number(config.smoothingPercent) : 0;
     compositeLabSession.warnings = [];
     compositeLabSession.preparedContext = null;
-    compositeLabSession.momentumByChannel = new Map();
-    compositeLabSession.momentumSummary = {};
-    compositeLabSession.momentumOptions = null;
-    compositeLabSession.lastDebugSession = null;
     compositeLabSession.densityLadder = [];
     compositeLabSession.densityLadderIndex = new Map();
     compositeLabSession.ladderBlendTracker = new Map();
@@ -647,7 +572,6 @@ export function beginCompositeLabRedistribution(config = {}) {
             });
         });
     }
-    compositeLabSession.autoRaiseAdjustments = sanitizedAutoRaiseAdjustments;
     compositeLabSession.autoRaiseContext = sanitizedAutoRaiseAdjustments.length
         ? {
             targetPercent: Number.isFinite(autoRaiseAudit?.targetPercent) ? autoRaiseAudit.targetPercent : null,
@@ -682,15 +606,10 @@ export function beginCompositeLabRedistribution(config = {}) {
     compositeLabSession.densitySources = overrideSources;
     compositeLabSession.autoComputeDensity = config.autoComputeDensity !== false;
     compositeLabSession.analysisOnly = config.analysisOnly === true;
-    const configuredMode = config.weightingMode || getCompositeWeightingMode();
-    compositeLabSession.weightingMode = Object.values(COMPOSITE_WEIGHTING_MODES).includes(configuredMode)
-        ? configuredMode
-        : COMPOSITE_WEIGHTING_MODES.NORMALIZED;
     if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
         console.log('[COMPOSITE] begin redistribution', {
             channels: compositeLabSession.channels,
             smoothingPercent: compositeLabSession.smoothingPercent,
-            weightingMode: compositeLabSession.weightingMode,
             autoCompute: compositeLabSession.autoComputeDensity
         });
     }
@@ -795,73 +714,12 @@ function sampleArrayAt(samples, t) {
     return leftValue + ((rightValue - leftValue) * frac);
 }
 
-function recordSampleForSmoothing(context, index, delta, contributions, weightMap) {
-    if (!context) return;
-    const filtered = {};
-    Object.keys(contributions || {}).forEach((channel) => {
-        const amount = contributions[channel];
-        if (amount > DENSITY_EPSILON) {
-            filtered[channel] = amount;
-        }
-    });
-    const record = {
-        index,
-        delta,
-        contributions: filtered,
-        weightMap: { ...weightMap },
-        inputPercent: (index / DENOM) * 100,
-        smoothingWindows: []
-    };
-    if (!Array.isArray(context.sampleRecords)) {
-        context.sampleRecords = new Array(CURVE_RESOLUTION).fill(null);
-    }
-    context.sampleRecords[index] = record;
-    if (!(context.channelHistory instanceof Map)) {
-        context.channelHistory = new Map();
-    }
-    Object.keys(filtered).forEach((channel) => {
-        let history = context.channelHistory.get(channel);
-        if (!history) {
-            history = [];
-            context.channelHistory.set(channel, history);
-        }
-        history.push(index);
-    });
-}
-
 function computeCompositeDensityWeights(channels, baseCurves, endValues, normalizedEntry, options = {}) {
     try {
-        const weightingMode = options.weightingMode || COMPOSITE_WEIGHTING_MODES.NORMALIZED;
     const weights = new Map();
     const constants = new Map();
     const measurementDeltas = new Array(CURVE_RESOLUTION).fill(0);
     const densityProfiles = new Array(CURVE_RESOLUTION).fill(null);
-    const momentumEnabled = weightingMode === COMPOSITE_WEIGHTING_MODES.MOMENTUM;
-    const momentumByChannel = new Map();
-    const momentumSummary = {};
-    const momentumOptions = momentumEnabled ? { windowRadius: MOMENTUM_WINDOW_RADIUS, sigma: MOMENTUM_SIGMA } : null;
-    const autoRaiseAdjustments = Array.isArray(compositeLabSession.autoRaiseAdjustments)
-        ? compositeLabSession.autoRaiseAdjustments
-        : [];
-    const forcedAutoRaiseChannels = new Set();
-    const forcedAutoRaiseMeta = new Map();
-    autoRaiseAdjustments.forEach((entry) => {
-        if (!entry || entry.raised !== true) return;
-        const name = typeof entry.channelName === 'string' ? entry.channelName : entry.channel;
-        if (!name) return;
-        forcedAutoRaiseChannels.add(name);
-        forcedAutoRaiseMeta.set(name, entry);
-    });
-
-    const perSampleCeilingEnabled = isCompositePerSampleCeilingEnabled();
-    const smoothingEnabled = isRedistributionSmoothingWindowEnabled();
-    const smoothingContext = smoothingEnabled
-        ? createRedistributionSmoothingContext(getRedistributionSmoothingWindowConfig(), {
-            forcedChannels: forcedAutoRaiseChannels,
-            forcedChannelMetadata: forcedAutoRaiseMeta,
-            perSampleCeiling: perSampleCeilingEnabled
-        })
-        : null;
     const cumulativeDensity = {};
     const coverageLimits = new Map();
     const coverageBuffers = new Map();
@@ -877,446 +735,18 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
 
     const samples = Array.isArray(normalizedEntry?.samples) ? normalizedEntry.samples : null;
 
-    function createRedistributionSmoothingContext(rawConfig = {}, extras = {}) {
-        const minSamplesRaw = Number.isFinite(rawConfig.minSamples) ? Math.round(rawConfig.minSamples) : 3;
-        const minSamples = Math.max(3, Math.min(12, minSamplesRaw));
-        const maxSamplesRaw = Number.isFinite(rawConfig.maxSamples) ? Math.round(rawConfig.maxSamples) : 9;
-        const maxSamples = Math.max(minSamples, Math.min(12, maxSamplesRaw));
-        const targetSpanRaw = Number.isFinite(rawConfig.targetSpan) ? rawConfig.targetSpan : 0.07;
-        const targetSpan = Math.max(0.01, Math.min(0.5, targetSpanRaw));
-        const alphaRaw = Number.isFinite(rawConfig.alpha) ? rawConfig.alpha : 1.5;
-        const alpha = Math.max(0.5, Math.min(4, alphaRaw));
-        const momentumBias = Number.isFinite(rawConfig.momentumBias) ? rawConfig.momentumBias : 0;
-        const perSampleActive = extras && extras.perSampleCeiling === true;
-        return {
-            config: {
-                minSamples,
-                maxSamples,
-                targetSpan,
-                targetSpanPercent: targetSpan * 100,
-                alpha,
-                momentumBias,
-                maxIncomingScan: Math.max(maxSamples, 6),
-                allowShortWindows: perSampleActive
-            },
-            sampleRecords: new Array(CURVE_RESOLUTION).fill(null),
-            channelHistory: new Map(),
-            saturationByChannel: new Map(),
-            clampIndicesByChannel: new Map(),
-            perSampleCeiling: perSampleActive,
-            windows: [],
-            debugRows: [],
-            nextWindowId: 1,
-            syntheticClampWindows: new Map(),
-            forcedChannels: extras && extras.forcedChannels instanceof Set ? new Set(extras.forcedChannels) : new Set(),
-            forcedChannelMetadata: extras && extras.forcedChannelMetadata instanceof Map
-                ? new Map(extras.forcedChannelMetadata)
-                : new Map()
-        };
-    }
-
-    function buildSmoothingWindowIndices(history, sampleRecords, config, limitIndex = null) {
-        const historyLength = Array.isArray(history) ? history.length : 0;
-        if (historyLength === 0) {
-            return [];
-        }
-        const allowShortWindows = !!config?.allowShortWindows;
-        if (!allowShortWindows && historyLength < config.minSamples) {
-            return [];
-        }
-        const minSamplesTarget = allowShortWindows
-            ? Math.min(config.minSamples, Math.max(2, historyLength))
-            : config.minSamples;
-        const maxSamplesTarget = config.maxSamples;
-        const windowIndices = [];
-        let accumulatedSpan = 0;
-        let previousInput = null;
-        for (let idx = historyLength - 1; idx >= 0; idx -= 1) {
-            const sampleIndex = history[idx];
-            if (Number.isInteger(limitIndex) && sampleIndex > limitIndex) {
-                continue;
-            }
-            const record = sampleRecords[sampleIndex];
-            if (!record) {
-                continue;
-            }
-            const input = Number.isFinite(record.inputPercent) ? record.inputPercent : (sampleIndex / DENOM) * 100;
-            if (previousInput != null) {
-                accumulatedSpan += Math.abs(previousInput - input);
-            }
-            windowIndices.unshift(sampleIndex);
-            previousInput = input;
-            if (windowIndices.length >= minSamplesTarget && accumulatedSpan >= config.targetSpanPercent) {
-                break;
-            }
-            if (windowIndices.length >= maxSamplesTarget) {
-                break;
-            }
-        }
-        let backfillIndex = historyLength - windowIndices.length - 1;
-        while (windowIndices.length < minSamplesTarget && backfillIndex >= 0) {
-            const sampleIndex = history[backfillIndex];
-            if (Number.isInteger(limitIndex) && sampleIndex > limitIndex) {
-                backfillIndex -= 1;
-                continue;
-            }
-            const record = sampleRecords[sampleIndex];
-            if (!record) {
-                break;
-            }
-            windowIndices.unshift(sampleIndex);
-            backfillIndex -= 1;
-        }
-        return windowIndices;
-    }
-
-    function identifyIncomingChannels(context, outgoingChannel, windowIndices) {
-        const sampleRecords = context.sampleRecords;
-        const config = context.config;
-        const incomingSet = new Set();
-        windowIndices.forEach((sampleIndex) => {
-            const record = sampleRecords[sampleIndex];
-            if (!record || !record.contributions) return;
-            Object.entries(record.contributions).forEach(([channel, amount]) => {
-                if (channel === outgoingChannel) return;
-                if (amount > DENSITY_EPSILON) {
-                    incomingSet.add(channel);
-                }
-            });
-        });
-        const endIndex = windowIndices.length ? windowIndices[windowIndices.length - 1] : -1;
-        for (let idx = endIndex + 1; idx < sampleRecords.length && idx >= 0 && incomingSet.size < config.maxIncomingScan; idx += 1) {
-            const record = sampleRecords[idx];
-            if (!record || !record.contributions) continue;
-            Object.entries(record.contributions).forEach(([channel, amount]) => {
-                if (channel === outgoingChannel) return;
-                if (amount > DENSITY_EPSILON) {
-                    incomingSet.add(channel);
-                }
-            });
-        }
-        if (!incomingSet.size) {
-            const referenceIndex = windowIndices.length ? windowIndices[windowIndices.length - 1] : null;
-            const referenceRecord = Number.isInteger(referenceIndex) ? sampleRecords[referenceIndex] : null;
-            if (referenceRecord && referenceRecord.weightMap) {
-                const weightEntries = Object.entries(referenceRecord.weightMap)
-                    .filter(([channel, value]) => channel !== outgoingChannel && Number(value) > 0)
-                    .sort((a, b) => (Number(b[1]) || 0) - (Number(a[1]) || 0));
-                weightEntries.slice(0, 3).forEach(([channel]) => incomingSet.add(channel));
-            }
-        }
-        if (!incomingSet.size && context.forcedChannelMetadata instanceof Map) {
-            const entries = [];
-            context.forcedChannelMetadata.forEach((meta, name) => {
-                if (!meta || name === outgoingChannel) return;
-                const previousPercent = Number(meta.previousPercent);
-                if (!Number.isFinite(previousPercent) || previousPercent <= 0) return;
-                entries.push({ name, weight: previousPercent });
-            });
-            entries
-                .sort((a, b) => (b.weight || 0) - (a.weight || 0))
-                .slice(0, 3)
-                .forEach(({ name }) => incomingSet.add(name));
-        }
-        if (!incomingSet.size && context.forcedChannels instanceof Set) {
-            Array.from(context.forcedChannels)
-                .filter((name) => name !== outgoingChannel)
-                .slice(0, 3)
-                .forEach((name) => incomingSet.add(name));
-        }
-        return incomingSet;
-    }
-
-    function detectSmoothingDropIndex(history, channel, sampleRecords) {
-        if (!Array.isArray(history) || history.length === 0) {
-            return null;
-        }
-        for (let idx = history.length - 2; idx >= 0; idx -= 1) {
-            const currentIndex = history[idx];
-            const nextIndex = history[idx + 1];
-            const currentRecord = sampleRecords[currentIndex];
-            const nextRecord = sampleRecords[nextIndex];
-            if (!currentRecord || !nextRecord) {
-                continue;
-            }
-            const currentValue = Number(currentRecord.contributions?.[channel]) || 0;
-            const nextValue = Number(nextRecord.contributions?.[channel]) || 0;
-            if (currentValue <= DENSITY_EPSILON) {
-                continue;
-            }
-            if (nextValue <= currentValue * 0.6) {
-                return currentIndex;
-            }
-        }
-        return history[history.length - 1];
-    }
-
-    function redistributeSampleForWindow(params) {
-        const {
-            delta,
-            outgoingChannel,
-            newOutgoing,
-            originalContributions,
-            incomingChannels,
-            weightMap
-        } = params;
-        const newContributions = {};
-        const cappedOutgoing = Math.max(0, Math.min(delta, newOutgoing));
-        newContributions[outgoingChannel] = cappedOutgoing;
-        const available = Math.max(0, delta - cappedOutgoing);
-        let othersOriginalTotal = 0;
-        Object.entries(originalContributions).forEach(([channel, amount]) => {
-            if (channel === outgoingChannel) return;
-            if (amount > DENSITY_EPSILON) {
-                othersOriginalTotal += amount;
-            }
-        });
-        if (othersOriginalTotal > DENSITY_EPSILON && available > DENSITY_EPSILON) {
-            const scale = available / othersOriginalTotal;
-            Object.entries(originalContributions).forEach(([channel, amount]) => {
-                if (channel === outgoingChannel) return;
-                const scaled = amount * scale;
-                if (scaled > DENSITY_EPSILON) {
-                    newContributions[channel] = scaled;
-                }
-            });
-        } else if (available > DENSITY_EPSILON) {
-            let totalWeight = 0;
-            incomingChannels.forEach((channel) => {
-                const weight = Math.max(0, Number(weightMap?.[channel]) || 0);
-                if (weight > 0) {
-                    totalWeight += weight;
-                }
-            });
-            if (totalWeight <= DENSITY_EPSILON && incomingChannels.length) {
-                totalWeight = incomingChannels.length;
-            }
-            incomingChannels.forEach((channel) => {
-                const rawWeight = Math.max(0, Number(weightMap?.[channel]) || 0);
-                const weight = totalWeight > DENSITY_EPSILON ? (rawWeight || 1) / totalWeight : 1 / incomingChannels.length;
-                const portion = available * weight;
-                if (portion > DENSITY_EPSILON) {
-                    newContributions[channel] = (newContributions[channel] || 0) + portion;
-                }
-            });
-        }
-        let sum = Object.values(newContributions).reduce((acc, value) => acc + value, 0);
-        if (sum <= DENSITY_EPSILON) {
-            return { contributions: { ...originalContributions } };
-        }
-        const diff = delta - sum;
-        if (Math.abs(diff) > 1e-6) {
-            const targets = incomingChannels.length ? incomingChannels : Object.keys(newContributions);
-            const distribute = diff / Math.max(1, targets.length);
-            targets.forEach((channel) => {
-                newContributions[channel] = (newContributions[channel] || 0) + distribute;
-            });
-        }
-        Object.keys(newContributions).forEach((channel) => {
-            if (newContributions[channel] <= DENSITY_EPSILON) {
-                delete newContributions[channel];
-            }
-        });
-        sum = Object.values(newContributions).reduce((acc, value) => acc + value, 0);
-        if (!Number.isFinite(sum) || sum <= DENSITY_EPSILON) {
-            return { contributions: { ...originalContributions } };
-        }
-        const correction = delta / sum;
-        Object.keys(newContributions).forEach((channel) => {
-            newContributions[channel] *= correction;
-        });
-        return { contributions: newContributions };
-    }
-
-    function applySmoothingWindow(context, outgoingChannel, windowIndices, densityProfiles, options = {}) {
-        if (!windowIndices.length) {
-            return;
-        }
-        const forcedWindow = options && options.forced === true;
-        const incomingSet = identifyIncomingChannels(context, outgoingChannel, windowIndices);
-        if (!incomingSet.size) {
-            return;
-        }
-        const incomingChannels = Array.from(incomingSet);
-        const denominator = windowIndices.length > 1 ? (windowIndices.length - 1) : 1;
-        const windowId = context.nextWindowId++;
-        windowIndices.forEach((sampleIndex, ordinal) => {
-            const record = context.sampleRecords[sampleIndex];
-            if (!record || !Number.isFinite(record.delta) || record.delta <= DENSITY_EPSILON) {
-                return;
-            }
-            const originalContributions = record.contributions || {};
-            const outgoingOriginal = originalContributions[outgoingChannel] || 0;
-            if (outgoingOriginal <= DENSITY_EPSILON) {
-                return;
-            }
-            const position = denominator > 0 ? (ordinal / denominator) : 1;
-            const attenuation = Math.pow(Math.max(0, 1 - position), context.config.alpha);
-            const newOutgoing = outgoingOriginal * attenuation;
-            const result = redistributeSampleForWindow({
-                delta: record.delta,
-                outgoingChannel,
-                newOutgoing,
-                originalContributions,
-                incomingChannels,
-                weightMap: record.weightMap || {}
-            });
-            record.contributions = result.contributions;
-            const profile = densityProfiles[sampleIndex];
-            if (profile) {
-                const newShares = {};
-                Object.entries(result.contributions).forEach(([channel, amount]) => {
-                    if (amount > DENSITY_EPSILON) {
-                        newShares[channel] = clamp01(amount / record.delta);
-                    }
-                });
-                profile.shares = newShares;
-                if (!Array.isArray(profile.smoothingWindows)) {
-                    profile.smoothingWindows = [];
-                }
-                profile.smoothingWindows.push({
-                    id: windowId,
-                    outgoingChannel,
-                    incomingChannels: incomingChannels.slice(),
-                    position,
-                    outFactor: attenuation,
-                    forced: forcedWindow
-                });
-            }
-            record.smoothingWindows = record.smoothingWindows || [];
-            record.smoothingWindows.push({
-                id: windowId,
-                outgoingChannel,
-                incomingChannels: incomingChannels.slice(),
-                position,
-                outFactor: attenuation,
-                forced: forcedWindow
-            });
-            if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-                const incomingPayload = {};
-                incomingChannels.forEach((channel) => {
-                    incomingPayload[channel] = result.contributions[channel] || 0;
-                });
-                context.debugRows.push({
-                    windowId,
-                    sampleIndex,
-                    inputPercent: record.inputPercent,
-                    outgoingOriginal,
-                    outgoingAdjusted: result.contributions[outgoingChannel] || 0,
-                    delta: record.delta,
-                    incoming: incomingPayload,
-                    forced: forcedWindow
-                });
-            }
-        });
-        const startRecord = context.sampleRecords[windowIndices[0]];
-        const endRecord = context.sampleRecords[windowIndices[windowIndices.length - 1]];
-        context.windows.push({
-            id: windowId,
-            outgoingChannel,
-            incomingChannels: incomingChannels.slice(),
-            startIndex: windowIndices[0],
-            endIndex: windowIndices[windowIndices.length - 1],
-            inputStart: startRecord ? startRecord.inputPercent : null,
-            inputEnd: endRecord ? endRecord.inputPercent : null,
-            forced: forcedWindow
-        });
-    }
-
-    function processRedistributionSmoothingWindows(context, densityProfiles) {
-        if (!context) return;
-        const forcedChannels = context.forcedChannels instanceof Set ? context.forcedChannels : null;
-        const clampMap = context.clampIndicesByChannel instanceof Map ? context.clampIndicesByChannel : null;
-        const perSampleCeilingActive = context.perSampleCeiling === true;
-        context.channelHistory.forEach((history, channel) => {
-            if (!Array.isArray(history) || !history.length) {
-                return;
-            }
-
-            let handledClamp = false;
-            if (perSampleCeilingActive && clampMap) {
-                const clampIndices = clampMap.get(channel);
-                if (Array.isArray(clampIndices) && clampIndices.length) {
-                    const uniqueClampIndices = Array.from(new Set(clampIndices)).sort((a, b) => a - b);
-                    uniqueClampIndices.forEach((clampIndex) => {
-                        if (!Number.isInteger(clampIndex)) {
-                            return;
-                        }
-                        let windowIndices = buildSmoothingWindowIndices(
-                            history,
-                            context.sampleRecords,
-                            context.config,
-                            clampIndex
-                        );
-                        if (windowIndices.length < 2) {
-                            const eligible = history.filter((idx) => Number.isInteger(idx) && idx <= clampIndex);
-                            if (eligible.length >= 2) {
-                                const start = Math.max(0, eligible.length - context.config.minSamples);
-                                windowIndices = eligible.slice(start);
-                            }
-                        }
-                        if (windowIndices.length >= 2) {
-                            applySmoothingWindow(context, channel, windowIndices, densityProfiles, { forced: true });
-                            handledClamp = true;
-                        }
-                    });
-                    clampMap.set(channel, []);
-                }
-            }
-
-            const isForced = forcedChannels ? forcedChannels.has(channel) : false;
-            let limitIndex = context.saturationByChannel?.get(channel);
-            if (!Number.isInteger(limitIndex)) {
-                limitIndex = detectSmoothingDropIndex(history, channel, context.sampleRecords);
-            }
-            if (!Number.isInteger(limitIndex) && isForced) {
-                limitIndex = history[history.length - 1];
-            }
-            if (handledClamp && !isForced) {
-                return;
-            }
-            const windowIndices = buildSmoothingWindowIndices(history, context.sampleRecords, context.config, limitIndex);
-            const minSamplesRequired = isForced ? Math.min(context.config.minSamples, 2) : context.config.minSamples;
-            if (windowIndices.length >= minSamplesRequired && windowIndices.length > 0) {
-                applySmoothingWindow(context, channel, windowIndices, densityProfiles, { forced: isForced });
-            }
-        });
-    }
-
-    function recomputeCumulativeDensityFromSamples(context, cumulativeDensityTarget) {
-        if (!context) return;
-        const totals = {};
-        context.sampleRecords.forEach((record) => {
-            if (!record || !record.contributions) return;
-            Object.entries(record.contributions).forEach(([channel, amount]) => {
-                if (!Number.isFinite(amount) || amount <= DENSITY_EPSILON) return;
-                totals[channel] = (totals[channel] || 0) + amount;
-            });
-        });
-        Object.keys(cumulativeDensityTarget).forEach((channel) => {
-            cumulativeDensityTarget[channel] = totals[channel] || 0;
-        });
-        Object.keys(totals).forEach((channel) => {
-            if (!Object.prototype.hasOwnProperty.call(cumulativeDensityTarget, channel)) {
-                cumulativeDensityTarget[channel] = totals[channel];
-            }
-        });
-    }
-
     const smoothingPercent = Number.isFinite(options.smoothingPercent)
         ? Number(options.smoothingPercent)
         : compositeLabSession.smoothingPercent;
 
-    const baselineSmoothingEnabled = isLabBaselineSmoothingEnabled();
     const widenFactor = smoothingPercent > 0
         ? mapSmoothingPercentToWiden(smoothingPercent)
-        : (baselineSmoothingEnabled ? 1 : 1);
+        : 1;
 
     let measurementEvaluator = null;
     if (Array.isArray(normalizedEntry?.originalData) && normalizedEntry.originalData.length >= 2) {
         try {
             const helper = buildInkInterpolatorFromMeasurements(normalizedEntry.originalData, {
-                skipDefaultSmoothing: !baselineSmoothingEnabled && smoothingPercent <= 0,
                 widenFactor
             });
             if (helper && typeof helper.evaluate === 'function') {
@@ -1342,14 +772,6 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
             return;
         }
         active.push({ name, curve, endValue });
-        if (momentumEnabled) {
-            const momentumSeries = computeChannelMomentum(curve, endValue, momentumOptions || undefined);
-            momentumByChannel.set(name, momentumSeries);
-            const peak = Array.isArray(momentumSeries)
-                ? momentumSeries.reduce((max, value) => (Number.isFinite(value) && value > max ? value : max), 0)
-                : 0;
-            momentumSummary[name] = peak;
-        }
     });
 
     if (!active.length) {
@@ -1572,119 +994,21 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
         });
     }
 
-    const useNormalizedWeighting = weightingMode === COMPOSITE_WEIGHTING_MODES.NORMALIZED;
-
-    let channelOrdering = [];
-    if (!useNormalizedWeighting) {
-        channelOrdering = active.map(({ name }) => {
-            const shareArray = shareTable[name];
-            let firstDominance = -1;
-            for (let i = 0; i < CURVE_RESOLUTION; i += 1) {
-                if (measurementDeltas[i] <= DENSITY_EPSILON) continue;
-                if (shareArray[i] >= DENSITY_DOMINANCE_THRESHOLD) {
-                firstDominance = i;
-                break;
-            }
+    active.forEach(({ name }) => {
+        let channelDensity = 0;
+        for (let i = 1; i < CURVE_RESOLUTION; i += 1) {
+            const delta = measurementDeltas[i];
+            if (delta <= DENSITY_EPSILON) continue;
+            const share = shareTable[name][i] || 0;
+            if (share <= DENSITY_MIN_SHARE) continue;
+            channelDensity += delta * share;
         }
-        if (firstDominance === -1) {
-            for (let i = 0; i < CURVE_RESOLUTION; i += 1) {
-                if (measurementDeltas[i] <= DENSITY_EPSILON) continue;
-                if (shareArray[i] >= DENSITY_SUPPORT_THRESHOLD) {
-                    firstDominance = i;
-                    break;
-                }
-            }
-        }
-        if (firstDominance === -1) {
-            for (let i = 0; i < CURVE_RESOLUTION; i += 1) {
-                if (shareArray[i] > DENSITY_MIN_SHARE) {
-                    firstDominance = i;
-                    break;
-                }
-            }
-        }
-        if (firstDominance === -1) {
-            firstDominance = Number.POSITIVE_INFINITY;
-        }
-        return { name, firstDominance, shareArray };
-    }).sort((a, b) => a.firstDominance - b.firstDominance);
-
-        const calibratedNames = [];
-        channelOrdering.forEach(({ name, shareArray }) => {
-            let residualSum = 0;
-            let shareSum = 0;
-
-            for (let i = 1; i < CURVE_RESOLUTION; i += 1) {
-                const delta = measurementDeltas[i];
-                if (delta <= DENSITY_EPSILON) continue;
-                const share = shareArray[i];
-                if (share <= DENSITY_MIN_SHARE) continue;
-
-                let residual = delta;
-                calibratedNames.forEach((prevName) => {
-                    const prevConstant = constants.get(prevName) || 0;
-                    const prevShare = shareTable[prevName]?.[i] || 0;
-                    if (prevConstant > 0 && prevShare > 0) {
-                        residual -= prevConstant * prevShare;
-                    }
-                });
-
-                if (residual <= DENSITY_EPSILON) continue;
-
-                residualSum += residual;
-                shareSum += share;
-            }
-
-            if (shareSum <= DENSITY_EPSILON || totalDensity <= DENSITY_EPSILON) {
-                constants.set(name, 0);
-                calibratedNames.push(name);
-                return;
-            }
-
-            let constant = residualSum / shareSum;
-            if (!Number.isFinite(constant) || constant < 0) {
-                constant = 0;
-            }
-
-            const used = Array.from(constants.values()).reduce((sum, value) => sum + value, 0);
-            const remaining = Math.max(0, totalDensity - used);
-            if (remaining <= DENSITY_EPSILON) {
-                constants.set(name, 0);
-                calibratedNames.push(name);
-                return;
-            }
-
-            if (constant > remaining) {
-                constant = remaining;
-            }
-
-            constants.set(name, constant);
-            calibratedNames.push(name);
-        });
-
-        const sumConstants = Array.from(constants.values()).reduce((sum, value) => sum + value, 0);
-        if (totalDensity > DENSITY_EPSILON && sumConstants < (totalDensity - DENSITY_EPSILON) && channelOrdering.length) {
-            const lastName = channelOrdering[channelOrdering.length - 1].name;
-            const additional = Math.max(0, totalDensity - sumConstants);
-            constants.set(lastName, (constants.get(lastName) || 0) + additional);
-        }
-    } else {
-        active.forEach(({ name }) => {
-            let channelDensity = 0;
-            for (let i = 1; i < CURVE_RESOLUTION; i += 1) {
-                const delta = measurementDeltas[i];
-                if (delta <= DENSITY_EPSILON) continue;
-                const share = shareTable[name][i] || 0;
-                if (share <= DENSITY_MIN_SHARE) continue;
-                channelDensity += delta * share;
-            }
-            constants.set(name, channelDensity);
-        });
-        channelOrdering = active.map(({ name }) => ({ name }));
-    }
+        constants.set(name, channelDensity);
+    });
+    const channelOrdering = active.map(({ name }) => ({ name }));
 
     if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-        console.log('[density] constants size', constants.size, 'mode', weightingMode);
+        console.log('[density] constants size', constants.size);
     }
 
     manualOnlyMap.forEach((manualValue, channelName) => {
@@ -1693,15 +1017,6 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
         densitySources.set(channelName, manualSources.get(channelName) || 'manual');
     });
 
-    if (weightingMode === COMPOSITE_WEIGHTING_MODES.EQUAL) {
-        const equalValue = 1;
-        totalWeight = 0;
-        solved = true;
-        active.forEach(({ name }) => {
-            weights.set(name, equalValue);
-            totalWeight += equalValue;
-        });
-    }
     const channelOrderingList = channelOrdering.length ? channelOrdering : active.map(({ name }) => ({ name }));
     channelOrderingList.forEach(({ name }) => {
         const endValue = Math.max(0, Number(endValues[name]) || 0);
@@ -1745,52 +1060,26 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
         coverageBufferThreshold.set(name, thresholdAbsolute);
         coverageBufferThresholdNormalized.set(name, 0);
         coverageUsage.set(name, 0);
-        if (!perSampleCeilingEnabled) {
-            remainingByChannel[name] = Math.max(0, Number.isFinite(thresholdAbsolute) ? thresholdAbsolute : 0);
-        }
     });
 
     for (let i = 1; i < CURVE_RESOLUTION; i += 1) {
         const delta = measurementDeltas[i];
         if (delta <= DENSITY_EPSILON) {
-            const profile = { density: 0, shares: {} };
-            if (momentumEnabled) {
-                const snapshotMomentum = {};
-                momentumByChannel.forEach((series, name) => {
-                    snapshotMomentum[name] = Array.isArray(series) ? series[i] || 0 : 0;
-                });
-                profile.momentum = snapshotMomentum;
-            }
-            densityProfiles[i] = profile;
+            densityProfiles[i] = { density: 0, shares: {} };
             continue;
         }
 
         const weightMap = {};
-        const sampleMomentum = momentumEnabled ? {} : null;
         let candidateCount = 0;
         active.forEach(({ name }) => {
             const share = shareTable[name][i] || 0;
             const remaining = remainingByChannel[name] || 0;
-            let momentumValue = 0;
-            if (sampleMomentum) {
-                const momentumSeries = momentumByChannel.get(name);
-                momentumValue = Array.isArray(momentumSeries) ? momentumSeries[i] || 0 : 0;
-                sampleMomentum[name] = momentumValue;
-            }
             if (remaining <= DENSITY_EPSILON) {
                 return;
             }
-            let effectiveShare = share;
-            let weightBias = 1;
-            if (sampleMomentum) {
-                weightBias += momentumValue * MOMENTUM_GAIN;
-                if (effectiveShare <= DENSITY_MIN_SHARE) {
-                    effectiveShare = Math.max(effectiveShare, momentumValue * MOMENTUM_SHARE_FLOOR);
-                }
-            }
-            if (effectiveShare > DENSITY_MIN_SHARE) {
+            if (share > DENSITY_MIN_SHARE) {
                 const baseWeight = constants.get(name) || 0;
-                weightMap[name] = baseWeight * effectiveShare * weightBias;
+                weightMap[name] = baseWeight * share;
                 if (weightMap[name] > 0 || remaining > DENSITY_EPSILON) {
                     candidateCount += 1;
                 }
@@ -1798,19 +1087,8 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
         });
 
         if (!candidateCount) {
-            const profile = { density: delta, shares: {} };
-            if (sampleMomentum) {
-                profile.momentum = sampleMomentum;
-            }
-            densityProfiles[i] = profile;
+            densityProfiles[i] = { density: delta, shares: {} };
             continue;
-        }
-
-        const preRemainingByChannel = smoothingContext ? {} : null;
-        if (preRemainingByChannel) {
-            active.forEach(({ name }) => {
-                preRemainingByChannel[name] = Number(remainingByChannel[name]) || 0;
-            });
         }
 
         const contributions = {};
@@ -1888,24 +1166,6 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
             }
         }
 
-        if (smoothingContext && preRemainingByChannel) {
-            const saturationMap = smoothingContext.saturationByChannel;
-            active.forEach(({ name }) => {
-                if (saturationMap.has(name)) {
-                    return;
-                }
-                const before = preRemainingByChannel[name] || 0;
-                const after = remainingByChannel[name] || 0;
-                if (before > DENSITY_EPSILON && after <= DENSITY_EPSILON) {
-                    saturationMap.set(name, i);
-                }
-            });
-        }
-
-        if (smoothingContext) {
-            recordSampleForSmoothing(smoothingContext, i, delta, contributions, weightMap);
-        }
-
         const shareEntries = {};
         Object.keys(contributions).forEach((name) => {
             const amount = contributions[name];
@@ -1914,44 +1174,14 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
             cumulativeDensity[name] += amount;
         });
 
-        const profile = {
+        densityProfiles[i] = {
             density: delta,
             shares: shareEntries
         };
-        if (sampleMomentum) {
-            profile.momentum = sampleMomentum;
-        }
-        densityProfiles[i] = profile;
-    }
-
-    if (smoothingContext) {
-        processRedistributionSmoothingWindows(smoothingContext, densityProfiles);
-        recomputeCumulativeDensityFromSamples(smoothingContext, cumulativeDensity);
-        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS && Array.isArray(smoothingContext.debugRows) && smoothingContext.debugRows.length) {
-            try {
-                console.table(smoothingContext.debugRows.slice(-Math.min(20, smoothingContext.debugRows.length)));
-            } catch (error) {
-                console.log('[smoothingWindow]', smoothingContext.debugRows.slice(-Math.min(20, smoothingContext.debugRows.length)));
-            }
-        }
     }
 
     if (!densityProfiles[0]) {
-        const profile = { density: 0, shares: {} };
-        if (momentumEnabled) {
-            const baseMomentum = {};
-            momentumByChannel.forEach((series, name) => {
-                baseMomentum[name] = Array.isArray(series) ? series[0] || 0 : 0;
-            });
-            profile.momentum = baseMomentum;
-        }
-        densityProfiles[0] = profile;
-    } else if (momentumEnabled && !densityProfiles[0].momentum) {
-        const baseMomentum = {};
-        momentumByChannel.forEach((series, name) => {
-            baseMomentum[name] = Array.isArray(series) ? series[0] || 0 : 0;
-        });
-        densityProfiles[0].momentum = baseMomentum;
+        densityProfiles[0] = { density: 0, shares: {} };
     }
 
     const summaryChannels = channelOrderingList.length
@@ -1964,50 +1194,6 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
         coverageUsage,
         coverageClampEvents
     });
-    const smoothingWindows = smoothingContext ? smoothingContext.windows.slice() : [];
-    if (perSampleCeilingEnabled && smoothingContext && smoothingWindows.length === 0) {
-        const synthetic = [];
-        Object.entries(coverageSummaryPlain || {}).forEach(([channel, entry]) => {
-            if (!entry || typeof entry !== 'object') {
-                return;
-            }
-            const clampedSamples = Array.isArray(entry.clampedSamples) ? entry.clampedSamples : [];
-            const firstClamp = clampedSamples.find((sample) => Number.isFinite(sample?.index));
-            if (!firstClamp) {
-                return;
-            }
-            const clampIndexRaw = Number(firstClamp.index);
-            if (!Number.isFinite(clampIndexRaw)) {
-                return;
-            }
-            const clampIndex = Math.trunc(clampIndexRaw);
-            const inputValue = Number.isFinite(firstClamp.inputPercent)
-                ? firstClamp.inputPercent
-                : (clampIndex / DENOM) * 100;
-            const windowId = Number.isFinite(smoothingContext.nextWindowId)
-                ? smoothingContext.nextWindowId++
-                : synthetic.length + 1;
-            const syntheticWindow = {
-                id: windowId,
-                outgoingChannel: channel,
-                incomingChannels: [],
-                startIndex: clampIndex,
-                endIndex: clampIndex,
-                inputStart: inputValue,
-                inputEnd: inputValue,
-                forced: true,
-                synthetic: true
-            };
-            synthetic.push(syntheticWindow);
-        });
-        if (synthetic.length) {
-            smoothingWindows.push(...synthetic);
-            if (Array.isArray(smoothingContext.windows)) {
-                smoothingContext.windows.push(...synthetic);
-            }
-        }
-    }
-
     return {
         weights,
         totalWeight,
@@ -2019,9 +1205,6 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
         totalDensity,
         inputs: densityInputs,
         measurementSamples,
-        momentumByChannel,
-        momentumSummary,
-        momentumOptions,
         densitySources,
         coverageSummary: coverageSummaryPlain,
         coverageByChannel: coverageSummaryMap,
@@ -2031,11 +1214,7 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
         coverageThresholdsNormalized: coverageBufferThresholdNormalized,
         coverageClampEvents,
         coverageUsage,
-        smoothingWindows,
-        smoothingConfig: smoothingContext ? { ...smoothingContext.config } : null,
-        remainingByChannel: { ...remainingByChannel },
-        smoothingContext,
-        perSampleCeilingEnabled
+        remainingByChannel: { ...remainingByChannel }
     };
     } catch (error) {
         console.error('[computeCompositeDensityWeights] Error computing density weights:', error);
@@ -2046,9 +1225,6 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
             constants: new Map(),
             measurementDeltas: new Array(CURVE_RESOLUTION).fill(0),
             densityProfiles: new Array(CURVE_RESOLUTION).fill(null),
-            momentumByChannel: new Map(),
-            momentumSummary: {},
-            momentumOptions: null,
             densitySources: new Map(),
             coverageSummary: {},
             coverageByChannel: new Map(),
@@ -2058,11 +1234,7 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
             coverageThresholdsNormalized: new Map(),
             coverageClampEvents: new Map(),
             coverageUsage: new Map(),
-            smoothingWindows: null,
-            smoothingConfig: null,
-            remainingByChannel: {},
-            smoothingContext: null,
-            perSampleCeilingEnabled: false
+            remainingByChannel: {}
         };
     }
 }
@@ -2093,7 +1265,6 @@ export function finalizeCompositeLabRedistribution() {
         return null;
     }
 
-    const perSampleCeilingEnabled = isCompositePerSampleCeilingEnabled();
     const analysisOnly = compositeLabSession.analysisOnly === true;
 
     const { channels, endValues, baseCurves } = compositeLabSession;
@@ -2102,10 +1273,7 @@ export function finalizeCompositeLabRedistribution() {
     if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
         console.log('[COMPOSITE] finalize redistribution', {
             activeChannels: channels?.length || 0,
-            perSampleCeilingEnabled,
-            smoothingEnabled: isRedistributionSmoothingWindowEnabled(),
-            autoCompute: compositeLabSession.autoComputeDensity,
-            debugEnabled: isCompositeDebugEnabled()
+            autoCompute: compositeLabSession.autoComputeDensity
         });
     }
 
@@ -2116,11 +1284,6 @@ export function finalizeCompositeLabRedistribution() {
     }
 
     const { interpolationFunction, lutDomainMin, domainSpan } = context;
-    if (!channels.length) {
-        compositeLabSession.active = false;
-        compositeLabSession.preparedContext = null;
-        return null;
-    }
 
     clearFrontReservePeakMap();
 
@@ -2160,21 +1323,17 @@ export function finalizeCompositeLabRedistribution() {
         return null;
     }
 
-    const weightingMode = compositeLabSession.weightingMode || COMPOSITE_WEIGHTING_MODES.NORMALIZED;
-
     const densityWeightsInfo = computeCompositeDensityWeights(
         channels,
         baselineSnapshot,  // Use snapshot for weight computation
         endValues,
         compositeLabSession.normalizedEntry,
         {
-            weightingMode,
             smoothingPercent: compositeLabSession.smoothingPercent,
             manualDensityOverrides: compositeLabSession.densityOverrides,
             autoComputeEnabled: compositeLabSession.autoComputeDensity
         }
     );
-    const smoothingContext = densityWeightsInfo.smoothingContext || null;
     const densityWeights = densityWeightsInfo.weights;
     compositeLabSession.densityWeights = densityWeights;
     const solverConstantsMap = densityWeightsInfo.constants instanceof Map
@@ -2204,11 +1363,6 @@ export function finalizeCompositeLabRedistribution() {
     compositeLabSession.measurementSamples = Array.isArray(densityWeightsInfo.measurementSamples)
         ? densityWeightsInfo.measurementSamples
         : [];
-    compositeLabSession.momentumByChannel = densityWeightsInfo.momentumByChannel instanceof Map
-        ? densityWeightsInfo.momentumByChannel
-        : new Map(densityWeightsInfo.momentumByChannel ? Object.entries(densityWeightsInfo.momentumByChannel) : []);
-    compositeLabSession.momentumSummary = densityWeightsInfo.momentumSummary || {};
-    compositeLabSession.momentumOptions = densityWeightsInfo.momentumOptions || null;
     compositeLabSession.densitySources = densityWeightsInfo.densitySources instanceof Map
         ? densityWeightsInfo.densitySources
         : new Map(densityWeightsInfo.densitySources ? Object.entries(densityWeightsInfo.densitySources) : []);
@@ -2249,8 +1403,6 @@ export function finalizeCompositeLabRedistribution() {
             channel,
             Array.isArray(events) ? events.slice() : []
         ]));
-    compositeLabSession.perSampleCeilingEnabled = perSampleCeilingEnabled;
-
     const coverageLimits = compositeLabSession.densityCoverageLimits instanceof Map
         ? compositeLabSession.densityCoverageLimits
         : new Map();
@@ -2275,13 +1427,6 @@ export function finalizeCompositeLabRedistribution() {
             ? densityWeightsInfo.remainingByChannel
             : {}
     );
-    compositeLabSession.smoothingWindows = Array.isArray(densityWeightsInfo.smoothingWindows)
-        ? densityWeightsInfo.smoothingWindows.slice()
-        : [];
-    compositeLabSession.smoothingConfig = densityWeightsInfo.smoothingConfig
-        ? { ...densityWeightsInfo.smoothingConfig }
-        : null;
-
     if (analysisOnly) {
         const coverageSummaryPlain = cloneCoverageSummary(densityWeightsInfo.coverageSummary || {});
         compositeLabSession.densityCoverageSummary = coverageSummaryPlain;
@@ -2300,9 +1445,6 @@ export function finalizeCompositeLabRedistribution() {
             const densityConstantsPlain = mapToPlainObject(compositeLabSession.densityConstants);
             const densitySourcesPlain = mapToPlainObject(compositeLabSession.densitySources);
             const cumulativeDensityPlain = mapToPlainObject(compositeLabSession.densityCumulative);
-            const momentumSummaryPlain = compositeLabSession.momentumSummary
-                ? { ...compositeLabSession.momentumSummary }
-                : null;
             const debugSnapshots = new Array(CURVE_RESOLUTION).fill(null);
             const measurementSamples = compositeLabSession.measurementSamples || [];
             const measurementDeltas = compositeLabSession.measurementDeltas || [];
@@ -2346,8 +1488,7 @@ export function finalizeCompositeLabRedistribution() {
                         headroomAfter: headroom,
                         densityContributionBefore: densityContribution,
                         densityContributionAfter: densityContribution,
-                        densityContributionDelta: 0,
-                        momentum: 0
+                        densityContributionDelta: 0
                     };
                 });
                 const measurementDensity = Array.isArray(measurementSamples)
@@ -2362,8 +1503,7 @@ export function finalizeCompositeLabRedistribution() {
                     baselineInk,
                     correctedInk: baselineInk,
                     inkDelta: 0,
-                    perChannel: perChannelDebug,
-                    weightingMode
+                    perChannel: perChannelDebug
                 };
             }
 
@@ -2378,30 +1518,17 @@ export function finalizeCompositeLabRedistribution() {
                 measurementDeltas: Array.isArray(measurementDeltas) ? measurementDeltas.slice() : null,
                 densityInputs: Array.isArray(densityInputs) ? densityInputs.slice() : null,
                 densitySources: densitySourcesPlain,
-                densityLadder: densityLadder.slice(),
-                ladderOrderIndex: { ...ladderIndicesPlain },
                 warnings: summaryWarnings.slice(),
                 peakIndices: null,
-                weightingMode,
-                momentumPeaks: momentumSummaryPlain,
-                momentumWindow: compositeLabSession.momentumOptions?.windowRadius ?? null,
-                momentumSigma: compositeLabSession.momentumOptions?.sigma ?? null,
                 coverageSummary: cloneCoverageSummary(coverageSummaryPlain),
                 coverageLimits: mapToPlainObject(coverageLimits),
-                coverageBuffers: mapToPlainObject(coverageBuffers),
-                smoothingWindows: [],
-                smoothingConfig: null
+                coverageBuffers: mapToPlainObject(coverageBuffers)
             };
             const sessionPayload = {
                 summary: summaryPayload,
-                snapshots: debugSnapshots,
-                selectionIndex: null
+                snapshots: debugSnapshots
             };
-            compositeLabSession.lastDebugSession = sessionPayload;
             storeCompositeDebugSession(sessionPayload);
-            if (typeof globalScope === 'object' && globalScope) {
-                globalScope.__COMPOSITE_DEBUG_CACHE__ = sessionPayload;
-            }
 
         compositeLabSession.warnings = summaryWarnings;
         compositeLabSession.peakIndices = {};
@@ -2437,76 +1564,47 @@ export function finalizeCompositeLabRedistribution() {
         };
     }
 
-    const debugEnabled = isCompositeDebugEnabled();
-    const captureDebug = true;
-    let debugSnapshots = captureDebug ? new Array(CURVE_RESOLUTION).fill(null) : null;
-    let debugSummary = null;
-    let debugSelectionIndex = null;
-    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-        console.log('[COMPOSITE] debug capture state', { captureDebug, debugEnabled });
+    const debugSnapshots = new Array(CURVE_RESOLUTION).fill(null);
+    const maxima = {};
+    if (Array.isArray(channels)) {
+        channels.forEach((name) => {
+            const raw = Number(endValues?.[name]);
+            maxima[name] = Number.isFinite(raw) ? raw : 0;
+        });
     }
-    if (captureDebug) {
-        const maxima = {};
-        if (Array.isArray(channels)) {
-            channels.forEach((name) => {
-                const raw = Number(endValues?.[name]);
-                maxima[name] = Number.isFinite(raw) ? raw : 0;
+    const debugSummary = {
+        channelNames: Array.isArray(channels) ? channels.slice() : [],
+        channelMaxima: maxima,
+        densityWeights: mapToPlainObject(densityWeights),
+        densityConstants: mapToPlainObject(compositeLabSession.densityConstants),
+        cumulativeDensity: mapToPlainObject(compositeLabSession.densityCumulative),
+        totalDensity: Number.isFinite(densityWeightsInfo.totalDensity) ? densityWeightsInfo.totalDensity : null,
+        measurementSamples: Array.isArray(compositeLabSession.measurementSamples) ? compositeLabSession.measurementSamples.slice() : null,
+        measurementDeltas: Array.isArray(compositeLabSession.measurementDeltas) ? compositeLabSession.measurementDeltas.slice() : null,
+        densityInputs: Array.isArray(compositeLabSession.densityInputs) ? compositeLabSession.densityInputs.slice() : null,
+        densitySources: mapToPlainObject(compositeLabSession.densitySources),
+        warnings: [],
+        peakIndices: null,
+        coverageSummary: cloneCoverageSummary(densityWeightsInfo.coverageSummary || {}),
+        coverageLimits: mapToPlainObject(densityWeightsInfo.coverageLimits),
+        coverageBuffers: mapToPlainObject(densityWeightsInfo.coverageBuffers),
+        coverageClampEvents: (() => {
+            if (!(densityWeightsInfo.coverageClampEvents instanceof Map)) {
+                return {};
+            }
+            const out = {};
+            densityWeightsInfo.coverageClampEvents.forEach((events, channel) => {
+                out[channel] = Array.isArray(events)
+                    ? events.map((entry) => ({ ...entry }))
+                    : [];
             });
-        }
-        debugSummary = {
-            channelNames: Array.isArray(channels) ? channels.slice() : [],
-            channelMaxima: maxima,
-            densityWeights: mapToPlainObject(densityWeights),
-            densityConstants: mapToPlainObject(compositeLabSession.densityConstants),
-            cumulativeDensity: mapToPlainObject(compositeLabSession.densityCumulative),
-            totalDensity: Number.isFinite(densityWeightsInfo.totalDensity) ? densityWeightsInfo.totalDensity : null,
-            measurementSamples: Array.isArray(compositeLabSession.measurementSamples) ? compositeLabSession.measurementSamples.slice() : null,
-            measurementDeltas: Array.isArray(compositeLabSession.measurementDeltas) ? compositeLabSession.measurementDeltas.slice() : null,
-            densityInputs: Array.isArray(compositeLabSession.densityInputs) ? compositeLabSession.densityInputs.slice() : null,
-            densitySources: mapToPlainObject(compositeLabSession.densitySources),
-            warnings: [],
-            peakIndices: null,
-            weightingMode,
-            momentumPeaks: compositeLabSession.momentumSummary ? { ...compositeLabSession.momentumSummary } : null,
-            momentumWindow: compositeLabSession.momentumOptions?.windowRadius ?? null,
-            momentumSigma: compositeLabSession.momentumOptions?.sigma ?? null,
-            coverageSummary: cloneCoverageSummary(densityWeightsInfo.coverageSummary || {}),
-            coverageLimits: mapToPlainObject(densityWeightsInfo.coverageLimits),
-            coverageBuffers: mapToPlainObject(densityWeightsInfo.coverageBuffers),
-            coverageClampEvents: (() => {
-                if (!(densityWeightsInfo.coverageClampEvents instanceof Map)) {
-                    return {};
-                }
-                const out = {};
-                densityWeightsInfo.coverageClampEvents.forEach((events, channel) => {
-                    out[channel] = Array.isArray(events)
-                        ? events.map((entry) => ({ ...entry }))
-                        : [];
-                });
-                return out;
-            })(),
-            perSampleCeilingEnabled,
-            smoothingWindows: Array.isArray(compositeLabSession.smoothingWindows)
-                ? compositeLabSession.smoothingWindows.map((entry) => (
-                    entry ? {
-                        id: entry.id ?? null,
-                        outgoingChannel: entry.outgoingChannel ?? null,
-                        incomingChannels: Array.isArray(entry.incomingChannels) ? entry.incomingChannels.slice() : [],
-                        startIndex: entry.startIndex ?? null,
-                        endIndex: entry.endIndex ?? null,
-                        inputStart: entry.inputStart ?? null,
-                        inputEnd: entry.inputEnd ?? null
-                    } : null
-                )).filter(Boolean)
-                : [],
-            smoothingConfig: compositeLabSession.smoothingConfig ? { ...compositeLabSession.smoothingConfig } : null
-        };
-        if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
-            console.log('[COMPOSITE] debug summary seeded', {
-                channelCount: debugSummary.channelNames.length,
-                smoothingWindowCount: debugSummary.smoothingWindows.length
-            });
-        }
+            return out;
+        })()
+    };
+    if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
+        console.log('[COMPOSITE] debug summary seeded', {
+            channelCount: debugSummary.channelNames.length
+        });
     }
 
     const normalizedBaselineByChannel = new Map();
@@ -2606,12 +1704,6 @@ export function finalizeCompositeLabRedistribution() {
         totalNormalizedByChannel.set(name, sum);
     });
 
-    const channelsByDensity = channels.slice().sort((a, b) => {
-        const totalA = totalNormalizedByChannel.get(a) || 0;
-        const totalB = totalNormalizedByChannel.get(b) || 0;
-        return totalB - totalA;
-    });
-
     const getDensityWeight = (name) => {
         if (densityWeights instanceof Map) {
             return Number(densityWeights.get(name));
@@ -2645,11 +1737,6 @@ export function finalizeCompositeLabRedistribution() {
     compositeLabSession.densityLadder = densityLadder.slice();
     compositeLabSession.densityLadderIndex = new Map(ladderIndexByChannel);
 
-    const orderIndexByChannel = new Map();
-    channelsByDensity.forEach((name, idx) => {
-        orderIndexByChannel.set(name, idx);
-    });
-
     const peakCompleted = new Map();
     channels.forEach((name) => {
         peakCompleted.set(name, false);
@@ -2664,31 +1751,6 @@ export function finalizeCompositeLabRedistribution() {
             locked: false
         });
     });
-
-    const computeRegionMultiplier = (channelName, sampleIndex) => {
-        const region = preferredRegionByChannel.get(channelName);
-        if (!region) {
-            return 0;
-        }
-        const { start, primaryEnd, effectiveStart, effectiveEnd } = region;
-        const primaryMultiplier = 1 + REGION_PRIMARY_BIAS;
-        if (sampleIndex < effectiveStart || sampleIndex > effectiveEnd) {
-            return 0;
-        }
-        if (sampleIndex >= start && sampleIndex <= primaryEnd) {
-            return primaryMultiplier;
-        }
-        if (sampleIndex < start) {
-            const distance = start - sampleIndex;
-            const t = 1 - (distance / (REGION_BLEND_MARGIN + 1));
-            const clampedT = Math.max(0, Math.min(1, t));
-            return REGION_SECONDARY_SCALE + (primaryMultiplier - REGION_SECONDARY_SCALE) * clampedT;
-        }
-        const distance = sampleIndex - primaryEnd;
-        const t = 1 - (distance / (REGION_BLEND_MARGIN + 1));
-        const clampedT = Math.max(0, Math.min(1, t));
-        return REGION_SECONDARY_SCALE * clampedT;
-    };
 
     for (let i = 0; i < CURVE_RESOLUTION; i += 1) {
         const correctedTotal = channels.reduce((sum, name) => {
@@ -2706,8 +1768,6 @@ export function finalizeCompositeLabRedistribution() {
             ? compositeLabSession.densityProfiles[i]
             : null;
         const densityShareMap = densityProfile && densityProfile.shares ? densityProfile.shares : null;
-        const momentumProfile = densityProfile && densityProfile.momentum ? densityProfile.momentum : null;
-
         const channelInfo = new Map();
         const weightMap = {};
 
@@ -2730,10 +1790,6 @@ export function finalizeCompositeLabRedistribution() {
             const weight = densityWeights.get(name) || 0;
             const normalized = endValue > 0 ? clamp01(current / endValue) : 0;
             const headroomNormalized = endValue > 0 ? headroom / endValue : 0;
-            const channelMomentum = momentumProfile && Number.isFinite(momentumProfile[name])
-                ? Math.max(0, momentumProfile[name])
-                : 0;
-
             const densityWeight = Math.max(DENSITY_EPSILON, weight || densityWeights.get(name) || 0);
             const thresholdAbsoluteRaw = coverageBufferThreshold.get(name);
             const coverageLimit = coverageLimits.get(name);
@@ -2757,7 +1813,6 @@ export function finalizeCompositeLabRedistribution() {
                 share: correctedTotal > 0 ? Math.max(0, current) / correctedTotal : 0,
                 densityShare: 0,
                 regionShareOverride: false,
-                momentum: channelMomentum,
                 densityWeight,
                 densityLimit,
                 coverageLimit: Number.isFinite(coverageLimit) ? coverageLimit : null,
@@ -2874,118 +1929,89 @@ export function finalizeCompositeLabRedistribution() {
             } else {
                 coverageUsage.set(name, info.normalized);
                 coverageBufferThresholdNormalized.set(name, 1);
-                if (perSampleCeilingEnabled) {
-                    remainingByChannel[name] = Math.max(0, densityWeight * (info.effectiveHeadroomNormalized ?? info.headroomNormalized));
-                }
+                remainingByChannel[name] = Math.max(0, densityWeight * (info.effectiveHeadroomNormalized ?? info.headroomNormalized));
             }
 
             cumulativeNormalizedStack = Math.max(cumulativeNormalizedStack, info.normalized);
         });
 
-        if (weightingMode === COMPOSITE_WEIGHTING_MODES.NORMALIZED) {
-            const reservePeakMap = ensureFrontReservePeakMap();
-            let darkerHeadroomTotal = 0;
-            for (let idx = densityLadder.length - 1; idx >= 0; idx -= 1) {
-                const name = densityLadder[idx];
-                const info = channelInfo.get(name);
-                if (!info) {
-                    continue;
-                }
-                const normalized = Number.isFinite(info.normalized) ? info.normalized : 0;
-                const allowed = Number.isFinite(info.allowedNormalized) ? info.allowedNormalized : normalized;
-                const headroomNormalized = Math.max(0, allowed - normalized);
-                const previousState = reservePeakMap.get(name);
-                const previousPeak = Number.isFinite(previousState?.peak)
-                    ? Math.max(0, previousState.peak)
-                    : 0;
-                const previousBase = Number.isFinite(previousState?.base)
-                    ? Math.max(0, previousState.base)
-                    : 0;
-
-                info.frontReserveBase = 0;
-                info.frontReserveDarkerHeadroom = darkerHeadroomTotal;
-                info.frontReserveApplied = 0;
-
-                let peakValue = 0;
-                let baseValue = 0;
-                if (darkerHeadroomTotal > DENSITY_EPSILON && headroomNormalized > DENSITY_EPSILON) {
-                    const candidateBase = Math.min(headroomNormalized, FRONT_RESERVE_MAX_NORMALIZED);
-                    peakValue = Math.min(
-                        FRONT_RESERVE_MAX_NORMALIZED,
-                        Math.max(previousPeak, candidateBase)
-                    );
-                    if (!Number.isFinite(previousBase) || previousBase <= DENSITY_EPSILON || candidateBase >= previousBase) {
-                        baseValue = candidateBase;
-                    } else {
-                        baseValue = Math.max(
-                            candidateBase,
-                            previousBase * FRONT_RESERVE_DECAY_FACTOR
-                        );
-                    }
-                } else if (headroomNormalized > DENSITY_EPSILON) {
-                    const clamped = Math.min(headroomNormalized, FRONT_RESERVE_MAX_NORMALIZED);
-                    peakValue = clamped;
-                    baseValue = clamped;
-                } else {
-                    peakValue = 0;
-                    baseValue = 0;
-                }
-
-                info.frontReservePeak = peakValue;
-                info.frontReserveBase = baseValue;
-
-                reservePeakMap.set(name, {
-                    peak: peakValue,
-                    base: baseValue
-                });
-                darkerHeadroomTotal += headroomNormalized;
-                info.effectiveHeadroomNormalized = computeEffectiveHeadroom(info);
-
-                const reserveMeta = computeReserveMeta(info);
-                info.reserveState = reserveMeta.state;
-                info.reserveAllowanceNormalized = reserveMeta.allowance;
-                info.reserveAllowanceRemaining = reserveMeta.allowance;
-
-                if (reserveMeta.allowance > DENSITY_EPSILON) {
-                    info.effectiveHeadroomNormalized = Math.max(
-                        0,
-                        (info.effectiveHeadroomNormalized || 0) + reserveMeta.allowance
-                    );
-                }
+        const reservePeakMap = ensureFrontReservePeakMap();
+        let darkerHeadroomTotal = 0;
+        for (let idx = densityLadder.length - 1; idx >= 0; idx -= 1) {
+            const name = densityLadder[idx];
+            const info = channelInfo.get(name);
+            if (!info) {
+                continue;
             }
-        } else {
-            clearFrontReservePeakMap();
-            channelInfo.forEach((info) => {
-                info.frontReserveBase = 0;
-                info.frontReservePeak = 0;
-                info.frontReserveDarkerHeadroom = 0;
-                info.frontReserveApplied = 0;
-                info.effectiveHeadroomNormalized = computeEffectiveHeadroom(info);
-                info.reserveState = 'approaching';
-                info.reserveAllowanceNormalized = 0;
-                info.reserveAllowanceRemaining = 0;
+            const normalized = Number.isFinite(info.normalized) ? info.normalized : 0;
+            const allowed = Number.isFinite(info.allowedNormalized) ? info.allowedNormalized : normalized;
+            const headroomNormalized = Math.max(0, allowed - normalized);
+            const previousState = reservePeakMap.get(name);
+            const previousPeak = Number.isFinite(previousState?.peak)
+                ? Math.max(0, previousState.peak)
+                : 0;
+            const previousBase = Number.isFinite(previousState?.base)
+                ? Math.max(0, previousState.base)
+                : 0;
+
+            info.frontReserveBase = 0;
+            info.frontReserveDarkerHeadroom = darkerHeadroomTotal;
+            info.frontReserveApplied = 0;
+
+            let peakValue = 0;
+            let baseValue = 0;
+            if (darkerHeadroomTotal > DENSITY_EPSILON && headroomNormalized > DENSITY_EPSILON) {
+                const candidateBase = Math.min(headroomNormalized, FRONT_RESERVE_MAX_NORMALIZED);
+                peakValue = Math.min(
+                    FRONT_RESERVE_MAX_NORMALIZED,
+                    Math.max(previousPeak, candidateBase)
+                );
+                if (!Number.isFinite(previousBase) || previousBase <= DENSITY_EPSILON || candidateBase >= previousBase) {
+                    baseValue = candidateBase;
+                } else {
+                    baseValue = Math.max(
+                        candidateBase,
+                        previousBase * FRONT_RESERVE_DECAY_FACTOR
+                    );
+                }
+            } else if (headroomNormalized > DENSITY_EPSILON) {
+                const clamped = Math.min(headroomNormalized, FRONT_RESERVE_MAX_NORMALIZED);
+                peakValue = clamped;
+                baseValue = clamped;
+            }
+
+            info.frontReservePeak = peakValue;
+            info.frontReserveBase = baseValue;
+
+            reservePeakMap.set(name, {
+                peak: peakValue,
+                base: baseValue
             });
+            darkerHeadroomTotal += headroomNormalized;
+            info.effectiveHeadroomNormalized = computeEffectiveHeadroom(info);
+
+            const reserveMeta = computeReserveMeta(info);
+            info.reserveState = reserveMeta.state;
+            info.reserveAllowanceNormalized = reserveMeta.allowance;
+            info.reserveAllowanceRemaining = reserveMeta.allowance;
+
+            if (reserveMeta.allowance > DENSITY_EPSILON) {
+                info.effectiveHeadroomNormalized = Math.max(
+                    0,
+                    (info.effectiveHeadroomNormalized || 0) + reserveMeta.allowance
+                );
+            }
         }
 
         channelInfo.forEach((info) => {
-            const preferredShare = weightingMode === COMPOSITE_WEIGHTING_MODES.NORMALIZED
-                ? (info.baselineShare > DENSITY_EPSILON ? info.baselineShare : info.share)
-                : info.share;
+            const preferredShare = info.baselineShare > DENSITY_EPSILON ? info.baselineShare : info.share;
             info.weightingShare = preferredShare;
         });
 
         let baselineInkTotal = 0;
-        if (captureDebug && debugSnapshots) {
-            channelInfo.forEach((info) => {
-                baselineInkTotal += info.baselineValue || 0;
-            });
-        }
-
-        const highlightGuardEnabled = isCompositeHighlightGuardEnabled();
-        let activeOrderIndex = channelsByDensity.findIndex((name) => !peakCompleted.get(name));
-        if (activeOrderIndex === -1) {
-            activeOrderIndex = channelsByDensity.length - 1;
-        }
+        channelInfo.forEach((info) => {
+            baselineInkTotal += info.baselineValue || 0;
+        });
 
         const getPreferredShare = (info) => {
             const value = info?.weightingShare;
@@ -2996,8 +2022,6 @@ export function finalizeCompositeLabRedistribution() {
             return Number.isFinite(fallback) && fallback > DENSITY_EPSILON ? fallback : 0;
         };
 
-        const useEqualWeighting = weightingMode === COMPOSITE_WEIGHTING_MODES.EQUAL;
-
         const shareInputs = new Map();
         if (densityShareMap) {
             channelInfo.forEach((info, name) => {
@@ -3005,12 +2029,8 @@ export function finalizeCompositeLabRedistribution() {
                     ? clamp01(densityShareMap[name])
                     : 0;
                 const fallbackShare = info.share || 0;
-                const useHighlightFallback = highlightGuardEnabled &&
-                    info.normalized <= HIGHLIGHT_DENSITY_NORMALIZED_THRESHOLD;
                 const preferredShare = getPreferredShare(info);
-                if (useHighlightFallback) {
-                    shareWeight = fallbackShare > 0 ? fallbackShare : preferredShare;
-                } else if (shareWeight <= DENSITY_EPSILON) {
+                if (shareWeight <= DENSITY_EPSILON) {
                     shareWeight = preferredShare > DENSITY_EPSILON ? preferredShare : fallbackShare;
                 }
                 shareInputs.set(name, shareWeight);
@@ -3021,38 +2041,12 @@ export function finalizeCompositeLabRedistribution() {
             });
         }
 
-        const candidateNames = [];
         const channelShareState = new Map();
 
         channelInfo.forEach((info, name) => {
-            const baselineNormalized = normalizedBaselineByChannel.get(name)?.[i] || 0;
-            let multiplier = weightingMode === COMPOSITE_WEIGHTING_MODES.NORMALIZED
-                ? 1
-                : computeRegionMultiplier(name, i);
-            const orderIndex = orderIndexByChannel.get(name);
             const peakLocked = peakCompleted.get(name);
+            const multiplier = peakLocked ? 1 : 0;
             info.lockPositive = !!peakLocked;
-            if (useEqualWeighting && multiplier <= DENSITY_EPSILON) {
-                const hasBaselinePresence = baselineNormalized > DENSITY_EPSILON;
-                const hasHeadroom = info.headroomNormalized > DENSITY_EPSILON;
-                if (hasBaselinePresence && hasHeadroom && !peakLocked) {
-                    multiplier = 1;
-                }
-            }
-
-            if (weightingMode !== COMPOSITE_WEIGHTING_MODES.NORMALIZED && !peakLocked && orderIndex != null) {
-                if (orderIndex < activeOrderIndex) {
-                    multiplier = 0;
-                } else if (orderIndex === activeOrderIndex) {
-                    // keep multiplier as-is
-                } else if (orderIndex === activeOrderIndex + 1 && multiplier > REGION_SECONDARY_SCALE) {
-                    // allow transitional contribution
-                } else {
-                    multiplier = 0;
-                }
-            } else if (!peakLocked) {
-                multiplier = 0;
-            }
 
             const inputShare = shareInputs.get(name) ?? 0;
             const fallbackShare = getPreferredShare(info);
@@ -3061,25 +2055,12 @@ export function finalizeCompositeLabRedistribution() {
                 : false;
             const preferredShare = inputShare > DENSITY_EPSILON ? inputShare
                 : (fallbackShare > DENSITY_EPSILON ? fallbackShare : 0);
-            const isCandidate = multiplier > DENSITY_EPSILON;
-            if (isCandidate) {
-                candidateNames.push(name);
-            }
-            const allowNegativeFallback = weightingMode === COMPOSITE_WEIGHTING_MODES.NORMALIZED
-                ? true
-                : (multiplier > DENSITY_EPSILON || peakLocked);
-
             channelShareState.set(name, {
                 multiplier,
                 preferredShare,
-                allowNegativeFallback,
-                isCandidate,
                 manualOverride
             });
         });
-
-        const candidateSet = new Set(candidateNames);
-        const equalShare = candidateNames.length ? 1 / candidateNames.length : 0;
 
         channelInfo.forEach((info, name) => {
             const state = channelShareState.get(name);
@@ -3089,26 +2070,23 @@ export function finalizeCompositeLabRedistribution() {
                 info.allowNegativeFallback = false;
                 return;
             }
-            const { multiplier, preferredShare, allowNegativeFallback, isCandidate } = state;
+            const { multiplier, preferredShare } = state;
             if (multiplier <= DENSITY_EPSILON) {
                 info.densityShare = 0;
                 info.regionShareOverride = false;
-                info.allowNegativeFallback = allowNegativeFallback;
+                info.allowNegativeFallback = true;
                 return;
             }
             const baseShare = preferredShare > DENSITY_EPSILON ? preferredShare : getPreferredShare(info);
-            const shareValue = useEqualWeighting && isCandidate && candidateSet.has(name)
-                ? equalShare
-                : baseShare;
-            const weightedShare = shareValue * multiplier;
+            const weightedShare = baseShare * multiplier;
             if (weightedShare > DENSITY_EPSILON) {
                 info.densityShare = weightedShare;
                 info.regionShareOverride = true;
-                info.allowNegativeFallback = weightingMode === COMPOSITE_WEIGHTING_MODES.NORMALIZED ? true : false;
+                info.allowNegativeFallback = true;
             } else {
                 info.densityShare = 0;
                 info.regionShareOverride = false;
-                info.allowNegativeFallback = allowNegativeFallback;
+                info.allowNegativeFallback = true;
             }
         });
 
@@ -3268,9 +2246,6 @@ export function finalizeCompositeLabRedistribution() {
             }
         }
 
-        if (analysisOnly) {
-            deltaDensity = 0;
-        }
         if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
             console.log('[deltaCheck.after]', { sample: i, deltaDensity });
         }
@@ -3343,12 +2318,11 @@ export function finalizeCompositeLabRedistribution() {
             info.pendingShadowBlendProgress = undefined;
             info.shadowBlendFromChannel = undefined;
         });
-        if (weightingMode === COMPOSITE_WEIGHTING_MODES.NORMALIZED) {
-            const blendTracker = ensureLadderBlendTracker();
-            const shadowTracker = ensureShadowBlendTracker();
-            const positiveDeltaRequest = deltaDensity > DENSITY_EPSILON;
-            const negativeDeltaRequest = deltaDensity < -DENSITY_EPSILON;
-            if (positiveDeltaRequest) {
+        const blendTracker = ensureLadderBlendTracker();
+        const shadowTracker = ensureShadowBlendTracker();
+        const positiveDeltaRequest = deltaDensity > DENSITY_EPSILON;
+        const negativeDeltaRequest = deltaDensity < -DENSITY_EPSILON;
+        if (positiveDeltaRequest) {
                 shadowTracker.clear();
                 const activeChannels = new Set();
                 for (let idxLadder = 1; idxLadder < densityLadder.length; idxLadder += 1) {
@@ -3451,7 +2425,7 @@ export function finalizeCompositeLabRedistribution() {
                         });
                     }
                 });
-            } else if (negativeDeltaRequest) {
+        } else if (negativeDeltaRequest) {
                 blendTracker.clear();
                 const activeShadowChannels = new Set();
                 for (let idxLadder = densityLadder.length - 2; idxLadder >= 0; idxLadder -= 1) {
@@ -3499,13 +2473,9 @@ export function finalizeCompositeLabRedistribution() {
                         shadowTracker.delete(channelName);
                     }
                 });
-            } else {
-                blendTracker.clear();
-                shadowTracker.clear();
-            }
         } else {
-            clearLadderBlendTracker();
-            clearShadowBlendTracker();
+            blendTracker.clear();
+            shadowTracker.clear();
         }
 
         const inputPercent = (i / DENOM) * 100;
@@ -3615,8 +2585,7 @@ export function finalizeCompositeLabRedistribution() {
             const baseReserve = Number.isFinite(info.frontReserveBase) ? Math.max(0, info.frontReserveBase) : 0;
             const appliedReserveTotal = Number.isFinite(info.frontReserveApplied) ? Math.max(0, info.frontReserveApplied) : 0;
             const remainingReserve = Math.max(0, baseReserve - appliedReserveTotal);
-            if (!context.allowReserveRelease &&
-                weightingMode === COMPOSITE_WEIGHTING_MODES.NORMALIZED) {
+            if (!context.allowReserveRelease) {
                 const darkerHeadroom = Number.isFinite(info.frontReserveDarkerHeadroom)
                     ? info.frontReserveDarkerHeadroom
                     : 0;
@@ -3654,7 +2623,6 @@ export function finalizeCompositeLabRedistribution() {
 
             let reserveReleaseScale = 1;
             if (!context.allowReserveRelease &&
-                weightingMode === COMPOSITE_WEIGHTING_MODES.NORMALIZED &&
                 baseReserve > DENSITY_EPSILON &&
                 previewHeadroom <= (baseReserve * FRONT_RESERVE_TAPER_START_FACTOR) + DENSITY_EPSILON) {
                 const startHeadroom = baseReserve * FRONT_RESERVE_TAPER_START_FACTOR;
@@ -3724,16 +2692,6 @@ export function finalizeCompositeLabRedistribution() {
         } else {
             info.capacityBeforeNormalized = Math.max(0, info.normalized);
             clampedDelta = Math.max(clampedDelta, -info.normalized);
-            if (weightingMode !== COMPOSITE_WEIGHTING_MODES.NORMALIZED) {
-                const baselineNormalized = normalizedBaselineByChannel.get(name)?.[i] || 0;
-                if (baselineNormalized > DENSITY_EPSILON) {
-                    const minNormalized = Math.min(baselineNormalized, baselineNormalized * ISOLATED_BASELINE_RETENTION);
-                    if (info.normalized > minNormalized + DENSITY_EPSILON) {
-                        const minDelta = minNormalized - info.normalized;
-                        clampedDelta = Math.max(clampedDelta, minDelta);
-                    }
-                }
-            }
         }
 
             if (Math.abs(clampedDelta) <= DENSITY_EPSILON) {
@@ -3746,7 +2704,7 @@ export function finalizeCompositeLabRedistribution() {
                         ? Math.max(0, shadowBlendRemaining)
                         : 0;
                 }
-                if (clampedDelta > 0 && weightingMode === COMPOSITE_WEIGHTING_MODES.NORMALIZED &&
+                if (clampedDelta > 0 &&
                     !context.allowReserveRelease && Number.isFinite(info.frontReserveBase)) {
                     const baseReserve = Math.max(0, Number(info.frontReserveBase) || 0);
                     const appliedReserveTotal = Math.max(0, Number(info.frontReserveApplied) || 0);
@@ -3761,8 +2719,7 @@ export function finalizeCompositeLabRedistribution() {
 
             const prevNormalized = info.normalized;
             let newNormalized = clamp01(prevNormalized + clampedDelta);
-            if (perSampleCeilingEnabled && Number.isFinite(thresholdNormalized) &&
-                newNormalized > thresholdNormalized + DENSITY_EPSILON) {
+            if (Number.isFinite(thresholdNormalized) && newNormalized > thresholdNormalized + DENSITY_EPSILON) {
                 newNormalized = thresholdNormalized;
                 truncatedByThreshold = true;
             }
@@ -3790,7 +2747,7 @@ export function finalizeCompositeLabRedistribution() {
                 info.shadowBlendAppliedNormalized = (info.shadowBlendAppliedNormalized || 0) + appliedMagnitude;
             }
             info.headroom = Math.max(0, info.endValue - newValue);
-            if (perSampleCeilingEnabled && Number.isFinite(thresholdNormalized)) {
+            if (Number.isFinite(thresholdNormalized)) {
                 info.headroomNormalized = Math.max(0, thresholdNormalized - info.normalized);
             } else {
                 info.headroomNormalized = info.endValue > 0 ? info.headroom / info.endValue : 0;
@@ -3856,7 +2813,7 @@ export function finalizeCompositeLabRedistribution() {
             info.reserveAllowanceRemaining = Math.min(allowanceRemainingValue, postReserveMeta.allowance);
             info.blendLimited = truncatedByBlend;
 
-            if (perSampleCeilingEnabled && desiredDelta > 0) {
+            if (desiredDelta > 0) {
                 const normalizedApplied = info.normalized - prevNormalized;
                 const desiredNormalizedAfter = clamp01(prevNormalized + desiredDelta);
                 const overflowNormalized = Math.max(0, desiredNormalizedAfter - info.normalized);
@@ -3881,62 +2838,6 @@ export function finalizeCompositeLabRedistribution() {
                         floorNormalized: info.coverageFloorNormalized ?? null
                     });
                     coverageClampEvents.set(name, list);
-                    if (smoothingContext && smoothingContext.perSampleCeiling === true) {
-                        const clampMap = smoothingContext.clampIndicesByChannel instanceof Map
-                            ? smoothingContext.clampIndicesByChannel
-                            : null;
-                        if (clampMap) {
-                            if (smoothingContext.channelHistory instanceof Map) {
-                                const history = smoothingContext.channelHistory.get(name);
-                                if (Array.isArray(history)) {
-                                    const lastSeenIndex = history[history.length - 1];
-                                    if (lastSeenIndex !== i) {
-                                        history.push(i);
-                                    }
-                                } else {
-                                    smoothingContext.channelHistory.set(name, [i]);
-                                }
-                            }
-                            const indices = clampMap.get(name);
-                            if (Array.isArray(indices)) {
-                                if (indices[indices.length - 1] !== i) {
-                                    indices.push(i);
-                                }
-                            } else {
-                                clampMap.set(name, [i]);
-                            }
-                            let addedSyntheticWindow = false;
-                            const syntheticMap = smoothingContext.syntheticClampWindows instanceof Map
-                                ? smoothingContext.syntheticClampWindows
-                                : null;
-                            if (syntheticMap && !syntheticMap.has(name)) {
-                                syntheticMap.set(name, i);
-                                addedSyntheticWindow = true;
-                            }
-                            if (addedSyntheticWindow && Array.isArray(smoothingContext.windows)) {
-                                const record = Array.isArray(smoothingContext.sampleRecords)
-                                    ? smoothingContext.sampleRecords[i]
-                                    : null;
-                                const windowId = Number.isFinite(smoothingContext.nextWindowId)
-                                    ? smoothingContext.nextWindowId++
-                                    : 0;
-                                const inputValue = record && Number.isFinite(record.inputPercent)
-                                    ? record.inputPercent
-                                    : (i / DENOM) * 100;
-                                smoothingContext.windows.push({
-                                    id: windowId,
-                                    outgoingChannel: name,
-                                    incomingChannels: [],
-                                    startIndex: i,
-                                    endIndex: i,
-                                    inputStart: inputValue,
-                                    inputEnd: inputValue,
-                                    forced: true,
-                                    synthetic: true
-                                });
-                            }
-                        }
-                    }
                 }
             }
 
@@ -3951,13 +2852,6 @@ export function finalizeCompositeLabRedistribution() {
 
             return weight * (info.normalized - prevNormalized);
         };
-
-        const preRemainingByChannel = smoothingContext ? {} : null;
-        if (preRemainingByChannel) {
-            channelInfo.forEach((_, name) => {
-                preRemainingByChannel[name] = Number(remainingByChannel[name]) || 0;
-            });
-        }
 
         let ladderTraceSnapshot = null;
 
@@ -4029,7 +2923,7 @@ export function finalizeCompositeLabRedistribution() {
                     info.capacityBeforeNormalized = capacity;
                 }
                 if (capacity <= DENSITY_EPSILON) return;
-                    if (!manualOverride && weightingMode === COMPOSITE_WEIGHTING_MODES.NORMALIZED && ladderIndexByChannel.has(name)) {
+                    if (!manualOverride && ladderIndexByChannel.has(name)) {
                         const ladderIndex = ladderIndexByChannel.get(name);
                         if (positive && ladderIndex != null && ladderIndex > 0) {
                             let lighterBlocking = null;
@@ -4045,14 +2939,12 @@ export function finalizeCompositeLabRedistribution() {
                                 }
                             }
                             if (lighterBlocking) {
-                                if (captureDebug) {
-                                    localTrace.blocked.push({
-                                        channel: name,
-                                        reason: 'lighter-headroom',
-                                        blockedBy: lighterBlocking.lighterName,
-                                        headroom: lighterBlocking.lighterHeadroom
-                                    });
-                                }
+                                localTrace.blocked.push({
+                                    channel: name,
+                                    reason: 'lighter-headroom',
+                                    blockedBy: lighterBlocking.lighterName,
+                                    headroom: lighterBlocking.lighterHeadroom
+                                });
                                 return;
                             }
                         } else if (!positive && ladderIndex != null && ladderIndex < densityLadder.length - 1) {
@@ -4069,14 +2961,12 @@ export function finalizeCompositeLabRedistribution() {
                                 }
                             }
                             if (heavierBlocking) {
-                                if (captureDebug) {
-                                    localTrace.blocked.push({
-                                        channel: name,
-                                        reason: 'heavier-usage',
-                                        blockedBy: heavierBlocking.heavierName,
-                                        usage: heavierBlocking.heavierUsage
-                                    });
-                                }
+                                localTrace.blocked.push({
+                                    channel: name,
+                                    reason: 'heavier-usage',
+                                    blockedBy: heavierBlocking.heavierName,
+                                    usage: heavierBlocking.heavierUsage
+                                });
                                 return;
                             }
                         }
@@ -4118,7 +3008,7 @@ export function finalizeCompositeLabRedistribution() {
                     break;
                 }
 
-                if (weightingMode === COMPOSITE_WEIGHTING_MODES.NORMALIZED) {
+                {
                     candidates.sort((a, b) => {
                         const idxA = Number.isFinite(a.ladderIndex) ? a.ladderIndex : (positive ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY);
                         const idxB = Number.isFinite(b.ladderIndex) ? b.ladderIndex : (positive ? Number.POSITIVE_INFINITY : Number.NEGATIVE_INFINITY);
@@ -4163,15 +3053,13 @@ export function finalizeCompositeLabRedistribution() {
                         contributions[name] = (contributions[name] || 0) + normalizedApplied;
                         remaining -= contribution;
                         appliedThisRound += Math.abs(contribution);
-                        if (captureDebug) {
-                            localTrace.sequence.push({
-                                channel: name,
-                                ladderIndex: Number.isFinite(entry.ladderIndex) ? entry.ladderIndex : null,
-                                normalizedApplied,
-                                iteration: iter,
-                                weight
-                            });
-                        }
+                        localTrace.sequence.push({
+                            channel: name,
+                            ladderIndex: Number.isFinite(entry.ladderIndex) ? entry.ladderIndex : null,
+                            normalizedApplied,
+                            iteration: iter,
+                            weight
+                        });
                     }
                 });
 
@@ -4183,16 +3071,14 @@ export function finalizeCompositeLabRedistribution() {
                 }
             }
 
-            if (captureDebug) {
-                localTrace.remaining = remaining;
-            }
-            ladderTraceSnapshot = captureDebug ? localTrace : null;
+            localTrace.remaining = remaining;
+            ladderTraceSnapshot = localTrace;
             return contributions;
         };
 
         const contributions = distributeDensity(deltaDensity);
 
-        if (weightingMode === COMPOSITE_WEIGHTING_MODES.NORMALIZED) {
+        {
             const blendTracker = ensureLadderBlendTracker();
             blendTracker.forEach((state, channelName) => {
                 if (!state || state.active !== true) {
@@ -4218,7 +3104,7 @@ export function finalizeCompositeLabRedistribution() {
             });
         }
 
-        if (weightingMode === COMPOSITE_WEIGHTING_MODES.NORMALIZED) {
+        {
             const shadowTracker = ensureShadowBlendTracker();
             if (deltaDensity < -DENSITY_EPSILON) {
                 shadowTracker.forEach((state, channelName) => {
@@ -4256,7 +3142,7 @@ export function finalizeCompositeLabRedistribution() {
             }
         }
 
-        if (weightingMode === COMPOSITE_WEIGHTING_MODES.NORMALIZED) {
+        {
             const blendTracker = ensureLadderBlendTracker();
             blendTracker.forEach((state, channelName) => {
                 if (!state || state.active !== true) {
@@ -4327,28 +3213,7 @@ export function finalizeCompositeLabRedistribution() {
             });
         }
 
-        if (smoothingContext) {
-            recordSampleForSmoothing(smoothingContext, i, deltaDensity, contributions, weightMap);
-        }
-
-        if (weightingMode !== COMPOSITE_WEIGHTING_MODES.NORMALIZED) {
-            channelInfo.forEach((info, name) => {
-                if (!info || !info.curve) return;
-                const baselineValue = Array.isArray(baselineSnapshot[name]) ? baselineSnapshot[name][i] : null;
-                if (!Number.isFinite(baselineValue) || baselineValue <= 0) return;
-                const minValue = Math.max(0, Math.round(baselineValue * ISOLATED_BASELINE_RETENTION));
-                if (info.curve[i] < minValue) {
-                    const clamped = Math.min(info.endValue > 0 ? info.endValue : TOTAL, minValue);
-                    info.curve[i] = clamped;
-                    info.current = clamped;
-                    info.normalized = info.endValue > 0 ? clamped / info.endValue : 0;
-                    info.headroom = Math.max(0, (info.endValue > 0 ? info.endValue : TOTAL) - clamped);
-                    info.headroomNormalized = info.endValue > 0 ? info.headroom / info.endValue : 0;
-                }
-            });
-        }
-
-        if (captureDebug && debugSnapshots) {
+        if (debugSnapshots) {
             const ladderSelection = [];
             if (contributions && typeof contributions === 'object') {
                 Object.entries(contributions).forEach(([name, normalized]) => {
@@ -4438,7 +3303,6 @@ export function finalizeCompositeLabRedistribution() {
                     densityContributionBefore: baselineContribution,
                     densityContributionAfter,
                     densityContributionDelta: densityContributionAfter - baselineContribution,
-                    momentum: info.momentum || 0,
                     ladderIndex,
                     ladderHeadroom: headroomAfter,
                     coverageFloorNormalized: info.coverageFloorNormalized ?? 0,
@@ -4483,8 +3347,7 @@ export function finalizeCompositeLabRedistribution() {
                 baselineInk: baselineInkTotal,
                 correctedInk,
                 inkDelta: correctedInk - baselineInkTotal,
-                perChannel: perChannelDebug,
-                weightingMode
+                perChannel: perChannelDebug
             };
             debugSnapshots[i].ladderSelection = ladderSelection;
             debugSnapshots[i].ladderBlocked = ladderBlocked;
@@ -4512,24 +3375,6 @@ export function finalizeCompositeLabRedistribution() {
                         }))
                         : []
                 };
-            }
-                const smoothingForSample = Array.isArray(densityProfile?.smoothingWindows)
-                    ? densityProfile.smoothingWindows.map((entry) => (
-                        entry ? {
-                            id: entry.id ?? null,
-                            outgoingChannel: entry.outgoingChannel ?? null,
-                            incomingChannels: Array.isArray(entry.incomingChannels) ? entry.incomingChannels.slice() : [],
-                            position: entry.position ?? entry.t ?? 0,
-                            outFactor: entry.outFactor ?? null,
-                            forced: entry.forced === true
-                        } : null
-                    )).filter(Boolean)
-                    : [];
-            if (smoothingForSample.length) {
-                debugSnapshots[i].smoothingWindows = smoothingForSample;
-            }
-            if (debugSelectionIndex == null && Math.abs(deltaDensity || 0) > 1e-4) {
-                debugSelectionIndex = i;
             }
         }
 
@@ -4615,12 +3460,12 @@ export function finalizeCompositeLabRedistribution() {
     let slopeLimiterNormalized = null;
     const normalizedAggregate = {};
     let limiterChannelList = channels.slice();
-    if (!autoRaiseInProgress && isSlopeKernelSmoothingEnabled()) {
+    if (!autoRaiseInProgress) {
         slopeKernelResult = applySnapshotSlopeKernel(correctedCurves, {
             channelNames: channels,
             endValues,
             thresholdPercent: SNAPSHOT_FLAG_THRESHOLD_PERCENT,
-            debugSnapshots: captureDebug ? debugSnapshots : null
+            debugSnapshots
         });
         if (slopeKernelResult && slopeKernelResult.normalizedSeriesByChannel) {
             Object.assign(normalizedAggregate, slopeKernelResult.normalizedSeriesByChannel);
@@ -4644,7 +3489,7 @@ export function finalizeCompositeLabRedistribution() {
             Object.assign(normalizedAggregate, slopeLimiterNormalized);
         }
     }
-    if (captureDebug && debugSnapshots && Object.keys(normalizedAggregate).length) {
+    if (Object.keys(normalizedAggregate).length) {
         syncSnapshotsWithSlopeLimiter(debugSnapshots, {
             channelNames: channels,
             normalizedSeriesByChannel: normalizedAggregate,
@@ -4775,7 +3620,7 @@ export function finalizeCompositeLabRedistribution() {
         debugSummary.coverageClampEvents = clampSnapshot;
     }
 
-    if (captureDebug) {
+    {
         const summaryPayload = debugSummary ? { ...debugSummary } : {};
         if (summaryPayload.channelMaxima && typeof summaryPayload.channelMaxima === 'object') {
             Object.keys(summaryPayload.channelMaxima).forEach((name) => {
@@ -4813,26 +3658,15 @@ export function finalizeCompositeLabRedistribution() {
         const sessionPayload = {
             summary: summaryPayload,
             snapshots: snapshotsPayload,
-            selectionIndex: debugSelectionIndex,
             snapshotFlags,
             flags: snapshotFlags
         };
-        compositeLabSession.lastDebugSession = sessionPayload;
         storeCompositeDebugSession(sessionPayload);
-        if (typeof globalScope === 'object' && globalScope) {
-            globalScope.__COMPOSITE_DEBUG_CACHE__ = sessionPayload;
-        }
         if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
             console.log('[COMPOSITE] debug payload ready', {
                 summaryKeys: Object.keys(summaryPayload),
                 snapshotCount: snapshotsPayload.filter((entry) => !!entry).length
             });
-        }
-    } else {
-        compositeLabSession.lastDebugSession = null;
-        storeCompositeDebugSession(null);
-        if (typeof globalScope === 'object' && globalScope && Object.prototype.hasOwnProperty.call(globalScope, '__COMPOSITE_DEBUG_CACHE__')) {
-            globalScope.__COMPOSITE_DEBUG_CACHE__ = null;
         }
     }
 
@@ -4904,30 +3738,6 @@ export function finalizeCompositeLabRedistribution() {
     };
 }
 
-export function replayCompositeDebugSessionFromCache() {
-    if (!isCompositeDebugEnabled()) {
-        return false;
-    }
-    const payload = compositeLabSession.lastDebugSession;
-    if (!payload || !payload.summary || !Array.isArray(payload.snapshots)) {
-        return false;
-    }
-    storeCompositeDebugSession(payload);
-    return true;
-}
-
-export function getCompositeDebugSessionCache() {
-    const payload = compositeLabSession.lastDebugSession;
-    if (!payload || !payload.summary || !Array.isArray(payload.snapshots)) {
-        return null;
-    }
-    return {
-        summary: payload.summary,
-        snapshotCount: payload.snapshots.filter((entry) => !!entry).length,
-        selectionIndex: payload.selectionIndex ?? null
-    };
-}
-
 export function getCompositeLabWarnings() {
     return compositeLabSession.warnings ? compositeLabSession.warnings.slice() : [];
 }
@@ -4960,7 +3770,6 @@ export function estimateCompositeDensity(channelNames, overrides = null, options
         compositeLabSession.endValues,
         compositeLabSession.normalizedEntry,
         {
-            weightingMode: compositeLabSession.weightingMode,
             smoothingPercent: compositeLabSession.smoothingPercent,
             manualDensityOverrides: effectiveOverrides || undefined,
             autoComputeEnabled: options.autoComputeEnabled !== false
@@ -5032,15 +3841,12 @@ export function getCompositeDensityProfile(inputPercent = 0) {
         endValues[name] = maxVal;
     });
 
-    const fallbackMode = getCompositeWeightingMode();
-
     const densityContext = computeCompositeDensityWeights(
         channelNames,
         correctedCurves,
         endValues,
         normalizedEntry,
         {
-            weightingMode: fallbackMode,
             smoothingPercent: normalizedEntry?.previewSmoothingPercent ?? getLabSmoothingPercent()
         }
     );
@@ -5891,30 +4697,6 @@ export function applyAutoEndpointAdjustments(values, endValue, channelName, smar
     });
 }
 
-// Memoization cache for make256 to avoid redundant curve generation
-const make256Cache = new Map();
-let make256CacheVersion = 0;
-
-/**
- * Invalidate the make256 cache - call when any state affecting curves changes:
- * - LAB data loaded/cleared
- * - Smart curve edited
- * - Feature flag changed
- * - End values changed
- */
-export function invalidateMake256Cache() {
-    make256Cache.clear();
-    make256CacheVersion += 1;
-}
-
-function getMake256CacheKey(endValue, channelName, applyLinearization, options) {
-    // Include version to auto-invalidate on state changes
-    const smoothing = options?.smoothingPercent ?? 0;
-    const forceSmartApplied = options?.forceSmartApplied ?? null;
-    const smartState = isSmartCurve(channelName) ? 'smart' : 'linear';
-    return `v${make256CacheVersion}:${channelName}:${endValue}:${applyLinearization}:${smoothing}:${forceSmartApplied}:${smartState}`;
-}
-
 /**
  * Main curve generation function - make256
  * Generates a 256-point curve for a channel with all corrections applied
@@ -5927,13 +4709,6 @@ export function make256(endValue, channelName, applyLinearization = false, optio
     try {
         if (endValue === 0) {
             return new Array(CURVE_RESOLUTION).fill(0);
-        }
-
-        // Check cache first
-        const cacheKey = getMake256CacheKey(endValue, channelName, applyLinearization, options);
-        const cached = make256Cache.get(cacheKey);
-        if (cached) {
-            return cached.slice(); // Return copy to prevent mutation
         }
 
         const debugEnabled = typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS;
@@ -6095,9 +4870,6 @@ export function make256(endValue, channelName, applyLinearization = false, optio
                 }
             }
         }
-
-        // Store in cache before returning
-        make256Cache.set(cacheKey, arr.slice()); // Store copy
 
         return arr;
 
@@ -6313,18 +5085,6 @@ export function apply1DLUTFixedDomain(values, lutOrData, domainMin = 0, domainMa
         const start = typeof lutDomainMin === 'number' ? lutDomainMin : 0;
         const span = Math.abs(domainSpan) > 1e-9 ? domainSpan : 1;
         const epsilon = 1e-6;
-
-        // Legacy mode: direct LUT interpolation without gain-based correction
-        if (useLegacyLUTMapping) {
-            const result = values.map((value) => {
-                const baseValue = Number(value) || 0;
-                const normalized = maxOutput > 0 ? baseValue / maxOutput : 0;
-                const t = start + clamp01(normalized) * span;
-                const lutValue = clamp01(interpolationFunction(t));
-                return Math.round(lutValue * maxOutput);
-            });
-            return preserveLeadingInk(result);
-        }
 
         // Measurement-based entries (LAB/CGATS/manual) represent an input-domain remap (target -> required input).
         // Applying them as multiplicative gains can produce non-monotone results (and forced clamps create flat plateaus).
@@ -6769,7 +5529,6 @@ export function buildFile() {
  */
 registerDebugNamespace('processingPipeline', {
     make256,
-    invalidateMake256Cache,
     apply1DLUT,
     apply1DLUTFixedDomain,
     apply1DLUTActiveRange,
@@ -6780,13 +5539,8 @@ registerDebugNamespace('processingPipeline', {
     buildFile,
     buildBaseCurve,
     applyPerChannelLinearizationStep,
-    applyGlobalLinearizationStep,
-    replayCompositeDebugSessionFromCache,
-    getCompositeDebugSessionCache,
-    // Feature flag controls
-    setLegacyLUTMappingEnabled,
-    isLegacyLUTMappingEnabled
+    applyGlobalLinearizationStep
 }, {
     exposeOnWindow: typeof window !== 'undefined',
-    windowAliases: ['make256', 'invalidateMake256Cache', 'apply1DLUT', 'buildFile', 'buildBaseCurve']
+    windowAliases: ['make256', 'apply1DLUT', 'buildFile', 'buildBaseCurve']
 });

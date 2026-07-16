@@ -112,7 +112,7 @@
 | Format | Parser | Purpose |
 |--------|--------|---------|
 | `.quad` | `src/js/data/quad-parser.js` | QuadToneRIP curve definitions |
-| `.cube` | `src/js/data/cube-parser.js` | 1D/3D LUT files for linearization |
+| `.cube` | `src/js/parsers/file-parsers.js` | 1D/3D LUT files for linearization |
 | `.acv` | Photoshop curves (EDN workflow) | EDN linearization reference |
 | `.txt` (LAB) | `src/js/data/lab-parser.js` | ColorMuse/spectrophotometer measurements |
 | `.ti3` (CGATS) | `src/js/data/cgats-parser.js` | Argyll CMS measurement data |

@@ -120,7 +120,6 @@ quadGEN/
   - **Parsers:**
     - `quad-parser.js` - Parse .quad files
     - `lab-parser.js` - Parse LAB measurement data, build interpolators
-    - `cube-parser.js` - Parse 1D/3D LUT files
     - `cgats-parser.js` - CGATS .ti3 measurement format
   - **Utilities:**
     - `linearization-utils.js` - LinearizationState, per-channel & global corrections

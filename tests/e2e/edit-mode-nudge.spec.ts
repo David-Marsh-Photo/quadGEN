@@ -7,7 +7,7 @@ test.describe('Edit Mode nudges', () => {
     const indexUrl = pathToFileURL(resolve('index.html')).href;
     await page.goto(indexUrl);
 
-    await page.waitForSelector('#globalLinearizationBtn');
+    await page.waitForSelector('#globalLinearizationBtn', { state: 'attached' });
 
     const manualLabPath = resolve('testdata/Manual-LAB-Data.txt');
     await page.setInputFiles('input#linearizationFile', manualLabPath);
@@ -75,7 +75,7 @@ test.describe('Edit Mode nudges', () => {
     const indexUrl = pathToFileURL(resolve('index.html')).href;
     await page.goto(indexUrl);
 
-    await page.waitForSelector('#globalLinearizationBtn');
+    await page.waitForSelector('#globalLinearizationBtn', { state: 'attached' });
 
     const quadPath = resolve('data/P800_K37_C26_LK25_V1.quad');
     await page.setInputFiles('input#quadFile', quadPath);

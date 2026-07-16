@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { resolve } from 'path';
 import { pathToFileURL } from 'url';
+import { openGlobalCorrectionTab } from '../utils/history-helpers';
 
 test.describe('Intent remap idempotency', () => {
   test('applying the same intent twice does not compound the curve', async ({ page }) => {
@@ -19,6 +20,7 @@ test.describe('Intent remap idempotency', () => {
     });
     expect(initialCurve.length).toBeGreaterThan(0);
 
+    await openGlobalCorrectionTab(page);
     await page.locator('#contrastIntentSelect').selectOption('gamma18');
 
     await page.click('#applyIntentToQuadBtn');

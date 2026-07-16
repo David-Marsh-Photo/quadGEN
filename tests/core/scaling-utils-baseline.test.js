@@ -3,26 +3,9 @@ import { JSDOM } from 'jsdom';
 
 const mockChannelRows = {};
 const mockRescaleCalls = [];
-const stateStore = new Map();
 const stateManagerStub = {
-  set: vi.fn((path, value) => {
-    stateStore.set(path, value);
-  }),
-  get: vi.fn((path) => stateStore.get(path)),
-  setChannelValue: vi.fn(),
-  setPrinter: vi.fn(),
-  batch: vi.fn((fn) => {
-    if (typeof fn === 'function') {
-      fn();
-    }
-  }),
-  createSelector: vi.fn((paths, computeFn) => {
-    const deps = Array.isArray(paths) ? paths : [paths];
-    return () => {
-      const values = deps.map((dep) => stateStore.get(dep));
-      return computeFn(...values);
-    };
-  })
+  set: vi.fn(),
+  get: vi.fn()
 };
 const historyStub = {
   recordBatchAction: vi.fn()
@@ -103,13 +86,8 @@ describe('scaling-utils baseline cache behavior', () => {
     vi.resetModules();
     mockRescaleCalls.length = 0;
     Object.keys(mockChannelRows).forEach((key) => { delete mockChannelRows[key]; });
-    stateStore.clear();
     stateManagerStub.set.mockClear();
     stateManagerStub.get.mockClear();
-    stateManagerStub.setChannelValue.mockClear();
-    stateManagerStub.setPrinter.mockClear();
-    stateManagerStub.batch.mockClear();
-    stateManagerStub.createSelector.mockClear();
     historyStub.recordBatchAction.mockClear();
 
     dom = new JSDOM('<!doctype html><html><body></body></html>');
