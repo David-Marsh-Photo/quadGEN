@@ -4,37 +4,57 @@ Purpose
 - Describe how quadGEN parses and uses .cube LUT files (1D and 3D) for linearization/correction.
 
 Supported Variants
-- 1D LUT (.cube with `LUT_1D_SIZE`) – treated as a single-channel tone mapping.
+- 1D LUT (`LUT_1D_SIZE`, or a documented headerless 2–256-row form) – treated as a single-channel tone mapping.
 - 3D LUT (.cube with `LUT_3D_SIZE`) – neutral axis extraction (R=G=B) via trilinear interpolation.
 
 General Parsing Rules
 - Lines starting with `#` are comments and ignored.
-- `TITLE` lines are ignored.
-- Values are read as whitespace-separated floats.
+- One optional quoted `TITLE` declaration is ignored after validation. It and
+  all size/domain declarations must precede the data table; malformed,
+  duplicate, or late declarations are rejected.
+- Data values are strict whitespace-separated finite floats. A malformed or
+  non-finite component rejects the whole row; components are never filtered or
+  shifted into a different column.
 - DOMAIN handling (optional):
-  - `DOMAIN_MIN a [b c]` and `DOMAIN_MAX x [y z]` accepted; quadGEN uses the first value for 1D and all three for 3D normalization.
+  - `DOMAIN_MIN` and `DOMAIN_MAX` each accept either one scalar or three RGB
+    values. Both declarations must use matching arity.
+  - Scalar domains are broadcast across RGB. Every declared component must be
+    finite, and each maximum must be strictly greater than its corresponding
+    minimum. Missing declarations default to `[0,0,0]` and `[1,1,1]`; invalid
+    declarations are rejected rather than replaced.
+  - 1D tone mapping uses the first component. 3D normalization uses all three
+    components independently.
 
 1D LUT Details
 - Headers:
-  - `LUT_1D_SIZE N` (optional but recommended). If present, quadGEN trims to N samples.
+  - `LUT_1D_SIZE N` is optional but recommended. If present, the file must
+    contain exactly `N` rows; short or long declarations are rejected.
+  - Declared 1D LUTs must contain exactly 2–65,536 rows. The ambiguous
+    headerless compatibility form is capped at 2–256 rows; 3D interpretation
+    always requires an explicit `LUT_3D_SIZE` declaration.
   - Optional `DOMAIN_MIN/DOMAIN_MAX` (defaults to 0.0 / 1.0 when absent).
 - Data lines:
-  - Accepts 1–3 floats per line; the first value is used.
+  - Accepts 1–3 finite floats per line; the first value is used only after every
+    supplied component passes validation.
   - Samples collected in order of appearance.
 - Post-processing (printer-space orientation):
 - Horizontal flip: reverse the input coordinate (index mapping i → 1−i scaled to index).
 - Vertical inversion: sample value v → 1 − v.
 - Monotonic interpolation: quadGEN resamples LUT values with a PCHIP interpolator so smooth, non-decreasing image-space curves stay monotonic after orientation.
 - Output to quadGEN:
-  - `{ domainMin, domainMax, samples, originalSamples, format: '1DLUT' }`
+  - `{ domainMin, domainMax, domainMinRGB, domainMaxRGB, samples, originalSamples, format: '1D LUT' }`
+  - `domainMin/domainMax` retain the first-component scalar contract used by
+    the correction pipeline; the RGB fields preserve the complete declaration.
   - `samples` are normalized floats in [0,1].
 
 3D LUT Details
 - Headers:
-  - `LUT_3D_SIZE N` is required.
+  - `LUT_3D_SIZE N` is required and accepts sizes from 2–256.
   - Optional `DOMAIN_MIN/DOMAIN_MAX` (defaults to 0.0 / 1.0 when absent).
 - Data lines:
-  - Exactly 3 floats per line (R G B) – total lines must equal `N^3`.
+  - Exactly 3 finite floats per line (R G B) – total lines must equal `N^3`.
+  - Entries use standard CUBE red-fastest order: R changes fastest, then G,
+    then B.
 - Neutral axis extraction:
   - For 256 evenly spaced inputs t ∈ [0..1], form RGB=(t,t,t).
   - Use trilinear interpolation within the RGB cube to sample the LUT.
@@ -43,13 +63,22 @@ General Parsing Rules
   - Horizontal flip (reverse input coordinate) and vertical inversion (v → 1−v).
 - Monotonic interpolation: the extracted neutral axis is resampled with the same PCHIP interpolator to avoid cubic overshoot when applying the correction to printer-space ramps.
 - Output to quadGEN:
-  - `{ domainMin, domainMax, samples, is3DLUT: true, lutSize, originalDataPoints }`
+  - `{ domainMin, domainMax, domainMinRGB, domainMaxRGB, samples, is3DLUT: true, lutSize }`
+  - Per-axis RGB domains are applied during trilinear evaluation; the scalar
+    fields remain for downstream correction compatibility.
   - `samples` is a 256-length array of normalized floats.
 
 Edge Handling & Validation
-- If `LUT_3D_SIZE` is missing, parsing fails.
-- For 1D: up to 256 samples are accepted. If more are present without a `LUT_1D_SIZE` header, quadGEN will flag the file as suspicious to avoid misreading a 3D LUT.
-- If `DOMAIN_MIN/MAX` produce invalid ranges, quadGEN defaults to 0.0..1.0.
+- Direct 3D parsing fails when `LUT_3D_SIZE` is missing. The public loader treats
+  an undeclared 2–256-row `.cube` file as the supported headerless 1D form.
+- A file cannot contain both 1D and 3D size declarations.
+- 1D declarations are exact and accept 2–65,536 samples; headerless files are
+  limited to 2–256 samples.
+- 3D data must contain exactly `N³` rows.
+- Duplicate size/domain declarations, malformed rows, non-finite values,
+  mismatched domain arity, and non-ascending domain components are rejected.
+- Lowercase declarations and headerless 1D files follow the same live loader
+  path as uppercase declared files.
 
 Implementation Notes
 - Orientation transforms (flip + invert) align EDN-style LUTs to quadGEN’s printer-space coordinate system.
@@ -94,17 +123,18 @@ TITLE "Example 3D"
 LUT_3D_SIZE 2
 DOMAIN_MIN 0.0 0.0 0.0
 DOMAIN_MAX 1.0 1.0 1.0
-# Order: r in {0,1}, g in {0,1}, b in {0,1} with b fastest
+# Order: r in {0,1}, g in {0,1}, b in {0,1} with r fastest
 0.0 0.0 0.0
-0.0 0.0 1.0
-0.0 1.0 0.0
-0.0 1.0 1.0
 1.0 0.0 0.0
-1.0 0.0 1.0
+0.0 1.0 0.0
 1.0 1.0 0.0
+0.0 0.0 1.0
+1.0 0.0 1.0
+0.0 1.0 1.0
 1.0 1.0 1.0
 ```
 
 Notes
 - The examples above are identity mappings in LUT space. quadGEN will apply printer‑space orientation (reverse + invert) internally after parsing.
-- For 1D, keep `LUT_1D_SIZE` modest; the current parser raises an error for unusually large sample counts to catch format mix‑ups.
+- Declared 1D LUTs may exceed the 256-row headerless safeguard, up to the CUBE
+  limit of 65,536 rows.

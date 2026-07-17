@@ -1,6 +1,6 @@
 # quadGEN Architecture Map
 
-Generated on 2026-07-16T23:40:12.413Z
+Generated on 2026-07-17T00:11:33.162Z
 
 This diagram groups source modules by their primary directory and highlights cross-cluster dependencies.
 

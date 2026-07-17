@@ -4,19 +4,23 @@ Audit date: July 16, 2026
 
 Source: Houston workspace `quadGEN`, session `dev`, session ID `84199578-bdc7-4e8b-96e4-32053ef04c77`, final report event sequence 5490.
 
-> **Post-audit remediation status (July 16, 2026):** Findings 1–3, 5, 7, and 8 are
+> **Post-audit remediation status (July 16, 2026):** Findings 1–3, 5, and 7–9 are
 > resolved for the audited contracts by mandatory PCHIP enforcement, an isolated
 > zero-skip history gate, preflight validation that preserves all prior state
 > when a correction import is rejected, a deterministic network-free portable
 > bundle, complete dialog behavior for the three remaining audited surfaces, and
-> one exact structural parser for editable and reference `.quad` imports.
+> exact structural parsing for `.quad` imports plus declared/domain-conformant
+> 1D and 3D CUBE ingestion.
 > Findings 4 and 6 are operationally contained while Lab Tech remains shelved
-> and its public Worker route remains disabled. Findings 9–10 remain active.
+> and its public Worker route remains disabled. Finding 10 remains active.
 > Credential rotation is intentionally deferred to a separate session.
 
-All ten compound questions resolve to “No,” though several contain healthy subpaths. The highest-risk confirmed defects are the live cubic interpolation fallback, non-atomic correction imports, dormant history tests, false-success Lab Tech results, and non-atomic Worker quotas.
+At audit time, all ten compound questions resolved to “No,” though several
+contained healthy subpaths. The highest-risk confirmed defects were the live
+cubic interpolation fallback, non-atomic correction imports, dormant history
+tests, false-success Lab Tech results, and non-atomic Worker quotas.
 
-| # | Contract | Verdict |
+| # | Contract | Audit-time verdict |
 |---:|---|---|
 | 1 | Mandatory PCHIP everywhere | No |
 | 2 | Effective validation gates | No |
@@ -229,7 +233,7 @@ root and `dist` artifacts (274,335 deterministic gzip bytes) with SHA-256
 
 Ordinary finite scalar domains work, and 3D LUTs correctly enforce exactly `N³` rows. Identity 3D neutral-axis extraction had a maximum numerical error of `1.665e-16`.
 
-The strict contract still fails:
+At audit time, the strict contract failed:
 
 - A declared 1D size larger than the data is accepted.
 - Extra 1D samples are silently truncated.
@@ -238,7 +242,33 @@ The strict contract still fails:
 - Equal/invalid scalar domains silently reset to `0..1`.
 - 3D rows containing `Infinity` can be accepted and collapsed into plausible finite output.
 
-The relevant parsing branches are in [file-parsers.js](/home/davidmarsh/Dropbox/Photography/quadGEN/src/js/parsers/file-parsers.js:295).
+The relevant parsing branches are [the 1D parser](/home/davidmarsh/Dropbox/Photography/quadGEN/src/js/parsers/file-parsers.js:280)
+and [the 3D parser](/home/davidmarsh/Dropbox/Photography/quadGEN/src/js/parsers/file-parsers.js:415).
+
+**Post-audit remediation:** The live 1D and 3D paths now parse numeric rows
+atomically and reject every non-finite or partial component. A declared 1D size
+must match exactly in the supported 2–65,536 range, while headerless compatibility
+remains limited to 2–256 samples; lowercase and headerless files route through
+the same public loader. Domain declarations accept one scalar or three RGB
+values with matching arity, require a finite ascending range on every axis, and default to `0..1`
+only when absent. The complete vectors are preserved as `domainMinRGB` and
+`domainMaxRGB` while the first-component scalar fields retain downstream
+compatibility. 3D neutral-axis extraction applies each axis independently using
+standard red-fastest CUBE ordering, retains exact `N³` enforcement, and rejects
+non-finite interpolation results instead of collapsing them into plausible
+samples.
+
+The original 19-case regression failed 15 cases before the fix; the expanded
+focused contract passed 29/29 and the broader LUT parser/application set passed
+34/34. All seven tracked `.cube` fixtures parse,
+and the two real browser loader checks passed. The previously truncated
+`ImageAdjustment.cube` fixture now declares its actual ten effective rows; its
+sample values are unchanged. Vitest passed 346/346, the 100-module build passed,
+smoke passed 2/2, the focused browser gate passed 4/4, history passed 7/7, the
+full Playwright inventory passed 101/101, and the pre-commit guard passed 12/12.
+Two builds produced identical 1,000,078-byte root and `dist` artifacts (275,234
+deterministic gzip bytes), with SHA-256
+`3551f5c7bd850ed27eb5b7b7b491d20e0e07f1b0fd9a4b413e33131c4b580c4e`.
 
 ## 10. Manual L* history convergence
 

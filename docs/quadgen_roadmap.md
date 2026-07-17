@@ -209,6 +209,23 @@ Vitest passed 317/317, the 100-module build passed, smoke passed 2/2, the focuse
 gate passed 4/4, history passed 7/7, the full Playwright inventory passed 101/101,
 and the pre-commit guard passed 12/12.
 
+**Completed slice (2026-07-16): CUBE declaration and domain conformance.** 1D
+size declarations now require exactly 2–65,536 finite rows instead of truncating
+or accepting missing data; the 2–256-row headerless safeguard and lowercase 1D
+inputs reach the same live parser. Scalar/RGB domains require matching arity and
+finite ascending ranges, with all three axes preserved and applied during red-fastest 3D
+trilinear evaluation. Malformed rows and non-finite results reject before the
+existing atomic correction boundary. The one truncated tracked fixture now
+declares its actual ten effective rows without changing its samples. Production
+scope remained one file at +139 net lines. The focused CUBE contract passed
+29/29, the broader LUT set passed 34/34, all seven tracked fixtures parsed,
+Vitest passed 346/346, the
+100-module build passed, smoke passed 2/2, the focused gate passed 4/4, history
+passed 7/7, the full Playwright inventory passed 101/101, and the pre-commit
+guard passed 12/12. Two builds produced identical 1,000,078-byte root and
+`dist` artifacts (275,234 deterministic gzip bytes), a 2,705-byte raw and
+899-byte gzip increase over the preceding checkpoint.
+
 ### 5. State and architecture evolution — Triggered only
 
 **Outcome:** A touched workflow has one understandable owner and no unnecessary

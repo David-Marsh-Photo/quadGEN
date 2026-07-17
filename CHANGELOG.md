@@ -12,6 +12,7 @@ This changelog follows a concise, user-facing format. Engineering details live i
 - Global Scale now uses one rollback-safe transaction and one canonical percent/baseline state for the Scale field, history, and compatibility helpers; the unused rollout flags, mirrored state, subscriptions, and diagnostic queue/telemetry layers were removed.
 
 ### Fixed
+- CUBE imports now enforce exact declared 1D counts, atomic finite rows, strict scalar/RGB domains, and red-fastest per-axis 3D normalization while retaining lowercase and headerless 1D compatibility.
 - Editable and reference `.quad` imports now share one exact parser: each declared channel requires 256 integer values, extra or malformed content is rejected, and documented headerless 8/10-channel files remain supported.
 - Manual L*, Channel Builder, and Intent Help now behave as named modal dialogs: focus stays contained and returns to the opener, Escape and pointer close paths work consistently, validation is announced, and close targets meet the 44 px touch guidance.
 - The portable `index.html` now compiles and inlines Tailwind CSS locally, retaining desktop/narrow and light/dark layout when every HTTP(S) request is blocked.

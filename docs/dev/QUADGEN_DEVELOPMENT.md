@@ -138,7 +138,10 @@ function testParseLogic() {
 
 **File Processing Issues**:
 - .quad files: Validate the explicit QuadToneRIP channel declaration when present, exact 256-value channel blocks, integer range, and the documented headerless 8/10-channel layouts
-- .cube files: Check 1D vs 3D detection logic
+- .cube files: Require exact declared 1D counts (2–65,536), limit headerless
+  1D compatibility to 2–256 rows, require exact `N³` 3D rows (size 2–256),
+  atomic finite row components, matching scalar/RGB domain declarations, and
+  strictly ascending per-axis domains; 3D entries use red-fastest order
 - LAB data: Verify L* value parsing and transformation
 - Orientation: Use the `DataSpace` helper (`convertSamples`, `convertControlPoints`) so imported data lands in printer space before downstream use.
 
