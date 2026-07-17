@@ -1,8 +1,8 @@
 # quadGEN Test Suite Reference
 
-**Note:** This document should be kept up-to-date whenever tests are added, removed, or significantly modified.
+**Note:** Keep referenced entries current when those tests are removed or significantly modified.
 
-This document provides a summary of the automated tests in the `/tests` directory.
+This document summarizes selected automated contracts in the `/tests` directory.
 
 ## Test Utilities
 
@@ -35,6 +35,6 @@ This document provides a summary of the automated tests in the `/tests` director
 *   **Purpose:** Tests the main pipeline steps for generating a final 256-point curve.
 *   **Covers:** It tests the individual helper functions for building the base curve, applying per-channel linearization, applying global linearization, and applying the auto-endpoint adjustments.
 
-### 7. `history_flow.spec.js`
-*   **Purpose:** A placeholder for future tests related to the undo/redo history feature.
-*   **Covers:** Nothing. This test is currently skipped.
+### 7. `e2e/manual-lstar-apply.spec.ts`
+*   **Purpose:** Proves that Manual L* replacement and history form one reversible operator action.
+*   **Covers:** Exact prior-correction independence plus Apply/Undo/Redo convergence across active, central, and compatibility correction payloads; baked metadata and controls; runtime smoothing; chart and canvas; preview; and exported `.quad` content.

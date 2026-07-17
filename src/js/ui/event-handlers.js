@@ -3653,6 +3653,44 @@ function restoreChannelsToRebasedSources(channelNames = [], options = {}) {
     return restoredChannels;
 }
 
+export function restoreOriginalCurvesForGlobalReplacement() {
+    const loadedData = getLoadedQuadData?.();
+    const originalCurves = loadedData?.originalCurves;
+    if (!originalCurves || typeof originalCurves !== 'object') {
+        return [];
+    }
+
+    if (!loadedData.curves || typeof loadedData.curves !== 'object') {
+        loadedData.curves = {};
+    }
+    loadedData.rebasedCurves = {};
+    loadedData.rebasedSources = {};
+
+    const baselineEndSnapshot = {};
+    const originalChannels = [];
+    Object.entries(originalCurves).forEach(([channelName, curve]) => {
+        if (!Array.isArray(curve)) {
+            return;
+        }
+        const cloned = curve.slice();
+        loadedData.curves[channelName] = cloned.slice();
+        loadedData.rebasedCurves[channelName] = cloned.slice();
+        loadedData.rebasedSources[channelName] = cloned.slice();
+        baselineEndSnapshot[channelName] = Math.max(...cloned);
+        originalChannels.push(channelName);
+    });
+
+    if (originalChannels.length) {
+        loadedData.baselineEnd = { ...baselineEndSnapshot };
+        restoreChannelsToRebasedSources(originalChannels, {
+            skipRefresh: false,
+            skipScaleBaselineUpdate: true
+        });
+    }
+
+    return originalChannels;
+}
+
 function applyCurveSnapshot(curveMap = {}, options = {}) {
     if (!curveMap || typeof curveMap !== 'object') {
         return false;
@@ -4808,35 +4846,7 @@ function initializeFileHandlers() {
                         syncLabSpotMarkersToggle();
 
                         try {
-                            const loadedData = getLoadedQuadData?.();
-                            if (loadedData && loadedData.originalCurves && typeof loadedData.originalCurves === 'object') {
-                                if (!loadedData.curves || typeof loadedData.curves !== 'object') {
-                                    loadedData.curves = {};
-                                }
-                                loadedData.rebasedCurves = {};
-                                loadedData.rebasedSources = {};
-                                const baselineEndSnapshot = {};
-                                Object.entries(loadedData.originalCurves).forEach(([channelName, curve]) => {
-                                    if (!Array.isArray(curve)) {
-                                        return;
-                                    }
-                                    const cloned = curve.slice();
-                                    loadedData.curves[channelName] = cloned.slice();
-                                    loadedData.rebasedCurves[channelName] = cloned.slice();
-                                    loadedData.rebasedSources[channelName] = cloned.slice();
-                                    baselineEndSnapshot[channelName] = Math.max(...cloned);
-                                });
-                                if (Object.keys(baselineEndSnapshot).length) {
-                                    loadedData.baselineEnd = { ...baselineEndSnapshot };
-                                }
-                                const originalChannels = Object.keys(loadedData.originalCurves).filter((name) => Array.isArray(loadedData.originalCurves[name]));
-                                if (originalChannels.length) {
-                                    restoreChannelsToRebasedSources(originalChannels, {
-                                        skipRefresh: false,
-                                        skipScaleBaselineUpdate: true
-                                    });
-                                }
-                            }
+                            restoreOriginalCurvesForGlobalReplacement();
                         } catch (resetErr) {
                             console.warn('Failed to restore original curves before applying new global linearization:', resetErr);
                         }

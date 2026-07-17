@@ -4,15 +4,17 @@ Audit date: July 16, 2026
 
 Source: Houston workspace `quadGEN`, session `dev`, session ID `84199578-bdc7-4e8b-96e4-32053ef04c77`, final report event sequence 5490.
 
-> **Post-audit remediation status (July 16, 2026):** Findings 1–3, 5, and 7–9 are
+> **Post-audit remediation status (July 16, 2026):** Findings 1–3, 5, and 7–10 are
 > resolved for the audited contracts by mandatory PCHIP enforcement, an isolated
 > zero-skip history gate, preflight validation that preserves all prior state
 > when a correction import is rejected, a deterministic network-free portable
 > bundle, complete dialog behavior for the three remaining audited surfaces, and
 > exact structural parsing for `.quad` imports plus declared/domain-conformant
-> 1D and 3D CUBE ingestion.
+> 1D and 3D CUBE ingestion. Manual L* Apply is now one rollback-safe transaction
+> whose Undo and Redo converge the active, central, compatibility, UI, chart,
+> preview, export, baked-state, and runtime smoothing surfaces.
 > Findings 4 and 6 are operationally contained while Lab Tech remains shelved
-> and its public Worker route remains disabled. Finding 10 remains active.
+> and its public Worker route remains disabled.
 > Credential rotation is intentionally deferred to a separate session.
 
 At audit time, all ten compound questions resolved to “No,” though several
@@ -282,6 +284,32 @@ A focused nonlinear browser probe found:
 - The applied correction remained after the undo attempt.
 - Chart and export agreed after application, but neither reverted.
 
-The existing [manual-lstar-apply.spec.ts](/home/davidmarsh/Dropbox/Photography/quadGEN/tests/e2e/manual-lstar-apply.spec.ts:36) verifies application only.
+At audit time, `manual-lstar-apply.spec.ts` at commit `232b1bc` (then lines
+36–73) verified application only.
+
+**Post-audit remediation:** Manual L* Apply now synchronizes the active global
+correction into StateManager, records one named transaction with complete before
+and after snapshots, and restores the same correction across `LinearizationState`,
+StateManager, compatibility state, controls, chart, preview, and export. Replacing
+a prior correction first restores the immutable `.quad` curves and reapplies the
+current Global Scale, so identical Manual measurements no longer depend on the
+previous correction. Baked metadata and controls clear on Apply and return on
+Undo. In-memory history snapshots retain the Manual smoothing provider, so Redo
+preserves measured-point smoothing behavior rather than only its serializable
+samples.
+
+The expanded browser contract compares identical Manual input with and without a
+prior CUBE correction, starts the reversible path from a baked correction, and
+checks the complete Apply → Undo → Redo cycle. It verifies exact central and
+compatibility payloads, UI state, K curve, canvas, preview, exported `.quad`, and
+the callable smoothing-control result. This remediation evidence extends the
+audit's original Apply/Undo probe; the original audit did not probe Redo.
+
+The focused browser contract passed 1/1, Vitest passed 346/346, the 100-module
+build passed, smoke passed 2/2, the focused browser gate passed 4/4, history
+passed 7/7, the full Playwright inventory passed 101/101, and the pre-commit
+guard passed 12/12. Two builds produced identical 1,002,576-byte root and `dist`
+artifacts (275,906 deterministic gzip bytes), with SHA-256
+`e6e33e362a282a95c50df7a0f2e5bd258f0ea20a734fb34e37791c5a1d7c0435`.
 
 No repository files, branches, commits, dependencies, deployments, or external systems were changed during the audit. Final `git status` and `git diff` were clean, and root/dist artifacts remained byte-identical. The question set was recovered from Houston workspace `quadGEN`, session `dev`, session ID `84199578-bdc7-4e8b-96e4-32053ef04c77`, event sequence 5390.

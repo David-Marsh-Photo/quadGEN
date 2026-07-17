@@ -1,55 +1,60 @@
 # Manual L* Entry Specification
 
 ## Purpose
-- Allow technicians to enter measured L* values manually, generate printer-space corrections, and seed Smart curves without importing a file.
-- Ensure manual entries share the same smoothing, metadata, and undo behavior as LAB file ingestion.
 
-## User-Facing Entry Points
-- Global Corrections → `Enter L* Values` modal.
-- Lab Tech command: `apply_manual_lstar_values` (array input).
+- Let technicians enter measured L* values without first creating a measurement file.
+- Generate the same printer-space, PCHIP-based correction used by supported LAB measurement workflows.
+- Replace an existing global correction as one reversible operator action.
 
-## Core State & Helpers
-- Modal controller: `src/js/ui/manual-lstar.js` (validation, grid management).
-- Processing pipeline: `parseManualLstarData` → `buildInkInterpolatorFromMeasurements`.
-- State integration identical to LAB ingestion via `LinearizationState`.
+## User-Facing Entry Point
+
+- Global Corrections → `Enter L* Values`.
+- Lab Tech is shelved and does not expose a Manual L* command in the shipped UI.
+
+## Core State and Helpers
+
+- `src/js/ui/manual-lstar.js` owns modal validation, layout persistence, application, and history boundaries.
+- `parseManualLstarData` reconstructs the measurement curve with the current CIE L* or CIE density normalization mode and PCHIP interpolation.
+- `LinearizationState`, StateManager, application compatibility state, chart, preview, and export must describe the same active correction.
 
 ## Expected Behavior
-1. **Data Entry & Validation**
-   - Grid defaults to evenly spaced Target L* values (0→100). User enters Measured L* per row.
-   - Validation ensures at least three rows, all target/measured values within 0..100, monotone target progression.
-   - Inline error styling guides corrections.
 
-2. **Correction Generation**
-   - `Generate Correction` triggers the same smoothing/inversion helper used for LAB files (hybrid mapping optional).
-   - Results populate `LinearizationState` as a global measurement, update charts, and seed Smart key points (respecting Edit Mode state).
+1. **Data entry and validation**
+   - The grid supports 5–50 rows and defaults to five evenly spaced Patch % positions.
+   - Every Patch % and measured L* field is required and must be within `0..100`.
+   - Patch % positions must be strictly increasing. Repeated measured L* values are accepted.
+   - Invalid or blank fields keep `Generate Correction` disabled and expose an inline validation message.
 
-3. **Metadata**
-   - Stored format tag `MANUAL_LSTAR`, originalData reflects grid entries, measurement intent recorded from current UI selection.
-   - Undo/redo fully supported; undo restores pre-manual state and clears metadata.
+2. **Correction generation**
+   - `Generate Correction` creates a printer-space global correction with format `Manual L* Entry` and source `manual`.
+   - Gaussian-weighted measurement reconstruction uses PCHIP wherever a smooth interpolation is required.
+   - Applying over another global correction first restores the immutable source `.quad` curves, then reapplies the current Global Scale. The Manual result therefore depends on the measurements and current settings, not on the correction it replaces.
+   - Chart, preview, filename, and exported `.quad` refresh before the modal closes.
 
-4. **UI Polish**
-   - Target swatches show expected tone; measured swatches preview input until valid.
-   - Modal supports CSV paste and keyboard navigation for efficient entry.
+3. **History and metadata**
+   - Apply records one transaction named `Apply manual L* correction`.
+   - Undo restores the complete pre-Apply correction, loaded curves, channel values, baked metadata and controls, chart, preview, export, filenames, and compatibility state.
+   - Redo restores the exact Manual result, including its callable smoothing-control provider.
+   - Internal data uses a generated `Manual-L-<count>pts` filename; the operator-facing correction label is `Manual L* Entry`.
 
-5. **Patch Layout Persistence**
-   - Saving (`Save as .txt`) or applying (`Generate Correction`) records the current row count and Patch % positions in local storage.
-   - The modal restores those Patch % positions and row count the next time it opens so recurring manual workflows do not require re-entering patch spacing.
-   - Clearing browser storage or running in private browsing resets the modal to the default five evenly spaced rows.
+4. **Dialog behavior**
+   - The modal has named dialog semantics, contains keyboard focus, closes by Escape, close control, or backdrop, and returns focus to its opener.
+   - The grid supports ordinary native keyboard entry. CSV paste is not implemented.
 
-## Edge Cases & Constraints
-- Duplicate measured rows allowed but flagged; smoothing minimizes oscillation.
-- Empty rows ignored; using fewer than three valid points results in modal error.
-- When auto white/black limit is enabled, metadata tags (`bakedAutoWhite/Black`) update after Smart recompute.
+5. **Patch layout persistence**
+   - Saving as `.txt` or applying records the row count and Patch % positions in local storage.
+   - Reopening restores that layout. Measured L* values are not persisted in local storage.
+   - Clearing browser storage or using a private session restores the five-row default.
+   - Undo/Redo affects correction state, not the saved data-entry layout preference.
 
 ## Testing
-- Manual matrix: `docs/manual_tests.md` → Manual L* section (validation, correction generation, undo).
-- Future Playwright coverage: fill grid, submit, verify correction + Smart seeding.
 
-## Debugging Aids
-- `DEBUG_LOGS` prints parsed manual data and smoothing parameters.
-- Developer tools: `window.LinearizationState.getGlobalData()` exposes stored manual entries for inspection.
+- `tests/e2e/manual-lstar-apply.spec.ts` covers prior-correction replacement plus complete Apply/Undo/Redo convergence, including baked state and runtime smoothing.
+- `docs/manual_tests.md` retains the operator patch-layout persistence check.
 
 ## References
-- Modal implementation: `src/js/ui/manual-lstar.js`.
-- Smoothing helper: `src/js/data/linearization-utils.js`.
-- LAB ingestion spec: `docs/features/lab-ingestion.md`.
+
+- Modal and history integration: `src/js/ui/manual-lstar.js`.
+- Measurement parser: `src/js/parsers/file-parsers.js`.
+- Reconstruction helper: `src/js/data/lab-parser.js`.
+- History restoration: `src/js/core/history-manager.js`.

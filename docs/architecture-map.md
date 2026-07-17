@@ -1,6 +1,6 @@
 # quadGEN Architecture Map
 
-Generated on 2026-07-17T00:11:33.162Z
+Generated on 2026-07-17T01:06:52.635Z
 
 This diagram groups source modules by their primary directory and highlights cross-cluster dependencies.
 
@@ -47,7 +47,7 @@ flowchart TD
   G_js_parsers -->|5| G_js_data
   G_js_parsers -->|1| G_js_math
   G_js_parsers -->|1| G_js_utils
-  G_js_ui -->|70| G_js_core
+  G_js_ui -->|73| G_js_core
   G_js_ui -->|7| G_js_curves
   G_js_ui -->|15| G_js_data
   G_js_ui -->|5| G_js_files

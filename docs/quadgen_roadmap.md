@@ -246,6 +246,24 @@ bottleneck demonstrates that the current ownership is inadequate.
 Session save/load is a future product decision, not justification for a
 speculative state rewrite.
 
+**Completed slice (2026-07-16): Manual L* history convergence.** Manual L*
+Apply now replaces an existing global correction from the immutable source
+curves, reapplies the current Global Scale, clears baked state, and commits one
+rollback-safe transaction. Undo restores the prior correction, baked controls,
+loaded curves, channel values, metadata, chart, preview, export, and compatibility
+state; Redo restores the exact Manual correction and its callable smoothing
+provider. The focused browser contract compares identical nonlinear Manual input
+with and without a prior CUBE correction, then exercises Apply → Undo → Redo from
+a baked starting state across the active model, StateManager, compatibility state,
+controls, K curve, canvas, preview, and exported `.quad`. Production scope is
+three files and +131 net lines, exactly at but not over the bug-review tripwire.
+The focused contract passed 1/1, Vitest passed 346/346, the 100-module build
+passed, smoke passed 2/2, the focused gate passed 4/4, history passed 7/7, the
+full Playwright inventory passed 101/101, and the pre-commit guard passed 12/12.
+Two builds produced identical 1,002,576-byte root and `dist` artifacts (275,906
+deterministic gzip bytes), a 2,498-byte raw and 672-byte gzip increase over the
+preceding checkpoint.
+
 ### 6. Distribution and documentation integrity — Ongoing
 
 **Outcome:** Source, tests, reference material, and the portable artifact agree.

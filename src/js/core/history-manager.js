@@ -36,13 +36,32 @@ export class HistoryManager {
         this.setupStateSubscriptions();
     }
 
-    cloneEntry(entry) {
-        try {
-            return JSON.parse(JSON.stringify(entry));
-        } catch (err) {
-            console.warn('HistoryManager.cloneEntry failed:', err);
+    cloneEntry(entry, seen = new WeakMap()) {
+        if (entry === null || typeof entry !== 'object') {
             return entry;
         }
+        if (seen.has(entry)) {
+            return seen.get(entry);
+        }
+        if (entry instanceof Date) {
+            return new Date(entry.getTime());
+        }
+        if (entry instanceof ArrayBuffer) {
+            return entry.slice(0);
+        }
+        if (entry instanceof DataView) {
+            return new DataView(entry.buffer.slice(entry.byteOffset, entry.byteOffset + entry.byteLength));
+        }
+        if (ArrayBuffer.isView(entry)) {
+            return new entry.constructor(entry);
+        }
+
+        const clone = Array.isArray(entry) ? [] : {};
+        seen.set(entry, clone);
+        Object.entries(entry).forEach(([key, value]) => {
+            clone[key] = this.cloneEntry(value, seen);
+        });
+        return clone;
     }
 
     /**
@@ -316,8 +335,7 @@ export class HistoryManager {
             return;
         }
 
-        // Get current state from state manager
-        const currentState = this.stateManager.getState();
+        const currentState = this.cloneEntry(this.stateManager.state);
 
         if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
             console.log(`[SNAPSHOT DEBUG] Capturing "${actionDescription}"`);
@@ -326,7 +344,7 @@ export class HistoryManager {
         }
 
         const currentLoaded = getLoadedQuadData();
-        const loaded = currentLoaded ? JSON.parse(JSON.stringify(currentLoaded)) : null;
+        const loaded = currentLoaded ? this.cloneEntry(currentLoaded) : null;
         if (!currentState.curves) {
             currentState.curves = {};
         }
@@ -824,7 +842,7 @@ export class HistoryManager {
         const normalized = this.ensureSnapshotVersion(state);
 
         if (normalized && normalized.stateSnapshot) {
-            const snapshotCopy = JSON.parse(JSON.stringify(normalized.stateSnapshot));
+            const snapshotCopy = this.cloneEntry(normalized.stateSnapshot);
             this.stateManager.state = snapshotCopy;
             this.restoreDomFromSnapshot(snapshotCopy);
 
@@ -926,9 +944,18 @@ export class HistoryManager {
      * @private
      */
     restoreDomFromSnapshot(snapshot) {
+        const targetBakedMeta = snapshot.linearization?.global?.baked || null;
+        if (isBrowser && typeof globalScope.__quadSetGlobalBakedState === 'function') {
+            try {
+                globalScope.__quadSetGlobalBakedState(null, { skipHistory: true });
+            } catch (err) {
+                console.warn('HistoryManager: failed to clear current baked UI state before restore:', err);
+            }
+        }
+
         const loadedQuadData = snapshot.curves?.loadedQuadData;
         if (loadedQuadData) {
-            setLoadedQuadData(JSON.parse(JSON.stringify(loadedQuadData)));
+            setLoadedQuadData(this.cloneEntry(loadedQuadData));
         } else {
             setLoadedQuadData(null);
         }
@@ -1067,42 +1094,52 @@ export class HistoryManager {
 
         if (LinearizationState) {
             const globalLin = snapshot.linearization?.global || {};
-            LinearizationState.globalData = globalLin.data || null;
-            LinearizationState.globalApplied = !!globalLin.applied;
-            LinearizationState.globalBakedMeta = globalLin.baked || null;
+            const globalData = globalLin.data || null;
+            const globalApplied = !!(globalData && globalLin.applied);
+            const globalSource = globalLin.source || null;
+            if (typeof LinearizationState.setGlobalData === 'function') {
+                LinearizationState.setGlobalData(globalData, globalApplied, { source: globalSource });
+            } else {
+                LinearizationState.globalData = globalData;
+                LinearizationState.globalApplied = globalApplied;
+                LinearizationState.globalDataSource = globalSource;
+            }
+            const canApplyBakedUi = isBrowser && typeof globalScope.__quadSetGlobalBakedState === 'function';
+            if (!targetBakedMeta || !canApplyBakedUi) {
+                if (typeof LinearizationState.setGlobalBakedMeta === 'function') {
+                    LinearizationState.setGlobalBakedMeta(targetBakedMeta);
+                } else {
+                    LinearizationState.globalBakedMeta = targetBakedMeta;
+                }
+            }
 
             const perData = snapshot.linearization?.perChannel?.data || {};
             const perEnabled = snapshot.linearization?.perChannel?.enabled || {};
 
-            LinearizationState.perChannelData = JSON.parse(JSON.stringify(perData));
+            LinearizationState.perChannelData = this.cloneEntry(perData);
             LinearizationState.perChannelEnabled = { ...perEnabled };
 
-            const bakedMeta = globalLin.baked || null;
             try {
                 if (this.stateManager) {
-                    this.stateManager.set('linearization.global.baked', bakedMeta, { skipHistory: true });
+                    this.stateManager.set('linearization.global.baked', targetBakedMeta, { skipHistory: true });
                 }
             } catch (err) {
                 console.warn('HistoryManager: failed to restore baked meta in state manager:', err);
             }
 
-            if (isBrowser && typeof globalScope.__quadSetGlobalBakedState === 'function') {
-                try {
-                    globalScope.__quadSetGlobalBakedState(bakedMeta, { skipHistory: true });
-                } catch (err) {
-                    console.warn('HistoryManager: failed to apply baked UI state during restore:', err);
-                }
-            }
-
             const perFilenames = snapshot.ui?.filenames?.perChannelLinearization || {};
             updateAppState({
-                perChannelLinearization: JSON.parse(JSON.stringify(perData)),
+                linearizationData: globalData,
+                linearizationApplied: globalApplied,
+                perChannelLinearization: this.cloneEntry(perData),
                 perChannelEnabled: { ...perEnabled },
                 perChannelFilenames: { ...perFilenames }
             });
 
             if (isBrowser) {
-                globalScope.perChannelLinearization = JSON.parse(JSON.stringify(perData));
+                globalScope.linearizationData = globalData;
+                globalScope.linearizationApplied = globalApplied;
+                globalScope.perChannelLinearization = this.cloneEntry(perData);
                 globalScope.perChannelEnabled = { ...perEnabled };
                 globalScope.perChannelFilenames = { ...perFilenames };
 
@@ -1119,11 +1156,18 @@ export class HistoryManager {
         const globalFilename = snapshot.ui?.filenames?.globalLinearization || '';
         const hasGlobalData = !!globalLinearization.data;
         const globalEnabled = !!globalLinearization.enabled;
-        const displayName = globalFilename || globalLinearization.filename || '';
+        const displayName = globalFilename
+            || globalLinearization.filename
+            || globalLinearization.data?.filename
+            || '';
 
         if (elements.globalLinearizationToggle) {
             elements.globalLinearizationToggle.disabled = !hasGlobalData;
             elements.globalLinearizationToggle.checked = hasGlobalData && globalEnabled;
+            elements.globalLinearizationToggle.setAttribute('aria-checked', String(hasGlobalData && globalEnabled));
+            elements.globalLinearizationToggle.removeAttribute('aria-disabled');
+            delete elements.globalLinearizationToggle.dataset.baked;
+            elements.globalLinearizationToggle.title = '';
         }
 
         if (elements.globalLinearizationFilename) {
@@ -1131,12 +1175,18 @@ export class HistoryManager {
         }
 
         if (elements.globalLinearizationDetails) {
-            if (hasGlobalData && Array.isArray(globalLinearization.data?.samples)) {
+            if (hasGlobalData && typeof globalLinearization.details === 'string') {
+                elements.globalLinearizationDetails.textContent = globalLinearization.details;
+            } else if (hasGlobalData && Array.isArray(globalLinearization.data?.samples)) {
                 const sampleCount = globalLinearization.data.samples.length;
                 elements.globalLinearizationDetails.textContent = sampleCount ? ` - ${sampleCount} samples` : '';
             } else {
                 elements.globalLinearizationDetails.textContent = '';
             }
+        }
+
+        if (elements.globalLinearizationBtn && typeof globalLinearization.tooltip === 'string') {
+            elements.globalLinearizationBtn.setAttribute('data-tooltip', globalLinearization.tooltip);
         }
 
         if (elements.globalLinearizationInfo) {
@@ -1147,6 +1197,17 @@ export class HistoryManager {
         if (elements.globalLinearizationHint) {
             if (hasGlobalData) elements.globalLinearizationHint.classList.add('hidden');
             else elements.globalLinearizationHint.classList.remove('hidden');
+        }
+
+        if (targetBakedMeta && isBrowser && typeof globalScope.__quadSetGlobalBakedState === 'function') {
+            try {
+                globalScope.__quadSetGlobalBakedState(targetBakedMeta, { skipHistory: true });
+            } catch (err) {
+                if (typeof LinearizationState.setGlobalBakedMeta === 'function') {
+                    LinearizationState.setGlobalBakedMeta(targetBakedMeta);
+                }
+                console.warn('HistoryManager: failed to apply baked UI state during restore:', err);
+            }
         }
 
         try {
@@ -1501,13 +1562,12 @@ export class HistoryManager {
      */
     captureSnapshotState() {
         try {
-            const currentState = this.stateManager.getState();
-            const snapshot = JSON.parse(JSON.stringify(currentState));
+            const snapshot = this.cloneEntry(this.stateManager.state);
             const currentLoaded = getLoadedQuadData();
             if (!snapshot.curves) {
                 snapshot.curves = {};
             }
-            snapshot.curves.loadedQuadData = currentLoaded ? JSON.parse(JSON.stringify(currentLoaded)) : null;
+            snapshot.curves.loadedQuadData = currentLoaded ? this.cloneEntry(currentLoaded) : null;
             return { stateSnapshot: snapshot, scaling: getScalingSnapshot() };
         } catch (err) {
             console.warn('Failed to capture history transaction snapshot:', err);
