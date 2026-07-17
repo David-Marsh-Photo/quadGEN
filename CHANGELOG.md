@@ -12,6 +12,7 @@ This changelog follows a concise, user-facing format. Engineering details live i
 - Global Scale now uses one rollback-safe transaction and one canonical percent/baseline state for the Scale field, history, and compatibility helpers; the unused rollout flags, mirrored state, subscriptions, and diagnostic queue/telemetry layers were removed.
 
 ### Fixed
+- Auto-raised ink limits now create one canonical percentage/End history pair instead of duplicate Undo steps; a real disabled-to-enabled transition still records its separate enabled-state change.
 - Manual L* Apply is now one reversible history action: it replaces any prior global correction from the immutable `.quad` baseline, clears baked controls, and Undo/Redo restore correction data, chart, preview, export, metadata, and smoothing behavior exactly.
 - CUBE imports now enforce exact declared 1D counts, atomic finite rows, strict scalar/RGB domains, and red-fastest per-axis 3D normalization while retaining lowercase and headerless 1D compatibility.
 - Editable and reference `.quad` imports now share one exact parser: each declared channel requires 256 integer values, extra or malformed content is rejected, and documented headerless 8/10-channel files remain supported.

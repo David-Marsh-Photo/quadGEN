@@ -264,6 +264,21 @@ Two builds produced identical 1,002,576-byte root and `dist` artifacts (275,906
 deterministic gzip bytes), a 2,498-byte raw and 672-byte gzip increase over the
 preceding checkpoint.
 
+**Completed slice (2026-07-16): Auto-raise history convergence.** Raising a
+channel's ink limit now initializes HistoryManager before the StateManager
+mutations and relies on that canonical subscription for one percentage and one
+End action. The redundant explicit writes were removed, while a genuine
+disabled-to-enabled transition still records its distinct enabled action. The
+browser regression reproduced four actions in the former already-enabled path
+(`percentage`, `endValue`, then the duplicate pair) and now requires exactly the
+first two with their old and new values. Production scope is one file and -9 net
+lines; no auto-raise policy, correction math, interpolation, or PCHIP behavior
+changed. The auto-raise and Manual L* focused contracts passed 3/3, Vitest passed
+346/346, smoke passed 2/2, the focused gate passed 4/4, history passed 7/7, the
+full Playwright inventory passed 101/101, and the pre-commit guard passed 12/12.
+The root and `dist` artifacts match at 1,002,357 bytes (275,861 deterministic
+gzip bytes), 219 raw and 45 gzip bytes smaller than the preceding checkpoint.
+
 ### 6. Distribution and documentation integrity — Ongoing
 
 **Outcome:** Source, tests, reference material, and the portable artifact agree.

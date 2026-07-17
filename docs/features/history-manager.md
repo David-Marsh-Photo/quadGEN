@@ -30,6 +30,7 @@
 1. **Recording**
    - A new top-level action clears the redo stack.
    - Silent synchronization uses `skipHistory` so state bridges do not create extra operator actions.
+   - Auto-raised ink limits initialize history before StateManager mutations, then rely on the StateManager subscription for one percentage and one End action. A disabled channel adds one enabled action only when it actually becomes enabled.
    - Transactions buffer child entries until commit and retain a pre-transaction snapshot for rollback.
 
 2. **Undo and Redo**
@@ -55,12 +56,14 @@
 
 - Restoration suppresses new history capture.
 - No-op enabled, percentage, and End writes are not recorded.
+- Feature code must not explicitly duplicate channel actions already emitted by the StateManager subscription.
 - New transactions must roll back to their captured pre-state if application throws.
 - Baked metadata must be applied after generic control restoration so baked toggles remain disabled and checked.
 
 ## Testing
 
 - `npm run test:history` runs the seven retained browser history contracts with zero skips.
+- `tests/e2e/auto-raise-on-import.spec.ts` proves an auto-raised, already-enabled channel records exactly one percentage/End pair and does not create an unrelated enabled action.
 - `tests/e2e/manual-lstar-apply.spec.ts` proves the Manual L* transaction across replacement, baked state, full payloads, smoothing, chart, preview, export, Undo, and Redo.
 - `tests/core/history-manager-transactions.test.js` and `tests/core/history-manager-schema.test.js` cover transaction and snapshot mechanics.
 
