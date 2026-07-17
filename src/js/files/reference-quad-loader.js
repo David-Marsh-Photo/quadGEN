@@ -38,18 +38,6 @@ export async function loadReferenceQuadFile(file) {
         // Read file content
         const content = await file.text();
 
-        // Validate file has numeric data (at least 256 values for one channel)
-        const numericLines = content.split('\n').filter(line => {
-            const trimmed = line.trim();
-            return trimmed && /^\d+$/.test(trimmed);
-        });
-        if (numericLines.length < 256) {
-            return {
-                success: false,
-                error: `File does not appear to be a valid .quad file (found only ${numericLines.length} numeric values, need at least 256).`
-            };
-        }
-
         // Parse .quad file
         const parsed = parseQuadFile(content);
 

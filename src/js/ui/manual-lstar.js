@@ -15,6 +15,11 @@ import { getLegacyLinearizationBridge } from '../legacy/linearization-bridge.js'
 import { getLabNormalizationMode, setLabNormalizationMode, isDensityNormalizationEnabled, LAB_NORMALIZATION_MODES } from '../core/lab-settings.js';
 import { parseManualLstarData as coreParseManualLstarData } from '../parsers/file-parsers.js';
 import { maybeAutoRaiseInkLimits } from '../core/auto-raise-on-import.js';
+import { getStateManager } from '../core/state-manager.js';
+import { getHistoryManager } from '../core/history-manager.js';
+import { reapplyCurrentGlobalScale } from '../core/scaling-utils.js';
+import { restoreOriginalCurvesForGlobalReplacement } from './event-handlers.js';
+import { createDialogFocusController } from './dialog-focus.js';
 import {
   lstarToHex,
   formatPatchPercent,
@@ -32,6 +37,7 @@ const LSTAR_LAYOUT_STORAGE_KEY = 'quadgen.manualLstarLayout';
 let lstarInputCount = MIN_ROWS;
 let lastLstarValues = [];
 let storedPatchPercents = [];
+let dialogFocusController = null;
 
 const legacyLinearizationBridge = getLegacyLinearizationBridge();
 
@@ -161,6 +167,18 @@ function setModalScrollLock(enabled) {
   }
 }
 
+function getDialogFocusController() {
+  if (!dialogFocusController && elements.lstarModal) {
+    dialogFocusController = createDialogFocusController({
+      dialog: elements.lstarModal,
+      initialFocus: () => elements.closeLstarModal,
+      fallbackFocus: () => elements.manualLstarBtn,
+      onEscape: hideModal
+    });
+  }
+  return dialogFocusController;
+}
+
 function showModal() {
   if (!elements.lstarModal) return;
   restoreLayoutFromStorage();
@@ -170,13 +188,13 @@ function showModal() {
     elements.manualLstarDensityToggle.checked = isDensity;
     elements.manualLstarDensityToggle.setAttribute('aria-checked', String(isDensity));
   }
-  elements.lstarModal.classList.remove('hidden');
+  getDialogFocusController()?.open();
   setModalScrollLock(true);
 }
 
 function hideModal() {
   if (!elements.lstarModal) return;
-  elements.lstarModal.classList.add('hidden');
+  getDialogFocusController()?.close();
   setModalScrollLock(false);
 }
 
@@ -353,6 +371,29 @@ function removeRow() {
   updateRows();
 }
 
+function syncGlobalHistoryState() {
+  const manager = getStateManager();
+  const data = LinearizationState.getGlobalData?.() || null;
+  const applied = !!(data && LinearizationState.globalApplied);
+  const displayFilename = elements.globalLinearizationFilename?.textContent?.trim()
+    || data?.filename
+    || '';
+  const details = elements.globalLinearizationDetails?.textContent || '';
+  const tooltip = elements.globalLinearizationBtn?.getAttribute('data-tooltip') || '';
+
+  manager.batch({
+    'linearization.global.data': data,
+    'linearization.global.applied': applied,
+    'linearization.global.enabled': applied,
+    'linearization.global.baked': LinearizationState.getGlobalBakedMeta?.() || null,
+    'linearization.global.source': LinearizationState.getGlobalDataSource?.() || null,
+    'linearization.global.filename': displayFilename,
+    'linearization.global.details': details,
+    'linearization.global.tooltip': tooltip,
+    'ui.filenames.globalLinearization': displayFilename
+  }, { skipHistory: true });
+}
+
 function handleCountInput(event) {
   const nextValue = parseInt(event.target.value, 10);
   if (Number.isFinite(nextValue) && nextValue >= MIN_ROWS && nextValue <= MAX_ROWS) {
@@ -362,11 +403,20 @@ function handleCountInput(event) {
   }
 }
 
-function applyManualLinearization(validation) {
-  const normalizationMode = getLabNormalizationMode();
-  const correctionData = parseManualLstarData(validation, { normalizationMode });
-  correctionData.filename = `Manual-L-${validation.values.length}pts`;
-  const normalized = normalizeLinearizationEntry(correctionData, DataSpace.SPACE.PRINTER);
+function applyManualLinearizationState(validation, normalizationMode, correctionData, normalized) {
+  if (typeof window !== 'undefined' && typeof window.__quadSetGlobalBakedState === 'function') {
+    window.__quadSetGlobalBakedState(null, { skipHistory: true });
+  }
+
+  LinearizationState.setGlobalData(normalized, true, { source: 'manual' });
+  updateAppState({ linearizationData: normalized, linearizationApplied: true });
+  legacyLinearizationBridge.setGlobalState(normalized, true);
+
+  appState.linearizationData = normalized;
+  appState.linearizationApplied = true;
+
+  restoreOriginalCurvesForGlobalReplacement();
+  reapplyCurrentGlobalScale({ skipHistory: true, reason: 'manualLstarApply' });
 
   try {
     const baselineData = getLoadedQuadData?.();
@@ -384,7 +434,8 @@ function applyManualLinearization(validation) {
       });
       return hasAny ? clone : null;
     };
-    const baselineSnapshot = cloneMap(baselineData?.plotBaseCurvesBaseline)
+    const baselineSnapshot = cloneMap(baselineData?.originalCurves)
+      || cloneMap(baselineData?.plotBaseCurvesBaseline)
       || cloneMap(baselineData?._plotSmoothingOriginalCurves)
       || cloneMap(baselineData?.curves);
 
@@ -394,16 +445,6 @@ function applyManualLinearization(validation) {
   } catch (snapshotErr) {
     console.warn('[Manual L*] Failed to capture baseline snapshot:', snapshotErr);
   }
-
-  LinearizationState.setGlobalData(normalized, true, { source: 'manual' });
-  if (typeof window !== 'undefined' && typeof window.__quadSetGlobalBakedState === 'function') {
-    window.__quadSetGlobalBakedState(null, { skipHistory: true });
-  }
-  updateAppState({ linearizationData: normalized, linearizationApplied: true });
-  legacyLinearizationBridge.setGlobalState(normalized, true);
-
-  appState.linearizationData = normalized;
-  appState.linearizationApplied = true;
 
   maybeAutoRaiseInkLimits(normalized, {
     scope: 'global',
@@ -418,6 +459,9 @@ function applyManualLinearization(validation) {
     elements.globalLinearizationToggle.disabled = false;
     elements.globalLinearizationToggle.checked = true;
     elements.globalLinearizationToggle.setAttribute('aria-checked', 'true');
+    elements.globalLinearizationToggle.removeAttribute('aria-disabled');
+    delete elements.globalLinearizationToggle.dataset.baked;
+    elements.globalLinearizationToggle.title = '';
   }
   if (elements.globalLinearizationInfo) {
     elements.globalLinearizationInfo.classList.remove('hidden');
@@ -463,6 +507,37 @@ function applyManualLinearization(validation) {
   const inputs = elements.lstarInputs ? Array.from(elements.lstarInputs.querySelectorAll('.lstar-input')) : [];
   lastLstarValues = inputs.map(input => input.value);
   lstarInputCount = validation.values.length;
+}
+
+function applyManualLinearization(validation) {
+  const normalizationMode = getLabNormalizationMode();
+  const correctionData = parseManualLstarData(validation, { normalizationMode });
+  correctionData.filename = `Manual-L-${validation.values.length}pts`;
+  const normalized = normalizeLinearizationEntry(correctionData, DataSpace.SPACE.PRINTER);
+  const history = getHistoryManager();
+  let transactionId = null;
+
+  try {
+    syncGlobalHistoryState();
+    transactionId = history.beginTransaction('Apply manual L* correction');
+    history.captureState('Before: Apply manual L* correction');
+
+    applyManualLinearizationState(validation, normalizationMode, correctionData, normalized);
+
+    syncGlobalHistoryState();
+    history.captureState('After: Apply manual L* correction');
+    history.commit(transactionId);
+    transactionId = null;
+  } catch (error) {
+    if (transactionId && history.activeTransaction?.id === transactionId) {
+      try {
+        history.rollback(transactionId);
+      } catch (rollbackError) {
+        console.warn('[Manual L*] Failed to roll back history transaction:', rollbackError);
+      }
+    }
+    throw error;
+  }
 }
 
 function handleGenerateClick() {

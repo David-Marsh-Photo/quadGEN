@@ -9,11 +9,18 @@ Scope
 
 Essential Structure
 - Header comments: Any number of comment lines starting with `#` (or `##`) are ignored by the RIP but useful for metadata.
-- Channel declaration (recommended): First non‑data line typically declares channels, e.g.
+- Channel declaration (recommended): A comment line declares channels, e.g.
   - `## QuadToneRIP K,C,M,Y,LC,LM,LK,LLK,V,MK`
-- Per‑channel blocks: One block per channel, each preceded by a comment label, then exactly 256 integer lines:
+- Per‑channel blocks: One block per channel, normally preceded by a comment label, then exactly 256 integer lines:
   - Example: `# K curve` followed by 256 integers (input levels 0→255).
   - Repeat for `# C curve`, `# M curve`, etc., in the same order as declared in the header.
+  - Block labels are recommended metadata; the declared order and exact numeric count are structural.
+
+quadGEN Import Contract
+- Blank lines and lines beginning with `#` are ignored. Every other line must contain one decimal integer from 0–65535 and no other text.
+- Headered files must declare a non-empty, unique channel list and contain exactly `declared channels × 256` values. Missing values, extra values, and undeclared channel blocks are rejected.
+- Headerless compatibility is limited to exact, identifiable layouts: 2,048 values map to `K,C,M,Y,LC,LM,LK,LLK`, and 2,560 values map to `K,C,M,Y,LC,LM,LK,LLK,V,MK`. Other counts require an explicit channel declaration.
+- Editable and reference imports use the same structural parser. Reference overlays separately apply file type/size guards before parsing and match parsed channels against the active printer afterward.
 
 Values and Ranges
 - Units: 16‑bit integer ink amounts; QTR accepts a full 16‑bit range.
@@ -21,7 +28,7 @@ Values and Ranges
   - Mapping examples: 33% → 21627 (rounded), 50% → 32768, 100% → 65535.
 - Practical notes:
   - Integers only, one value per line, 256 lines per channel.
-  - Values outside range are clamped by quadGEN before writing.
+  - Import rejects values outside the range; export clamps computed values before writing.
   - Non‑monotonic curves are accepted by QTR; validate visually to avoid unintended tone kinks.
 
 Channel Order and Presence

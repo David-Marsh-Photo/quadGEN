@@ -1,10 +1,6 @@
 import { elements } from '../core/state.js';
 import { APP_DISPLAY_VERSION } from '../core/version.js';
-import {
-  downloadSampleLabData,
-  downloadSampleCubeFile,
-  SAMPLE_DATA
-} from '../files/file-operations.js';
+import { createDialogFocusController } from './dialog-focus.js';
 import {
   getHelpReadmeHTML,
   getHelpGlossaryHTML,
@@ -12,7 +8,19 @@ import {
   getHelpWorkflowHTML
 } from './help-content.js';
 
+const FOCUSABLE_SELECTOR = [
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  'a[href]',
+  '[tabindex]:not([tabindex="-1"])'
+].join(', ');
+
 let currentHelpTab = 'readme';
+let helpReturnFocusElement = null;
+let intentDialogFocusController = null;
+
 function lockBodyScroll() {
   try {
     document.body.style.overflow = 'hidden';
@@ -21,11 +29,40 @@ function lockBodyScroll() {
   }
 }
 
+function getFocusableElements(container) {
+  return Array.from(container.querySelectorAll(FOCUSABLE_SELECTOR))
+    .filter((element) => element.tabIndex >= 0 && element.getClientRects().length > 0);
+}
+
+function containHelpFocus(event) {
+  const popup = elements.helpPopup;
+  if (!popup || event.key !== 'Tab') return;
+
+  const focusableElements = getFocusableElements(popup);
+  if (!focusableElements.length) {
+    event.preventDefault();
+    return;
+  }
+
+  const firstElement = focusableElements[0];
+  const lastElement = focusableElements[focusableElements.length - 1];
+  const activeElement = document.activeElement;
+  const movingBackwardPastStart = event.shiftKey
+    && (activeElement === firstElement || !popup.contains(activeElement));
+  const movingForwardPastEnd = !event.shiftKey
+    && (activeElement === lastElement || !popup.contains(activeElement));
+
+  if (movingBackwardPastStart || movingForwardPastEnd) {
+    event.preventDefault();
+    const target = movingBackwardPastStart ? lastElement : firstElement;
+    target.focus({ preventScroll: true });
+  }
+}
+
 function unlockBodyScrollIfNoHelpOpen() {
   try {
     const popups = [
       elements.helpPopup,
-      elements.globalCorrectionHelpPopup,
       elements.editModeHelpPopup,
       elements.intentHelpPopup,
       elements.optionsModal
@@ -46,53 +83,6 @@ function updateTabButton(button, isActive) {
   button.classList.toggle('text-gray-500', !isActive);
   button.classList.toggle('border-transparent', !isActive);
   button.setAttribute('aria-selected', isActive ? 'true' : 'false');
-}
-
-function wireSampleButtons() {
-  const helpLoadLab = document.getElementById('helpLoadSampleLab');
-  if (helpLoadLab && !helpLoadLab.dataset.wired) {
-    helpLoadLab.addEventListener('click', () => {
-      const actions = window?.quadGenActions;
-      if (actions && typeof actions.loadLabData === 'function') {
-        const result = actions.loadLabData(SAMPLE_DATA.colorMuse, true);
-        if (result?.success) {
-          window?.showStatus?.('Loaded sample LAB correction');
-        } else {
-          const message = result?.message || 'Unable to load sample LAB data';
-          window?.showStatus?.(message);
-        }
-      } else {
-        window?.showStatus?.('Sample LAB loading is not yet available in this build');
-      }
-    });
-    helpLoadLab.dataset.wired = 'true';
-  }
-
-  const helpLoadCube = document.getElementById('helpLoadSampleCube');
-  if (helpLoadCube && !helpLoadCube.dataset.wired) {
-    helpLoadCube.addEventListener('click', () => {
-      window?.showStatus?.('Sample LUT loading is not yet available in the modular build.');
-    });
-    helpLoadCube.dataset.wired = 'true';
-  }
-
-  const helpDownloadLab = document.getElementById('helpDownloadSampleLab');
-  if (helpDownloadLab && !helpDownloadLab.dataset.wired) {
-    helpDownloadLab.addEventListener('click', (event) => {
-      event.preventDefault();
-      downloadSampleLabData();
-    });
-    helpDownloadLab.dataset.wired = 'true';
-  }
-
-  const helpDownloadCube = document.getElementById('helpDownloadSampleCube');
-  if (helpDownloadCube && !helpDownloadCube.dataset.wired) {
-    helpDownloadCube.addEventListener('click', (event) => {
-      event.preventDefault();
-      downloadSampleCubeFile();
-    });
-    helpDownloadCube.dataset.wired = 'true';
-  }
 }
 
 function setHelpActiveTab(tab) {
@@ -121,22 +111,36 @@ function setHelpActiveTab(tab) {
 
   if (elements.helpContent) {
     elements.helpContent.innerHTML = html;
-    wireSampleButtons();
   }
 }
 
-function openHelpPopup(defaultTab = 'readme') {
+function openHelpPopup(defaultTab = 'readme', returnFocusTarget = document.activeElement) {
   populateHelp(defaultTab);
   if (elements.helpPopup) {
+    if (!elements.helpPopup.classList.contains('hidden')) {
+      elements.closeHelpBtn?.focus({ preventScroll: true });
+      return;
+    }
+
+    helpReturnFocusElement = returnFocusTarget;
     elements.helpPopup.classList.remove('hidden');
+    elements.helpPopup.setAttribute('aria-hidden', 'false');
     lockBodyScroll();
+    elements.closeHelpBtn?.focus({ preventScroll: true });
   }
 }
 
 function closeHelpPopup() {
   if (elements.helpPopup) {
     elements.helpPopup.classList.add('hidden');
+    elements.helpPopup.setAttribute('aria-hidden', 'true');
     unlockBodyScrollIfNoHelpOpen();
+
+    const focusTarget = helpReturnFocusElement?.isConnected
+      ? helpReturnFocusElement
+      : elements.helpBtn;
+    helpReturnFocusElement = null;
+    focusTarget?.focus({ preventScroll: true });
   }
 }
 
@@ -227,11 +231,23 @@ function wireIntentHelpContent() {
   const workflowLink = elements.intentHelpContent?.querySelector('[data-open-workflow-help]');
   if (workflowLink && !workflowLink.dataset.wired) {
     workflowLink.addEventListener('click', () => {
-      closeIntentHelpPopup({ skipUnlock: true });
-      openHelpPopup('workflow');
+      closeIntentHelpPopup({ skipUnlock: true, returnFocus: false });
+      openHelpPopup('workflow', elements.intentHelpBtn);
     });
     workflowLink.dataset.wired = 'true';
   }
+}
+
+function getIntentDialogFocusController() {
+  if (!intentDialogFocusController && elements.intentHelpPopup) {
+    intentDialogFocusController = createDialogFocusController({
+      dialog: elements.intentHelpPopup,
+      initialFocus: () => elements.closeIntentHelpBtn,
+      fallbackFocus: () => elements.intentHelpBtn,
+      onEscape: closeIntentHelpPopup
+    });
+  }
+  return intentDialogFocusController;
 }
 
 function openIntentHelpPopup() {
@@ -244,7 +260,7 @@ function openIntentHelpPopup() {
     wireIntentHelpContent();
   }
 
-  elements.intentHelpPopup.classList.remove('hidden');
+  getIntentDialogFocusController()?.open();
   lockBodyScroll();
 }
 
@@ -253,7 +269,7 @@ function closeIntentHelpPopup(options = {}) {
     return;
   }
 
-  elements.intentHelpPopup.classList.add('hidden');
+  getIntentDialogFocusController()?.close({ returnFocus: options.returnFocus !== false });
   if (!options.skipUnlock) {
     unlockBodyScrollIfNoHelpOpen();
   }
@@ -309,12 +325,6 @@ export function initializeHelpSystem() {
     });
   }
 
-  if (elements.globalCorrectionHelpBtn) {
-    elements.globalCorrectionHelpBtn.addEventListener('click', () => {
-      openHelpPopup('workflow');
-    });
-  }
-
   if (elements.intentHelpBtn && elements.intentHelpPopup && elements.intentHelpContent) {
     elements.intentHelpBtn.addEventListener('click', () => openIntentHelpPopup());
   }
@@ -332,14 +342,15 @@ export function initializeHelpSystem() {
   }
 
   document.addEventListener('keydown', (event) => {
-    if (event.key === 'Escape') {
-      if (elements.helpPopup && !elements.helpPopup.classList.contains('hidden')) {
+    if (elements.helpPopup && !elements.helpPopup.classList.contains('hidden')) {
+      if (event.key === 'Escape' || event.key === 'Esc') {
+        event.preventDefault();
         closeHelpPopup();
       }
-      if (elements.intentHelpPopup && !elements.intentHelpPopup.classList.contains('hidden')) {
-        closeIntentHelpPopup();
-      }
+      containHelpFocus(event);
+      return;
     }
+
   });
 
   // Prime default content so keyboard activation works immediately

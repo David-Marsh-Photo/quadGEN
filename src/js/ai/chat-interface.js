@@ -196,6 +196,7 @@ Only engage with requests about: app functionality, printing, photography, histo
                         provider: 'anthropic',
                         model: AI_CONFIG.ANTHROPIC_MODEL,
                         max_tokens: 1000,
+                        thinking: { type: 'disabled' },
                         system: systemMessage,
                         messages: messages,
                         tools: CLAUDE_FUNCTIONS.map(func => ({

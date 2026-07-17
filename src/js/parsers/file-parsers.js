@@ -3,6 +3,7 @@
 
 import { CURVE_RESOLUTION } from '../data/processing-utils.js';
 import { DataSpace } from '../data/processing-utils.js';
+import { parseQuadFile as parseCanonicalQuadFile } from '../data/quad-parser.js';
 import { anchorSamplesToUnitRange } from '../data/linearization-utils.js';
 import { isCubeEndpointAnchoringEnabled } from '../core/feature-flags.js';
 import {
@@ -32,12 +33,6 @@ export {
     parseCGATS17
 };
 
-// Default channel names by count (based on common QTR printer configurations)
-const DEFAULT_CHANNEL_NAMES = {
-    8: ['K', 'C', 'M', 'Y', 'LC', 'LM', 'LK', 'LLK'],           // P600/P800
-    10: ['K', 'C', 'M', 'Y', 'LC', 'LM', 'LK', 'LLK', 'V', 'MK'] // P700/P900
-};
-
 /**
  * Parse QuadToneRIP .quad file content
  * @param {string} content - File content
@@ -46,115 +41,14 @@ const DEFAULT_CHANNEL_NAMES = {
 export function parseQuadFile(content) {
     try {
         console.log('📄 parseQuadFile: parsing real .quad file data');
-
-        const lines = content.split('\n').map(line => line.trim());
-
-        // Look for the QuadToneRIP header line to extract channel names
-        let channels = [];
-        let headerFound = false;
-
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-
-            // Look for QuadToneRIP header: ## QuadToneRIP K,C,M,Y,LC,LM,LK,LLK
-            if (line.startsWith('## QuadToneRIP ')) {
-                const channelPart = line.substring('## QuadToneRIP '.length);
-                channels = channelPart.split(',').map(ch => ch.trim());
-                headerFound = true;
-                break;
-            }
-        }
-
-        // Collect all numeric values from the file (ignoring comments)
-        const numericLines = [];
-        let invalidDataLines = [];
-
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i].trim();
-            if (line && !line.startsWith('#')) {
-                if (/^\d+$/.test(line)) {
-                    const value = parseInt(line, 10);
-
-                    // Validate reasonable value range for QuadToneRIP (0-65535)
-                    if (value < 0 || value > 65535) {
-                        throw new Error(`Invalid data value ${value} at line ${i + 1}. QuadToneRIP values must be 0-65535.`);
-                    }
-
-                    numericLines.push(value);
-                } else {
-                    // Track non-numeric, non-comment lines as potentially problematic
-                    invalidDataLines.push(`Line ${i + 1}: "${line}"`);
-                    if (invalidDataLines.length > 10) break; // Don't flood with errors
-                }
-            }
-        }
-
-        if (numericLines.length < 256) {
-            throw new Error(`Insufficient data: found only ${numericLines.length} values, need at least 256 for one channel`);
-        }
-
-        // Warn about mixed content if found
-        if (invalidDataLines.length > 0) {
-            const sampleLines = invalidDataLines.slice(0, 3).join(', ');
-            console.warn(`Found ${invalidDataLines.length} non-numeric lines in data section: ${sampleLines}`);
-        }
-
-        // If no header found, infer channel count from data
-        if (!headerFound || channels.length === 0) {
-            const inferredChannelCount = Math.floor(numericLines.length / 256);
-
-            if (inferredChannelCount === 0) {
-                throw new Error(`Insufficient data: found ${numericLines.length} values, need at least 256 for one channel`);
-            }
-
-            // Use default channel names if we have a known configuration
-            if (DEFAULT_CHANNEL_NAMES[inferredChannelCount]) {
-                channels = DEFAULT_CHANNEL_NAMES[inferredChannelCount];
-                console.log(`📄 parseQuadFile: no header found, inferred ${inferredChannelCount} channels using default names: ${channels.join(',')}`);
-            } else {
-                // Generate generic channel names for unknown configurations
-                channels = Array.from({ length: inferredChannelCount }, (_, i) => `CH${i + 1}`);
-                console.log(`📄 parseQuadFile: no header found, inferred ${inferredChannelCount} channels with generic names`);
-            }
-        }
-
-        // Each channel should have exactly 256 data points
-        const expectedDataPoints = channels.length * 256;
-        if (numericLines.length < expectedDataPoints) {
-            throw new Error(`Insufficient data: found ${numericLines.length} values, expected ${expectedDataPoints} (${channels.length} channels × 256 points each)`);
-        }
-
-        // Extract all 256 data points for each channel
-        const channelCurves = {};
-        const values = []; // Final values for UI display
-        const baselineEnd = {};
-
-        for (let channelIdx = 0; channelIdx < channels.length; channelIdx++) {
-            const channelName = channels[channelIdx];
-            const channelStartIdx = channelIdx * 256;
-            const channelEndIdx = channelStartIdx + 255; // 0-indexed, so 255 is the 256th value
-
-            if (channelEndIdx >= numericLines.length) {
-                throw new Error(`Not enough data for channel ${channelName}: need point ${channelEndIdx + 1}, have ${numericLines.length}`);
-            }
-
-            // Extract all 256 points for this channel
-            const curveData = numericLines.slice(channelStartIdx, channelStartIdx + 256);
-            channelCurves[channelName] = curveData;
-
-            // Store the maximum value for UI display (percentage calculation) and baseline
-            const maxValue = Math.max(...curveData);
-            values.push(maxValue);
-            baselineEnd[channelName] = maxValue;
-        }
-
-        console.log(`📄 parseQuadFile: successfully parsed ${channels.length} channels with ${numericLines.length} data points`);
+        const parsed = parseCanonicalQuadFile(content);
+        const baselineEnd = Object.fromEntries(
+            parsed.channels.map((channelName, index) => [channelName, parsed.values[index]])
+        );
 
         return {
-            curves: channelCurves,
+            ...parsed,
             baselineEnd,
-            channels,
-            values,
             filename: 'loaded.quad',
             valid: true
         };
@@ -292,72 +186,179 @@ export function parseACVFile(arrayBuffer, filename = 'curve.acv') {
  * @param {string} cubeText - CUBE file content
  * @returns {Object} Parsed LUT data
  */
+const CUBE_NUMBER_PATTERN = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+const DEFAULT_CUBE_DOMAIN_MIN = Object.freeze([0, 0, 0]);
+const DEFAULT_CUBE_DOMAIN_MAX = Object.freeze([1, 1, 1]);
+const MAX_DECLARED_CUBE_1D_SIZE = 65536;
+const MAX_CUBE_3D_SIZE = 256;
+const MAX_HEADERLESS_CUBE_1D_SIZE = 256;
+
+function parseCubeSize(line, directive, lineNumber, maximumSize) {
+    const match = line.match(new RegExp(`^${directive}\\s+(\\d+)\\s*$`, 'i'));
+    if (!match) {
+        throw new Error(`Malformed ${directive} declaration on line ${lineNumber}.`);
+    }
+
+    const size = Number(match[1]);
+    if (!Number.isSafeInteger(size) || size < 2 || size > maximumSize) {
+        throw new Error(`${directive} must declare an integer size between 2 and ${maximumSize} on line ${lineNumber}.`);
+    }
+    return size;
+}
+
+function validateCubeTitle(line, lineNumber) {
+    if (!/^TITLE\s+"(?:[^"\\]|\\.)*"\s*$/i.test(line)) {
+        throw new Error(`Malformed TITLE declaration on line ${lineNumber}.`);
+    }
+}
+
+function requireCubeHeaderBeforeData(directive, dataStarted, lineNumber) {
+    if (dataStarted) {
+        throw new Error(`${directive} must appear before CUBE data rows (line ${lineNumber}).`);
+    }
+}
+
+function parseCubeDomain(line, directive, lineNumber) {
+    const tokens = line.trim().split(/\s+/).slice(1);
+    if (tokens.length !== 1 && tokens.length !== 3) {
+        throw new Error(`${directive} must contain one scalar or three RGB values on line ${lineNumber}.`);
+    }
+
+    const values = tokens.map((token) => (
+        CUBE_NUMBER_PATTERN.test(token) ? Number(token) : Number.NaN
+    ));
+    if (!values.every(Number.isFinite)) {
+        throw new Error(`${directive} must contain finite numeric values on line ${lineNumber}.`);
+    }
+
+    return {
+        arity: values.length,
+        values: values.length === 1 ? [values[0], values[0], values[0]] : values
+    };
+}
+
+function resolveCubeDomains(domainMinDeclaration, domainMaxDeclaration) {
+    if (domainMinDeclaration && domainMaxDeclaration
+        && domainMinDeclaration.arity !== domainMaxDeclaration.arity) {
+        throw new Error('DOMAIN_MIN and DOMAIN_MAX must use matching scalar or RGB arity.');
+    }
+
+    const domainMinRGB = domainMinDeclaration
+        ? domainMinDeclaration.values.slice()
+        : DEFAULT_CUBE_DOMAIN_MIN.slice();
+    const domainMaxRGB = domainMaxDeclaration
+        ? domainMaxDeclaration.values.slice()
+        : DEFAULT_CUBE_DOMAIN_MAX.slice();
+
+    for (let component = 0; component < 3; component += 1) {
+        if (domainMaxRGB[component] <= domainMinRGB[component]) {
+            throw new Error(`DOMAIN_MAX must be greater than DOMAIN_MIN for RGB component ${component + 1}.`);
+        }
+    }
+
+    return { domainMinRGB, domainMaxRGB };
+}
+
+function parseCubeDataRow(line, lineNumber, minimumComponents, maximumComponents) {
+    const tokens = line.trim().split(/\s+/);
+    if (tokens.length < minimumComponents || tokens.length > maximumComponents) {
+        const expected = minimumComponents === maximumComponents
+            ? `exactly ${minimumComponents}`
+            : `${minimumComponents} to ${maximumComponents}`;
+        throw new Error(`CUBE data row ${lineNumber} must contain ${expected} numeric components.`);
+    }
+
+    const values = tokens.map((token) => (
+        CUBE_NUMBER_PATTERN.test(token) ? Number(token) : Number.NaN
+    ));
+    if (!values.every(Number.isFinite)) {
+        throw new Error(`CUBE data row ${lineNumber} must contain finite numeric components.`);
+    }
+    return values;
+}
+
 export function parseCube1D(cubeText, filename = 'lut.cube') {
     try {
         const lines = cubeText.split(/\r?\n/);
-        let domainMin = 0.0;
-        let domainMax = 1.0;
+        let domainMinDeclaration = null;
+        let domainMaxDeclaration = null;
         let declaredSize = null;
+        let titleSeen = false;
+        let dataStarted = false;
         const samples = [];
 
         // Early detection: route mislabeled 3D LUTs to the 3D parser
         for (const raw of lines) {
             const trimmed = raw.trim();
-            if (!trimmed || trimmed.startsWith('#') || /^TITLE/i.test(trimmed)) continue;
-            if (/^LUT_3D_SIZE/i.test(trimmed)) {
-                return parseCube3D(cubeText);
+            if (!trimmed || trimmed.startsWith('#') || /^TITLE(?:\s|$)/i.test(trimmed)) continue;
+            if (/^LUT_3D_SIZE(?:\s|$)/i.test(trimmed)) {
+                return parseCube3D(cubeText, filename);
             }
         }
 
-        for (const raw of lines) {
+        for (let index = 0; index < lines.length; index += 1) {
+            const raw = lines[index];
             const trimmed = raw.trim();
-            if (!trimmed || trimmed.startsWith('#') || /^TITLE/i.test(trimmed)) continue;
+            if (!trimmed || trimmed.startsWith('#')) continue;
+            const lineNumber = index + 1;
 
-            if (/^LUT_1D_SIZE/i.test(trimmed)) {
-                const match = trimmed.match(/LUT_1D_SIZE\s+(\d+)/i);
-                if (match) declaredSize = parseInt(match[1], 10);
+            if (/^TITLE(?:\s|$)/i.test(trimmed)) {
+                requireCubeHeaderBeforeData('TITLE', dataStarted, lineNumber);
+                if (titleSeen) {
+                    throw new Error(`Duplicate TITLE declaration on line ${lineNumber}.`);
+                }
+                validateCubeTitle(trimmed, lineNumber);
+                titleSeen = true;
                 continue;
             }
 
-            if (/^DOMAIN_MIN/i.test(trimmed)) {
-                const parts = trimmed.split(/\s+/);
-                if (parts[1] !== undefined) domainMin = parseFloat(parts[1]);
+            if (/^LUT_1D_SIZE(?:\s|$)/i.test(trimmed)) {
+                requireCubeHeaderBeforeData('LUT_1D_SIZE', dataStarted, lineNumber);
+                if (declaredSize !== null) {
+                    throw new Error(`Duplicate LUT_1D_SIZE declaration on line ${lineNumber}.`);
+                }
+                declaredSize = parseCubeSize(trimmed, 'LUT_1D_SIZE', lineNumber, MAX_DECLARED_CUBE_1D_SIZE);
                 continue;
             }
 
-            if (/^DOMAIN_MAX/i.test(trimmed)) {
-                const parts = trimmed.split(/\s+/);
-                if (parts[1] !== undefined) domainMax = parseFloat(parts[1]);
+            if (/^DOMAIN_MIN(?:\s|$)/i.test(trimmed)) {
+                requireCubeHeaderBeforeData('DOMAIN_MIN', dataStarted, lineNumber);
+                if (domainMinDeclaration) {
+                    throw new Error(`Duplicate DOMAIN_MIN declaration on line ${lineNumber}.`);
+                }
+                domainMinDeclaration = parseCubeDomain(trimmed, 'DOMAIN_MIN', lineNumber);
                 continue;
             }
 
-            const numbers = trimmed
-                .split(/\s+/)
-                .map(val => parseFloat(val))
-                .filter(val => Number.isFinite(val));
-
-            if (numbers.length >= 1 && numbers.length <= 3) {
-                samples.push(numbers[0]);
+            if (/^DOMAIN_MAX(?:\s|$)/i.test(trimmed)) {
+                requireCubeHeaderBeforeData('DOMAIN_MAX', dataStarted, lineNumber);
+                if (domainMaxDeclaration) {
+                    throw new Error(`Duplicate DOMAIN_MAX declaration on line ${lineNumber}.`);
+                }
+                domainMaxDeclaration = parseCubeDomain(trimmed, 'DOMAIN_MAX', lineNumber);
+                continue;
             }
+
+            const numbers = parseCubeDataRow(trimmed, lineNumber, 1, 3);
+            samples.push(numbers[0]);
+            dataStarted = true;
         }
 
-        const SAMPLE_LIMIT = 256;
-        if (declaredSize == null && samples.length > SAMPLE_LIMIT) {
-            throw new Error(`1D LUT lists ${samples.length} samples without LUT_1D_SIZE; limit is ${SAMPLE_LIMIT}.`);
+        if (declaredSize == null && samples.length > MAX_HEADERLESS_CUBE_1D_SIZE) {
+            throw new Error(`1D LUT lists ${samples.length} samples without LUT_1D_SIZE; limit is ${MAX_HEADERLESS_CUBE_1D_SIZE}.`);
         }
 
-        if (declaredSize !== null && samples.length >= declaredSize) {
-            samples.length = declaredSize;
+        if (declaredSize !== null && samples.length !== declaredSize) {
+            throw new Error(`1D LUT declares ${declaredSize} samples but found ${samples.length}.`);
         }
 
-        if (!Number.isFinite(domainMin) || !Number.isFinite(domainMax) || domainMin === domainMax) {
-            domainMin = 0.0;
-            domainMax = 1.0;
+        if (samples.length < 2) {
+            throw new Error('A 1D LUT must contain at least 2 samples.');
         }
 
-        if (!samples.length) {
-            throw new Error('No 1D LUT samples found.');
-        }
+        const { domainMinRGB, domainMaxRGB } = resolveCubeDomains(domainMinDeclaration, domainMaxDeclaration);
+        const domainMin = domainMinRGB[0];
+        const domainMax = domainMaxRGB[0];
 
         const converted = DataSpace.convertSamples(samples, {
             from: DataSpace.SPACE.IMAGE,
@@ -392,6 +393,8 @@ export function parseCube1D(cubeText, filename = 'lut.cube') {
             conversionMeta: converted.meta,
             domainMin,
             domainMax,
+            domainMinRGB,
+            domainMaxRGB,
             interpolationType: 'pchip'
         };
 
@@ -412,42 +415,62 @@ export function parseCube1D(cubeText, filename = 'lut.cube') {
 export function parseCube3D(cubeText, filename = 'lut3d.cube') {
     try {
         const lines = cubeText.split(/\r?\n/);
-        let domainMin = 0.0;
-        let domainMax = 1.0;
+        let domainMinDeclaration = null;
+        let domainMaxDeclaration = null;
         let lutSize = null;
+        let titleSeen = false;
+        let dataStarted = false;
         const lutData = [];
 
-        for (const raw of lines) {
+        for (let index = 0; index < lines.length; index += 1) {
+            const raw = lines[index];
             const line = raw.trim();
-            if (!line || line.startsWith('#') || /^TITLE/i.test(line)) continue;
+            if (!line || line.startsWith('#')) continue;
+            const lineNumber = index + 1;
 
-            if (/^LUT_3D_SIZE/i.test(line)) {
-                const match = line.match(/LUT_3D_SIZE\s+(\d+)/i);
-                if (match) lutSize = parseInt(match[1], 10);
-                continue;
-            }
-
-            if (/^DOMAIN_MIN/i.test(line)) {
-                const parts = line.split(/\s+/);
-                if (parts[1] !== undefined) domainMin = parseFloat(parts[1]);
-                continue;
-            }
-
-            if (/^DOMAIN_MAX/i.test(line)) {
-                const parts = line.split(/\s+/);
-                if (parts[1] !== undefined) domainMax = parseFloat(parts[1]);
-                continue;
-            }
-
-            const parts = line.split(/\s+/);
-            if (parts.length === 3) {
-                const r = parseFloat(parts[0]);
-                const g = parseFloat(parts[1]);
-                const b = parseFloat(parts[2]);
-                if (!isNaN(r) && !isNaN(g) && !isNaN(b)) {
-                    lutData.push([r, g, b]);
+            if (/^TITLE(?:\s|$)/i.test(line)) {
+                requireCubeHeaderBeforeData('TITLE', dataStarted, lineNumber);
+                if (titleSeen) {
+                    throw new Error(`Duplicate TITLE declaration on line ${lineNumber}.`);
                 }
+                validateCubeTitle(line, lineNumber);
+                titleSeen = true;
+                continue;
             }
+
+            if (/^LUT_3D_SIZE(?:\s|$)/i.test(line)) {
+                requireCubeHeaderBeforeData('LUT_3D_SIZE', dataStarted, lineNumber);
+                if (lutSize !== null) {
+                    throw new Error(`Duplicate LUT_3D_SIZE declaration on line ${lineNumber}.`);
+                }
+                lutSize = parseCubeSize(line, 'LUT_3D_SIZE', lineNumber, MAX_CUBE_3D_SIZE);
+                continue;
+            }
+
+            if (/^LUT_1D_SIZE(?:\s|$)/i.test(line)) {
+                throw new Error('A CUBE file cannot contain both LUT_1D_SIZE and LUT_3D_SIZE declarations.');
+            }
+
+            if (/^DOMAIN_MIN(?:\s|$)/i.test(line)) {
+                requireCubeHeaderBeforeData('DOMAIN_MIN', dataStarted, lineNumber);
+                if (domainMinDeclaration) {
+                    throw new Error(`Duplicate DOMAIN_MIN declaration on line ${lineNumber}.`);
+                }
+                domainMinDeclaration = parseCubeDomain(line, 'DOMAIN_MIN', lineNumber);
+                continue;
+            }
+
+            if (/^DOMAIN_MAX(?:\s|$)/i.test(line)) {
+                requireCubeHeaderBeforeData('DOMAIN_MAX', dataStarted, lineNumber);
+                if (domainMaxDeclaration) {
+                    throw new Error(`Duplicate DOMAIN_MAX declaration on line ${lineNumber}.`);
+                }
+                domainMaxDeclaration = parseCubeDomain(line, 'DOMAIN_MAX', lineNumber);
+                continue;
+            }
+
+            lutData.push(parseCubeDataRow(line, lineNumber, 3, 3));
+            dataStarted = true;
         }
 
         if (!lutSize) {
@@ -459,15 +482,22 @@ export function parseCube3D(cubeText, filename = 'lut3d.cube') {
             throw new Error(`3D LUT data mismatch. Expected ${expectedPoints} points, found ${lutData.length}.`);
         }
 
+        const { domainMinRGB, domainMaxRGB } = resolveCubeDomains(domainMinDeclaration, domainMaxDeclaration);
+        const domainSpanRGB = domainMaxRGB.map((maximum, component) => (
+            maximum - domainMinRGB[component]
+        ));
+
         const outputSteps = 256;
         const neutralAxisSamples = new Array(outputSteps);
-        const domainSpan = Math.abs(domainMax - domainMin) > 1e-9 ? (domainMax - domainMin) : 1;
 
         for (let i = 0; i < outputSteps; i++) {
             const input = i / (outputSteps - 1);
             const rgb = [input, input, input];
-            const out = trilinearInterpolate3D(rgb, lutData, lutSize, domainMin, domainSpan);
+            const out = trilinearInterpolate3D(rgb, lutData, lutSize, domainMinRGB, domainSpanRGB);
             neutralAxisSamples[i] = (out[0] + out[1] + out[2]) / 3;
+            if (!Number.isFinite(neutralAxisSamples[i])) {
+                throw new Error(`3D LUT interpolation produced a non-finite sample at index ${i}.`);
+            }
         }
 
         const converted = DataSpace.convertSamples(neutralAxisSamples, {
@@ -476,7 +506,9 @@ export function parseCube3D(cubeText, filename = 'lut3d.cube') {
             metadata: { lutSize }
         });
 
-        const anchoredSamples = anchorSamplesToUnitRange(converted.values.map(value => Number(value) || 0));
+        const anchoredSamples = anchorSamplesToUnitRange(converted.values.slice());
+        const domainMin = domainMinRGB[0];
+        const domainMax = domainMaxRGB[0];
 
         return {
             valid: true,
@@ -490,6 +522,8 @@ export function parseCube3D(cubeText, filename = 'lut3d.cube') {
             conversionMeta: converted.meta,
             domainMin,
             domainMax,
+            domainMinRGB,
+            domainMaxRGB,
             is3DLUT: true,
             interpolationType: 'pchip'
         };
@@ -503,12 +537,12 @@ export function parseCube3D(cubeText, filename = 'lut3d.cube') {
     }
 }
 
-function trilinearInterpolate3D(inputRGB, lutData, lutSize, domainMin, domainSpan) {
+function trilinearInterpolate3D(inputRGB, lutData, lutSize, domainMinRGB, domainSpanRGB) {
     const [r, g, b] = inputRGB;
 
-    const normalizedR = Math.max(0, Math.min(1, (r - domainMin) / domainSpan));
-    const normalizedG = Math.max(0, Math.min(1, (g - domainMin) / domainSpan));
-    const normalizedB = Math.max(0, Math.min(1, (b - domainMin) / domainSpan));
+    const normalizedR = Math.max(0, Math.min(1, (r - domainMinRGB[0]) / domainSpanRGB[0]));
+    const normalizedG = Math.max(0, Math.min(1, (g - domainMinRGB[1]) / domainSpanRGB[1]));
+    const normalizedB = Math.max(0, Math.min(1, (b - domainMinRGB[2]) / domainSpanRGB[2]));
 
     const lutR = normalizedR * (lutSize - 1);
     const lutG = normalizedG * (lutSize - 1);
@@ -522,7 +556,7 @@ function trilinearInterpolate3D(inputRGB, lutData, lutSize, domainMin, domainSpa
     const fg = lutG - g0;
     const fb = lutB - b0;
 
-    const idx = (rr, gg, bb) => rr * lutSize * lutSize + gg * lutSize + bb;
+    const idx = (rr, gg, bb) => bb * lutSize * lutSize + gg * lutSize + rr;
 
     const corners = [
         lutData[idx(r0, g0, b0)],
@@ -624,12 +658,11 @@ export async function parseLinearizationFile(fileContentOrFile, filename) {
             const parsed = parseLabData(textContent, finalFilename, { normalizationMode });
             return applyDefaultLabSmoothingToEntry(parsed, { normalizationMode });
         } else if (ext === 'cube') {
-            // Determine if 1D or 3D CUBE
-            if (textContent.includes('LUT_1D_SIZE')) {
-                return parseCube1D(textContent, finalFilename);
-            } else {
+            // 3D requires an explicit declaration; otherwise preserve 1D compatibility.
+            if (/^\s*LUT_3D_SIZE(?:\s|$)/im.test(textContent)) {
                 return parseCube3D(textContent, finalFilename);
             }
+            return parseCube1D(textContent, finalFilename);
         } else {
             // Default to LAB format
             const parsed = parseLabData(textContent, finalFilename, { normalizationMode });
@@ -840,13 +873,9 @@ export function validateFileFormat(content, filename) {
 
     // QuadToneRIP .quad files
     if (ext === 'quad') {
-        // Count numeric lines to validate - don't require header
-        const numericLines = content.split('\n').filter(line => {
-            const trimmed = line.trim();
-            return trimmed && /^\d+$/.test(trimmed);
-        });
+        const validation = validateQuadFile(content);
         return {
-            valid: numericLines.length >= 256,
+            ...validation,
             format: 'quad',
             parser: 'parseQuadFile'
         };
@@ -909,41 +938,18 @@ export function validateQuadFile(content) {
             };
         }
 
-        const lines = content.split('\n').map(line => line.trim()).filter(line => line);
-
-        // Look for header (optional)
-        const header = lines.find(line => line.startsWith('## QuadToneRIP'));
-        let channels = [];
-
-        if (header) {
-            // Extract channel names from header
-            channels = header.substring('## QuadToneRIP '.length).split(',').map(c => c.trim());
-        }
-
-        // Count numeric data lines
-        const numericLines = lines.filter(line => /^\d+$/.test(line));
-
-        if (numericLines.length < 256) {
+        const parsed = parseQuadFile(content);
+        if (!parsed.valid) {
             return {
                 valid: false,
-                error: `Insufficient data: found ${numericLines.length} values, need at least 256 for one channel`
+                error: parsed.error
             };
-        }
-
-        // If no header, infer channel count
-        if (channels.length === 0) {
-            const inferredChannelCount = Math.floor(numericLines.length / 256);
-            if (DEFAULT_CHANNEL_NAMES[inferredChannelCount]) {
-                channels = DEFAULT_CHANNEL_NAMES[inferredChannelCount];
-            } else {
-                channels = Array.from({ length: inferredChannelCount }, (_, i) => `CH${i + 1}`);
-            }
         }
 
         return {
             valid: true,
-            channels,
-            message: `Valid .quad file with ${channels.length} channels`
+            channels: parsed.channels,
+            message: `Valid .quad file with ${parsed.channels.length} channels`
         };
 
     } catch (error) {

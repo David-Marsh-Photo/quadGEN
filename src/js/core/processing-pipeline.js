@@ -6,7 +6,7 @@ import { elements, getCurrentPrinter, getAppState, TOTAL, getLoadedQuadData, isC
 import { InputValidator } from './validation.js';
 import { ControlPoints, isSmartCurve, isSmartCurveSourceTag } from '../curves/smart-curves.js';
 import { LinearizationState, ensurePrinterSpaceData, normalizeLinearizationEntry } from '../data/linearization-utils.js';
-import { createCubicSpline, createCatmullRomSpline, createPCHIPSpline, clamp01 } from '../math/interpolation.js';
+import { createPCHIPSpline, clamp01 } from '../math/interpolation.js';
 import { buildInkInterpolatorFromMeasurements } from '../data/lab-utils.js';
 import { captureMake256Step } from '../debug/debug-make256.js';
 import { CurveSimplification, normalizeSmoothingAlgorithm } from '../data/curve-simplification.js';
@@ -426,7 +426,7 @@ const compositeLabSession = {
     normalizedEntry: null,
     domainMin: 0,
     domainMax: 1,
-    interpolationType: 'cubic',
+    interpolationType: 'pchip',
     smoothingPercent: 0,
     warnings: [],
     preparedContext: null,
@@ -529,7 +529,7 @@ export function beginCompositeLabRedistribution(config = {}) {
     compositeLabSession.normalizedEntry = normalizedEntry;
     compositeLabSession.domainMin = typeof normalizedEntry.domainMin === 'number' ? normalizedEntry.domainMin : 0;
     compositeLabSession.domainMax = typeof normalizedEntry.domainMax === 'number' ? normalizedEntry.domainMax : 1;
-    compositeLabSession.interpolationType = config.interpolationType || 'cubic';
+    compositeLabSession.interpolationType = config.interpolationType || 'pchip';
     compositeLabSession.smoothingPercent = Number.isFinite(config.smoothingPercent) ? Number(config.smoothingPercent) : 0;
     compositeLabSession.warnings = [];
     compositeLabSession.preparedContext = null;
@@ -4763,7 +4763,7 @@ export function make256(endValue, channelName, applyLinearization = false, optio
         });
 
         // Get interpolation type from UI
-        const interpolationType = elements.curveSmoothingMethod?.value || 'cubic';
+        const interpolationType = elements.curveSmoothingMethod?.value || 'pchip';
         // For LAB data, reuse the entry's preview smoothing percent (Options panel slider)
         const globalData = LinearizationState.getGlobalData();
         const globalApplied = LinearizationState.globalApplied;
@@ -5001,15 +5001,10 @@ function prepareLUTInterpolation(lutOrData, domainMin, domainMax, interpolationT
             captureMake256Step(debugChannel, `${entry.__debugStage || 'per'}_lutSamplesProcessed`, processedSamples.slice());
         }
 
-        const type = String(interpolationType || 'cubic').toLowerCase();
+        const type = String(interpolationType || 'pchip').toLowerCase();
         let interpolationFunction;
 
-        if (type === 'pchip' || type === 'smooth') {
-            interpolationFunction = createPCHIPSpline(lutX, processedSamples);
-        } else if (type === 'catmull') {
-            const tensionValue = Number(elements?.catmullTension?.value) || 0;
-            interpolationFunction = createCatmullRomSpline(lutX, processedSamples, Math.max(0, Math.min(1, tensionValue / 100)));
-        } else if (type === 'linear') {
+        if (type === 'linear') {
             interpolationFunction = (t) => {
                 if (t <= lutX[0]) return processedSamples[0];
                 if (t >= lutX[lutX.length - 1]) return processedSamples[processedSamples.length - 1];
@@ -5032,7 +5027,9 @@ function prepareLUTInterpolation(lutOrData, domainMin, domainMax, interpolationT
                 return (1 - alpha) * y0 + alpha * y1;
             };
         } else {
-            interpolationFunction = createCubicSpline(lutX, processedSamples);
+            // PCHIP is mandatory for every smooth photography curve. Legacy
+            // cubic/Catmull labels and unknown values intentionally converge here.
+            interpolationFunction = createPCHIPSpline(lutX, processedSamples);
         }
 
         return {
@@ -5053,7 +5050,7 @@ function preserveLeadingInk(result) {
     return result;
 }
 
-export function apply1DLUT(values, lutOrData, domainMin = 0, domainMax = 1, maxValue = TOTAL, interpolationType = 'cubic', smoothingPercent = 0) {
+export function apply1DLUT(values, lutOrData, domainMin = 0, domainMax = 1, maxValue = TOTAL, interpolationType = 'pchip', smoothingPercent = 0) {
     if (isActiveRangeLinearizationEnabled()) {
         return apply1DLUTActiveRange(values, lutOrData, domainMin, domainMax, maxValue, interpolationType, smoothingPercent);
     }
@@ -5061,7 +5058,7 @@ export function apply1DLUT(values, lutOrData, domainMin = 0, domainMax = 1, maxV
     return apply1DLUTFixedDomain(values, lutOrData, domainMin, domainMax, maxValue, interpolationType, smoothingPercent);
 }
 
-export function apply1DLUTFixedDomain(values, lutOrData, domainMin = 0, domainMax = 1, maxValue = TOTAL, interpolationType = 'cubic', smoothingPercent = 0) {
+export function apply1DLUTFixedDomain(values, lutOrData, domainMin = 0, domainMax = 1, maxValue = TOTAL, interpolationType = 'pchip', smoothingPercent = 0) {
     try {
         if (!Array.isArray(values) || values.length === 0) {
             return [];
@@ -5217,7 +5214,7 @@ export function apply1DLUTFixedDomain(values, lutOrData, domainMin = 0, domainMa
     }
 }
 
-export function apply1DLUTActiveRange(values, lutOrData, domainMin = 0, domainMax = 1, maxValue = TOTAL, interpolationType = 'cubic', smoothingPercent = 0) {
+export function apply1DLUTActiveRange(values, lutOrData, domainMin = 0, domainMax = 1, maxValue = TOTAL, interpolationType = 'pchip', smoothingPercent = 0) {
     try {
         if (!Array.isArray(values) || values.length === 0) {
             return [];

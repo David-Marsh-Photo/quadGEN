@@ -297,6 +297,7 @@ function ensureInkLimitForAbsoluteTarget(channelName, desiredAbsolute, options =
 
     const manager = getStateManager?.();
     if (manager) {
+        getHistoryManager?.();
         manager.setChannelValue(channelName, 'percentage', newPercent);
         manager.setChannelValue(channelName, 'endValue', newEnd);
         manager.setChannelEnabled(channelName, newEnd > 0 || newPercent > 0);
@@ -305,16 +306,6 @@ function ensureInkLimitForAbsoluteTarget(channelName, desiredAbsolute, options =
     updateChannelLockBounds(channelName, { percent: newPercent, endValue: newEnd });
     updateScaleBaselineForChannel(channelName);
     triggerRevertButtonsUpdate();
-
-    const history = getHistoryManager?.();
-    if (history && typeof history.recordChannelAction === 'function') {
-        try {
-            history.recordChannelAction(channelName, 'percentage', currentPercent, newPercent);
-            history.recordChannelAction(channelName, 'endValue', currentEnd, newEnd);
-        } catch (err) {
-            console.warn('[SMART CURVES] Failed to record ink-limit history:', err);
-        }
-    }
 
     let messageText = null;
     if (typeof statusFormatter === 'function') {

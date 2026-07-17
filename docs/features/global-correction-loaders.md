@@ -6,21 +6,26 @@
 
 ## User-Facing Entry Points
 - Global Corrections → `Load Data File` (accepts `.quad`, `.cube`, `.acv`).
-- Lab Tech commands: `load_quad_file`, `load_lut_file`, `load_acv_file` (future expansions).
 
 ## Core State & Helpers
-- Parsers: `src/js/parsers/file-parsers.js`, `src/js/data/quad-parser.js`, LUT/ACV helpers under `src/js/data/`.
+- Canonical `.quad` structure: `src/js/data/quad-parser.js`; `src/js/parsers/file-parsers.js` adapts its result for the editable load workflow. LUT/ACV helpers remain under `src/js/data/`.
 - State integration: `setLoadedQuadData`, overlay registries in `src/js/ui/chart-renderer.js`.
 - History: `history.recordGlobalLoad`.
 
 ## Expected Behavior
 1. **.quad Files**
-   - Parse ink curves, metadata, channel list; store raw curves in `loadedQuadData.curves`, keep immutable copy in `originalCurves` and `originalCurvesBaseline`.
+   - Require one exact 256-integer block per declared channel. Headerless input is accepted only for the documented 8- and 10-channel layouts; malformed structure is rejected before load-state mutation.
+   - Parse the channel list, per-channel maxima, and curves; store raw curves in `loadedQuadData.curves`, keep immutable copy in `originalCurves` and `originalCurvesBaseline`.
    - Capture ink limit baselines for global scale, auto limit, and revert integration.
    - Seed Smart curves from `.quad` data on first Edit Mode activation.
    - Update filename label, channel table, and revert/intent button states.
 
 2. **.cube LUT (1D/3D)**
+   - Treat `LUT_1D_SIZE` as an exact 2–65,536-row declaration; retain 2–256-row
+     headerless and lowercase 1D compatibility through the same live parser route.
+   - Reject malformed/non-finite rows and invalid scalar/RGB domains before
+     state mutation. Apply all three domain axes to red-fastest 3D data before
+     neutral-axis extraction.
    - Normalize orientation, map to printer-space samples, convert per-channel curves, and store as overlays (read-only) while keeping `.quad` base intact.
    - Resample the oriented data with a monotonic PCHIP interpolator so LUTs that rise smoothly in image space stay monotonic on quadGEN’s 0–100 printer ramps.
    - Provide smoothing control points when sample counts ≤25 (for Smart seeding).
@@ -43,11 +48,17 @@
 
 ## Edge Cases & Guards
 - Non-grayscale channels: warn and ignore unsupported ones; maintain channel ordering consistent with current printer profile.
-- Incomplete data: fall back to linear ramp, inform user via status toast.
+- Invalid or incomplete correction data is rejected before history or application
+  state changes; the prior correction, curves, baselines, and controls remain
+  active and an error status explains the rejection.
+- CUBE size declarations, row arity/finite values, and domain arity/ranges are
+  structural parser guards and never silently truncate, shift, or reset data.
 - Loading new `.quad` clears measurement state, history, and Smart metadata; user confirmation may be required (future enhancement).
 
 ## Testing
 - Manual matrix: load each format, verify overlays, Smart seeding, and Undo behavior.
+- Playwright: `tests/e2e/correction-import-atomicity.spec.ts` verifies rejected
+  global and per-channel imports preserve the active correction and history.
 - Scripts: `scripts/compare_quad_versions.py` validates parsing accuracy (internal tooling).
 
 ## Debugging Aids

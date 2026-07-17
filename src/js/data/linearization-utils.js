@@ -705,7 +705,7 @@ export function getGlobalLinearizationInterpolationType(linearizationData, selec
         return selectedInterpolationType;
     }
 
-    return 'cubic'; // Default
+    return 'pchip'; // Mandatory smooth default
 }
 
 /**
@@ -719,7 +719,7 @@ export function createLinearizationData(samples, options = {}) {
         sourceSpace = DataSpace.SPACE.PRINTER,
         domainMin = 0,
         domainMax = 1,
-        interpolationType = 'cubic',
+        interpolationType = 'pchip',
         filename = 'generated',
         description = 'Generated linearization data'
     } = options;
@@ -754,6 +754,13 @@ export function validateLinearizationData(data) {
         };
     }
 
+    if (data.valid === false) {
+        return {
+            valid: false,
+            message: data.error || 'Linearization parser rejected the data'
+        };
+    }
+
     if (!Array.isArray(data.samples)) {
         return {
             valid: false,
@@ -761,17 +768,17 @@ export function validateLinearizationData(data) {
         };
     }
 
-    if (data.samples.length === 0) {
+    if (data.samples.length < 2) {
         return {
             valid: false,
-            message: 'Samples array cannot be empty'
+            message: 'Samples array must contain at least two values'
         };
     }
 
     // Check sample values
     for (let i = 0; i < data.samples.length; i++) {
         const sample = data.samples[i];
-        if (typeof sample !== 'number' || !isFinite(sample)) {
+        if (typeof sample !== 'number' || !Number.isFinite(sample)) {
             return {
                 valid: false,
                 message: `Invalid sample at index ${i}: ${sample}`
@@ -780,10 +787,10 @@ export function validateLinearizationData(data) {
     }
 
     // Check domain
-    if (typeof data.domainMin !== 'number' || typeof data.domainMax !== 'number') {
+    if (!Number.isFinite(data.domainMin) || !Number.isFinite(data.domainMax)) {
         return {
             valid: false,
-            message: 'domainMin and domainMax must be numbers'
+            message: 'domainMin and domainMax must be finite numbers'
         };
     }
 

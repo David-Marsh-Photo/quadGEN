@@ -109,7 +109,7 @@ export class GraphStatus {
         // that we can see working, then worry about perfect positioning later
         const statusContainer = document.createElement('div');
         statusContainer.id = 'graphStatusContainer';
-        statusContainer.className = 'fixed top-1 right-4 z-50 bg-white bg-opacity-90 px-2 py-1 rounded shadow-sm';
+        statusContainer.className = 'fixed top-1 right-4 z-50 bg-white bg-white/90 px-2 py-1 rounded shadow-sm';
         statusContainer.style.fontSize = '11px';
         statusContainer.style.fontFamily = 'monospace';
         statusContainer.style.border = 'none';

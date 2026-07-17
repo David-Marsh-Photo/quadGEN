@@ -16,6 +16,8 @@ ALL smooth curve generation MUST use PCHIP (Piecewise Cubic Hermite Interpolatin
 - Prevents overshooting
 - Maintains monotonic curves
 - **Never** use smoothstep, cosine, Catmull-Rom, or cubic splines
+- Missing, unknown, or legacy Cubic/Catmull interpolation labels normalize to PCHIP at the processing boundary
+- Explicit Linear interpolation is the only supported technical exception
 
 ### Helper Function
 `buildInkInterpolatorFromMeasurements(points, options)` centralizes the inversion pipeline:
@@ -28,6 +30,16 @@ Options:
 - LAB smoothing slider: `widenFactor = 1 + (percent/600) × 3` (range [1.0, 4.0])
 
 ## LAB Data Lifecycle & State Management
+
+### Correction Import Atomicity
+
+- Global and per-channel correction files must report parser success and pass
+  shared validation before history capture or any state, curve, baseline, cache,
+  or UI mutation.
+- Imported corrections require at least two finite samples, a finite ascending
+  domain, and a recognized source space.
+- Rejecting an invalid file preserves the active correction and its history/UI
+  state; only the file input is reset and an error status is reported.
 
 ### Data Flow
 1. **Load .quad**: `baselineEnd` captured, `originalCurves` stored

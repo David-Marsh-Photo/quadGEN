@@ -1,6 +1,14 @@
 # quadGEN AI Integration
 
-Lab Tech functions, tool contracts, and documentation policy.
+Shelved Lab Tech contracts, the active network-free editing facade, and documentation policy.
+
+## Current Status — Shelved (2026-07-16)
+
+- The shipped UI has no Lab Tech tab, console, prompt, or assistant controls.
+- `src/main.js` does not import assistant configuration, chat-interface, or chat-UI modules and no longer exposes those modules' compatibility globals.
+- `createQuadGenActions()` remains active as a network-free programmatic editing facade used by core and compatibility callers.
+- Assistant source and tests remain in the repository as dormant implementation reference.
+- Cloudflare production and preview Worker URLs are disabled. Any revival requires a fresh product decision plus security, authentication, provider, and deployment review.
 
 ## Documentation Policy
 
@@ -9,7 +17,7 @@ Lab Tech functions, tool contracts, and documentation policy.
 - **Reference docs**: `/docs` directory, file format specs in `docs/File_Specs/`
 - **Architecture map**: `docs/architecture-map.md` (regenerate with `node scripts/docs/export-architecture-map.js`)
 
-## Lab Tech Functions
+## Dormant Lab Tech Function Catalog
 
 ### Key-Point Operations (Per-Channel)
 | Function | Purpose |
@@ -95,12 +103,14 @@ Lab Tech functions, tool contracts, and documentation policy.
 - Double-apply guard: Recompute with global correction tags `bakedGlobal` to prevent double scaling
 - Per-channel guard: Skip per-channel linearization only when Smart curve is actually applied
 
-## Cloudflare Worker
+## Archived Cloudflare Worker Configuration
 
-- Worker: `cloudflare-worker.js` with KV rate limits
+- Status: production and preview URLs disabled; not used by the shipped app
+- Worker source: `cloudflare-worker.js` with KV rate limits
 - Environment: `CLAUDE_API_KEY` must be set
 - Default limits: 10/minute, 100/hour, 500/day per IP
-- Model: Claude Sonnet 4 (`claude-sonnet-4-5`)
+- Model: Claude Sonnet 5 (`claude-sonnet-5`)
+- Thinking: explicitly disabled to preserve the concise 1,000-token tool-response budget
 
 ## Security
 

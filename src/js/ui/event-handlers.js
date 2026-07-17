@@ -30,7 +30,7 @@ import scalingCoordinator from '../core/scaling-coordinator.js';
 import { updateCompactChannelsList, updateChannelCompactState, updateNoChannelsMessage } from './compact-channels.js';
 import { registerChannelRow, getChannelRow } from './channel-registry.js';
 import { updateProcessingDetail, updateSessionStatus } from './graph-status.js';
-import { LinearizationState, normalizeLinearizationEntry, getEditedDisplayName, getBasePointCountLabel } from '../data/linearization-utils.js';
+import { LinearizationState, normalizeLinearizationEntry, validateLinearizationData, getEditedDisplayName, getBasePointCountLabel } from '../data/linearization-utils.js';
 import { maybeAutoRaiseInkLimits } from '../core/auto-raise-on-import.js';
 import { ControlPoints, extractAdaptiveKeyPointsFromValues, KP_SIMPLIFY, isSmartCurve, isSmartCurveSourceTag, rescaleSmartCurveForInkLimit, refreshPlotSmoothingSnapshotsForSmartEdit } from '../curves/smart-curves.js';
 import { isEditModeEnabled, setEditMode, populateChannelDropdown, refreshSmartCurvesFromMeasurements, reinitializeChannelSmartCurves, persistSmartPoints, setGlobalBakedState, isSmartPointDragActive } from './edit-mode.js';
@@ -410,6 +410,22 @@ function getPerChannelMaps() {
         enabled: { ...(appState.perChannelEnabled || {}) },
         filenames: { ...(appState.perChannelFilenames || {}) }
     };
+}
+
+function normalizeAndValidateLinearizationImport(parsed, filename) {
+    if (!parsed || parsed.valid !== true) {
+        throw new Error(parsed?.error || 'Failed to parse linearization data');
+    }
+
+    const validation = validateLinearizationData(parsed);
+    if (!validation.valid) {
+        throw new Error(validation.message || 'Invalid linearization data');
+    }
+
+    const normalized = normalizeLinearizationEntry(parsed);
+    normalized.filename = filename;
+    normalized.edited = false;
+    return normalized;
 }
 
 function syncPerChannelAppState(channelName, data) {
@@ -3040,7 +3056,7 @@ function rebaseChannelsToCorrectedCurves(channelNames = [], options = {}) {
         isLabLinearizationData(globalData)
     );
 
-    const interpolationType = elements.curveSmoothingMethod?.value || 'cubic';
+    const interpolationType = elements.curveSmoothingMethod?.value || 'pchip';
     let smoothingPercent = 0;
     if (compositeEligible) {
         if (globalData && typeof globalData.previewSmoothingPercent === 'number') {
@@ -3635,6 +3651,44 @@ function restoreChannelsToRebasedSources(channelNames = [], options = {}) {
     });
 
     return restoredChannels;
+}
+
+export function restoreOriginalCurvesForGlobalReplacement() {
+    const loadedData = getLoadedQuadData?.();
+    const originalCurves = loadedData?.originalCurves;
+    if (!originalCurves || typeof originalCurves !== 'object') {
+        return [];
+    }
+
+    if (!loadedData.curves || typeof loadedData.curves !== 'object') {
+        loadedData.curves = {};
+    }
+    loadedData.rebasedCurves = {};
+    loadedData.rebasedSources = {};
+
+    const baselineEndSnapshot = {};
+    const originalChannels = [];
+    Object.entries(originalCurves).forEach(([channelName, curve]) => {
+        if (!Array.isArray(curve)) {
+            return;
+        }
+        const cloned = curve.slice();
+        loadedData.curves[channelName] = cloned.slice();
+        loadedData.rebasedCurves[channelName] = cloned.slice();
+        loadedData.rebasedSources[channelName] = cloned.slice();
+        baselineEndSnapshot[channelName] = Math.max(...cloned);
+        originalChannels.push(channelName);
+    });
+
+    if (originalChannels.length) {
+        loadedData.baselineEnd = { ...baselineEndSnapshot };
+        restoreChannelsToRebasedSources(originalChannels, {
+            skipRefresh: false,
+            skipScaleBaselineUpdate: true
+        });
+    }
+
+    return originalChannels;
 }
 
 function applyCurveSnapshot(curveMap = {}, options = {}) {
@@ -4776,17 +4830,14 @@ function initializeFileHandlers() {
 
                     // Parse the linearization file
                     const parsed = await parseLinearizationFile(fileInput, file.name);
+                    const normalized = normalizeAndValidateLinearizationImport(parsed, file.name);
 
-                    if (parsed && parsed.samples) {
+                    if (normalized) {
                         console.log('✅ Global linearization file loaded:', file.name);
 
                         if (typeof CurveHistory !== 'undefined' && CurveHistory && typeof CurveHistory.captureState === 'function') {
                             CurveHistory.captureState('Before: Load Global Linearization');
                         }
-
-                        // Store in LinearizationState (modular system)
-                        const normalized = normalizeLinearizationEntry(parsed);
-                        normalized.filename = file.name;
 
                         // Use LinearizationState for modular system
                         LinearizationState.setGlobalData(normalized, true, { source: 'external' });
@@ -4795,35 +4846,7 @@ function initializeFileHandlers() {
                         syncLabSpotMarkersToggle();
 
                         try {
-                            const loadedData = getLoadedQuadData?.();
-                            if (loadedData && loadedData.originalCurves && typeof loadedData.originalCurves === 'object') {
-                                if (!loadedData.curves || typeof loadedData.curves !== 'object') {
-                                    loadedData.curves = {};
-                                }
-                                loadedData.rebasedCurves = {};
-                                loadedData.rebasedSources = {};
-                                const baselineEndSnapshot = {};
-                                Object.entries(loadedData.originalCurves).forEach(([channelName, curve]) => {
-                                    if (!Array.isArray(curve)) {
-                                        return;
-                                    }
-                                    const cloned = curve.slice();
-                                    loadedData.curves[channelName] = cloned.slice();
-                                    loadedData.rebasedCurves[channelName] = cloned.slice();
-                                    loadedData.rebasedSources[channelName] = cloned.slice();
-                                    baselineEndSnapshot[channelName] = Math.max(...cloned);
-                                });
-                                if (Object.keys(baselineEndSnapshot).length) {
-                                    loadedData.baselineEnd = { ...baselineEndSnapshot };
-                                }
-                                const originalChannels = Object.keys(loadedData.originalCurves).filter((name) => Array.isArray(loadedData.originalCurves[name]));
-                                if (originalChannels.length) {
-                                    restoreChannelsToRebasedSources(originalChannels, {
-                                        skipRefresh: false,
-                                        skipScaleBaselineUpdate: true
-                                    });
-                                }
-                            }
+                            restoreOriginalCurvesForGlobalReplacement();
                         } catch (resetErr) {
                             console.warn('Failed to restore original curves before applying new global linearization:', resetErr);
                         }
@@ -4990,7 +5013,7 @@ function initializeFileHandlers() {
 
                 } catch (error) {
                     console.error('Error loading global linearization file:', error);
-                    // TODO: Add user-visible error message
+                    showStatus(`Error loading global correction: ${error.message}`);
                 }
 
                 // Clear the file input for next use
@@ -5753,6 +5776,11 @@ export function setupChannelRow(tr) {
         if (!file || !perChannelBtn) return;
 
         try {
+            const extension = file.name.toLowerCase().split('.').pop();
+            const fileInput = extension === 'acv' ? await file.arrayBuffer() : await file.text();
+            const parsed = await parseLinearizationFile(fileInput, file.name);
+            const normalized = normalizeAndValidateLinearizationImport(parsed, file.name);
+
             if (typeof CurveHistory !== 'undefined' && CurveHistory && typeof CurveHistory.captureState === 'function') {
                 // Capture current channel state for debugging
                 if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS) {
@@ -5766,12 +5794,6 @@ export function setupChannelRow(tr) {
                 }
                 CurveHistory.captureState(`Before: Load Per-Channel Linearization (${channelName})`);
             }
-
-            const extension = file.name.toLowerCase().split('.').pop();
-            const fileInput = extension === 'acv' ? await file.arrayBuffer() : await file.text();
-            const parsed = await parseLinearizationFile(fileInput, file.name);
-            const normalized = normalizeLinearizationEntry(parsed);
-            normalized.edited = false;
 
             perChannelLinearizationMap[channelName] = normalized;
             perChannelEnabledMap[channelName] = true;
@@ -5858,20 +5880,6 @@ export function setupChannelRow(tr) {
         } catch (error) {
             console.error('Per-channel linearization file error:', error);
             showStatus(`Error loading ${channelName} linearization: ${error.message}`);
-            delete perChannelLinearizationMap[channelName];
-            delete perChannelFilenamesMap[channelName];
-            perChannelEnabledMap[channelName] = false;
-            existingPerChannelData = null;
-            LinearizationState.clearPerChannel(channelName);
-            syncPerChannelAppState(channelName, null);
-            if (perChannelToggle) {
-                perChannelToggle.disabled = true;
-                perChannelToggle.checked = false;
-            }
-            refreshPerChannelDisplay();
-            updateProcessingDetail(channelName);
-            updateInkChart();
-            refreshEffectiveInkDisplays();
         } finally {
             if (perChannelFile) {
                 perChannelFile.value = '';

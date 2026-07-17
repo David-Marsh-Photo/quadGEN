@@ -59,7 +59,7 @@ All parsed data objects now include a `sourceSpace` field that records whether t
   treatment: "INTERPOLATE_AND_SMOOTH", // Requires processing
   processingStage: "LINEARIZATION_LAYER",
   scalingBehavior: "DOMAIN_SCALE", // Scale to 0-1 domain
-  interpolationNeeds: "REQUIRED", // Use PCHIP or user-selected method
+  interpolationNeeds: "REQUIRED", // PCHIP for smooth curves; explicit Linear is the technical exception
   uiRepresentation: "File load + smoothing controls",
   processingPriority: 2, // Applied after base curves
   notes: "Measurement data represents key sampling points that need interpolation to create smooth correction curves."
@@ -71,16 +71,20 @@ All parsed data objects now include a `sourceSpace` field that records whether t
 // Storage: linearizationData or perChannelLinearization[channelName]
 {
   source: "1D/3D LUT .cube files",
-  pointCount: "Variable - 1D: (often 33, 65, 256), 3D: (256 extracted points)",
+  pointCount: "Variable - 1D: 2-65,536 declared or 2-256 headerless rows; 3D: 256 extracted points",
   valueRange: "0.0-1.0 (normalized)",
   sourceSpace: "printer", // Converted from image space via DataSpace helper
   treatment: "INTERPOLATE_AND_SMOOTH", // Requires processing
   processingStage: "LINEARIZATION_LAYER",
   scalingBehavior: "DOMAIN_SCALE", // Already normalized
-  interpolationNeeds: "REQUIRED", // Use PCHIP or user-selected method
+  interpolationNeeds: "REQUIRED", // PCHIP for smooth curves; explicit Linear is the technical exception
   uiRepresentation: "File load + smoothing controls",
   processingPriority: 2, // Applied after base curves
-  notes: "Professional LUT data - 1D LUTs used directly, 3D LUTs have neutral axis (R=G=B diagonal) extracted via trilinear interpolation to create 256-point correction curves."
+  domainMin: "First declared component for downstream scalar compatibility",
+  domainMax: "First declared component for downstream scalar compatibility",
+  domainMinRGB: "Complete scalar-broadcast or RGB minimum declaration",
+  domainMaxRGB: "Complete scalar-broadcast or RGB maximum declaration",
+  notes: "Declared 1D counts are exact; all row/domain components must be finite. 3D LUTs use red-fastest ordering and per-axis domains while extracting the R=G=B neutral axis via trilinear interpolation."
 }
 ```
 
@@ -95,7 +99,7 @@ All parsed data objects now include a `sourceSpace` field that records whether t
   treatment: "INTERPOLATE_AND_SMOOTH", // Requires processing
   processingStage: "LINEARIZATION_LAYER",
   scalingBehavior: "RANGE_CONVERT", // Convert 0-255 to 0-1 domain
-  interpolationNeeds: "REQUIRED", // Use PCHIP or user-selected method
+  interpolationNeeds: "REQUIRED", // PCHIP for smooth curves; explicit Linear is the technical exception
   uiRepresentation: "File load + smoothing controls",
   processingPriority: 2, // Applied after base curves
   notes: "Photoshop curve anchor points that define tone adjustments. Always requires interpolation."
@@ -173,9 +177,10 @@ LAB → Smart conversion preserves plotted shape:
 - Benefits: Visually identical handoff pre/post conversion; no path shifts between adjacent anchors.
 
 **`parseQuadFile(content)`**: Parses .quad file format
-- Extracts QuadToneRIP header: `## QuadToneRIP K,C,M,Y,LC,LM,LK,LLK`
-- Validates 256 data points per channel (0-65535 range)
-- Returns structured data with channel curves and metadata
+- Treats a non-empty, unique `## QuadToneRIP ...` channel declaration as authoritative; exact headerless 8- and 10-channel files use the documented standard layouts
+- Requires exactly 256 integer data points per channel in the 0–65535 range and rejects extra values, remainder data, or non-comment text
+- Owns structural validation for both editable and reference imports; reference-only size and active-printer matching remain workflow checks
+- Returns the channel order, each channel's maximum value, and its 256-point curve
 
 **`_pchipInterpolate(x, y, xi)`**: PCHIP implementation
 - Monotonic interpolation preserving curve characteristics

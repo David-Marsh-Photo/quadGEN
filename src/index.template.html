@@ -32,7 +32,6 @@ Scope: This license applies to this HTML file (quadgen.html) only.
 <title id="pageTitle">quadGEN</title>
 <meta content="quadGEN - Generate Epson P700-P900/P600-P800 QuadToneRIP .quad files with 256-step ramps per channel." name="description"/>
 <!-- Version History notes guidance: keep entries concise, direct, factual, and short. See AGENTS.md and CLAUDE.md. -->
-<script src="https://cdn.tailwindcss.com"></script>
 <link href="/src/styles/main.css" rel="stylesheet"/>
 <script src="/src/main.js" type="module"></script>
 </head>
@@ -160,12 +159,11 @@ Scope: This license applies to this HTML file (quadgen.html) only.
 <div class="chart-divider-grip"></div>
 </div>
 </div> <!-- Close chartPanel -->
-<!-- Tabbed Tool Area (Bottom: Channels, Lab Tech, Preview) -->
+<!-- Tabbed Tool Area (Bottom: Channels, Preview) -->
 <div class="tool-tabs-container" id="toolTabs">
 <!-- Tab Navigation -->
 <div class="tab-nav" role="tablist">
 <button aria-selected="true" class="tab-btn active" data-tab="channels" role="tab"><span class="tab-icon">🎛️</span><span class="tab-title">CHANNELS</span></button>
-<button aria-selected="false" class="tab-btn" data-tab="lab" role="tab"><span class="tab-icon">💬</span><span class="tab-title">LAB TECH</span></button>
 <button aria-selected="false" class="tab-btn" data-tab="preview" role="tab"><span class="tab-icon">📄</span><span class="tab-title">.QUAD PREVIEW</span></button>
 </div>
 <!-- Tab Content Areas -->
@@ -210,45 +208,6 @@ Scope: This license applies to this HTML file (quadgen.html) only.
 <tbody id="rows">
 </tbody>
 </table>
-</div>
-</div>
-<!-- Lab Tech Tab -->
-<div class="tab-content" data-tab-content="lab" hidden="" role="tabpanel">
-<div class="border border-gray-200 rounded-xl overflow-hidden">
-<div class="console-header bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 flex items-center justify-between">
-<span><span class="mr-1" id="labTechIcon">💬</span>Lab Tech</span>
-<div class="flex items-center gap-3">
-<label class="flex items-center gap-1 text-xs text-gray-700 hidden" title="Show assistant status messages in chat">
-<input checked="" class="rounded border-gray-300" id="aiShowStatusToggle" type="checkbox"/>
-<span>Show assistant status</span>
-</label>
-<button class="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 rounded px-2 py-0.5 font-bold focus:outline-none focus:ring-0" id="clearChatBtn">Clear</button>
-</div>
-</div>
-<div class="font-mono p-2" id="labTechConsole">
-<!-- Chat History -->
-<div class="overflow-y-auto text-xs leading-4 mb-2" id="chatHistory" style="height:224px;">
-<div class="labtech-sample px-2 py-1 rounded mb-2">
-<strong>Try this:</strong> "Reduce all ink limits by 20%"<br/>
-<strong>or:</strong> "generate a curve with points 0,0 25,20 75,85 100,100"<br/>
-<strong>or:</strong> "apply a midtone lift"<br/>
-<strong>or:</strong> "delete the key point near 25%"<br/>
-<strong>or:</strong> "delete key point 2"
-                </div>
-</div>
-<!-- Resizer for Lab Tech console -->
-<div aria-orientation="horizontal" class="h-4 bg-gray-800/40 hover:bg-gray-700/60 cursor-row-resize mb-2 rounded relative" id="labTechResizer" role="separator" title="Drag to resize">
-<div class="absolute inset-0 flex items-center justify-center pointer-events-none">
-<span class="inline-block w-10 h-[2px] bg-gray-400/80 rounded"></span>
-<span class="inline-block w-10 h-[2px] bg-gray-400/80 rounded ml-1"></span>
-</div>
-</div>
-<!-- Bottom input area -->
-<div class="flex items-center gap-2">
-<input class="flex-1 min-w-0 rounded border px-3 py-1 text-xs focus:outline-none focus:ring-2 placeholder-gray-400" id="aiInputCompact" placeholder="Ask Lab Tech… (Enter to send)" type="text"/>
-<button class="px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded font-bold focus:outline-none focus:ring-0" disabled="" id="sendMessageBtnCompact">Send</button>
-</div>
-</div>
 </div>
 </div>
 <!-- Preview Tab -->
@@ -554,12 +513,12 @@ Scope: This license applies to this HTML file (quadgen.html) only.
 </div>
 </div>
 
-<div id="lstarModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+<div aria-hidden="true" aria-labelledby="lstarModalTitle" aria-modal="true" class="fixed inset-0 bg-black bg-black/50 hidden flex items-center justify-center z-50" id="lstarModal" role="dialog">
   <div class="bg-white rounded-lg max-w-3xl w-full mx-4 max-h-[90vh] flex flex-col">
     <div class="p-6 pb-4 flex-shrink-0">
       <div class="flex justify-between items-center mb-2">
-        <h3 class="text-lg font-semibold">Manual Luminosity (L*) Entry</h3>
-        <button id="closeLstarModal" class="text-gray-500 hover:text-gray-700 text-xl">&times;</button>
+        <h3 class="text-lg font-semibold" id="lstarModalTitle">Manual Luminosity (L*) Entry</h3>
+        <button aria-label="Close Manual L* entry" class="inline-flex h-11 w-11 items-center justify-center rounded text-2xl text-gray-500 hover:text-gray-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" id="closeLstarModal" type="button"><span aria-hidden="true">&times;</span></button>
       </div>
       <div class="hidden text-xs italic text-gray-700 mb-3 p-2 px-3 bg-gray-50 border border-gray-200 rounded">The L* component of the Lab color system represents perceived lightness, ranging from 0 (black) to 100 (white). Equal steps in L* correspond approximately to equal perceptual differences in light–dark appearance.</div>
       <div class="hidden mb-4 text-sm text-gray-600">
@@ -616,7 +575,7 @@ Scope: This license applies to this HTML file (quadgen.html) only.
         </thead>
         <tbody id="lstarInputs" class="align-middle"></tbody>
       </table>
-      <div id="lstarValidation" class="text-sm text-red-600 mt-3 hidden"></div>
+      <div aria-atomic="true" aria-live="polite" class="text-sm text-red-600 mt-3 hidden" id="lstarValidation" role="status"></div>
     </div>
     <div class="p-6 pt-4 flex-shrink-0 border-t border-gray-200">
       <div class="flex justify-end gap-3">
@@ -633,7 +592,7 @@ Scope: This license applies to this HTML file (quadgen.html) only.
 </div>
 </div> <!-- Close app-layout -->
 <!-- Help Popup -->
-<div class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4" id="helpPopup">
+<div aria-hidden="true" aria-labelledby="helpPopupTitle" aria-modal="true" class="fixed inset-0 bg-black bg-black/50 hidden z-50 flex items-center justify-center p-4" id="helpPopup" role="dialog">
 <div class="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] p-6 relative">
 <button aria-label="Close" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors" id="closeHelpBtn">
 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24">
@@ -653,7 +612,7 @@ Scope: This license applies to this HTML file (quadgen.html) only.
 <circle cx="94" cy="48" fill="white" r="6" stroke="#1A1A1A" stroke-width="2"></circle>
 <circle cx="126" cy="18" fill="white" r="6" stroke="#1A1A1A" stroke-width="2"></circle>
 </svg>
-<h2 class="text-xl font-bold">quadGEN <span class="text-gray-400 text-base" id="helpAppVersion"></span></h2>
+<h2 class="text-xl font-bold" id="helpPopupTitle">quadGEN <span class="text-gray-400 text-base" id="helpAppVersion"></span></h2>
 </div>
 <div class="mb-2 border-b border-gray-200 flex items-center gap-2" id="helpTabs">
 <button class="px-3 py-1 text-sm font-bold text-gray-800 border-b-2 border-slate-700" id="helpTabReadme">README</button>
@@ -665,7 +624,7 @@ Scope: This license applies to this HTML file (quadgen.html) only.
 </div>
 </div>
 <!-- Options Modal -->
-<div aria-labelledby="optionsModalTitle" aria-modal="true" class="fixed inset-0 bg-black bg-opacity-30 hidden z-50 flex items-start justify-center md:justify-end px-4 py-8 md:py-16" id="optionsModal" role="dialog">
+<div aria-labelledby="optionsModalTitle" aria-modal="true" class="fixed inset-0 bg-black bg-black/30 hidden z-50 flex items-start justify-center md:justify-end px-4 py-8 md:py-16" id="optionsModal" role="dialog">
 <div class="bg-white border border-gray-200 rounded-xl shadow-2xl w-full max-w-[420px] max-h-[90vh] flex flex-col" data-options-panel="">
 <div class="px-4 py-3 border-b border-gray-200 flex items-center gap-3">
 <h2 class="text-sm font-semibold flex items-center gap-2 text-gray-900" id="optionsModalTitle">
@@ -764,105 +723,26 @@ Scope: This license applies to this HTML file (quadgen.html) only.
 </div>
 </div>
 </div>
-<!-- Global Correction Help Popup -->
-<div id="globalCorrectionHelpPopup" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4">
-<div class="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] p-6 relative">
-<button aria-label="Close" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors" id="closeGlobalCorrectionHelpBtn">
-<svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24">
-<path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
-</svg>
-</button>
-<h2 class="text-xl font-bold mb-4">Global Correction Help</h2>
-<div class="text-sm text-gray-700 space-y-6 max-h-[70vh] overflow-y-auto">
-<div>
-<p class="font-medium text-lg mb-2">Overview</p>
-<p class="text-sm text-gray-600">Global corrections can be applied in two ways: directly via a curve/LUT file, or by computing a linearization from L* measurements. Both approaches update all channels uniformly.</p>
-</div>
-<div>
-<p class="font-medium text-lg mb-2">Working Assumptions</p>
-<ul class="list-disc list-inside text-sm text-gray-600">
-<li>Positive space: X=0% is white → X=100% is black; Y=0% = no ink (white), Y=100% = max ink (black).</li>
-<li>Endpoints anchored: Keep 0→0 and 100→100 fixed unless you have a specific reason to change them.</li>
-<li>Monotonic, smooth curves: Avoid kinks or flat spots, especially near endpoints.</li>
-<li>Digital negatives: Work in positive space; invert your image in the editor when making a digital negative.</li>
-</ul>
-</div>
-<div>
-<p class="text-xs text-gray-700 font-semibold">Applies Directly →</p>
-<ul class="list-disc list-inside text-xs text-gray-600 mb-1">
-<li>Photoshop Curves (.acv): Curve presets.</li>
-<li>LUT (.cube): 1D or 3D LUT.</li>
-</ul>
-</div>
-<div>
-<p class="text-xs text-gray-700 font-semibold">Calculates Linearization ↕</p>
-<ul class="list-disc list-inside text-xs text-gray-600 mb-1">
-<li>LAB Data (.txt): L* measurements.</li>
-<li>Manual L* Entry: L* measurements.</li>
-</ul>
-</div>
-<div>
-<p class="font-medium text-lg mb-2">Tonal Zones</p>
-<ul class="list-disc list-inside text-sm text-gray-600">
-<li><span class="font-medium">Highlights</span>: 0–25% (X)</li>
-<li><span class="font-medium">Midtones</span>: 25–75% (X)</li>
-<li><span class="font-medium">Shadows</span>: 75–100% (X)</li>
-</ul>
-<div class="text-xs text-gray-600 mt-2">Examples: Lighten shadows → reduce output in 75–95% and taper to 0 change by 100%. Lighten highlights → reduce output in 5–25% and taper to 0 by 0%.</div>
-</div>
-<div>
-<p class="font-medium text-lg mb-2">Workflow Summary</p>
-<ol class="list-decimal list-inside space-y-1 ml-2 text-sm">
-<li>Choose your printer and set ink limits for each channel.</li>
-<li>Export a test .quad and print a 0–100% step wedge.</li>
-<li>Measure the positive result (inkjet print or alt‑process print).</li>
-<li>Load data into quadGEN: LAB (.txt), EDN LUT (.cube/.acv), or Manual L*.</li>
-<li>Review the graph and adjust channel limits if needed.</li>
-<li>Export the corrected .quad and reprint to verify.</li>
-</ol>
-<div class="text-xs text-gray-600 ml-2 mt-2">Tip for digital negatives: work in positive space, then invert your image in your editor before printing the negative.</div>
-</div>
-<div>
-<p class="font-medium text-lg mb-2">Auto endpoint rolloff</p>
-<p class="text-sm text-gray-600 mb-1">Temporarily disabled while we retune the shoulder/toe detector. Existing projects keep previously baked knees, but quadGEN will not generate new auto rolloff adjustments until the retune ships.</p>
-<div class="text-xs text-gray-600 mt-2">Historical behavior (for reference only): the black limit added a soft shoulder near End, and the white limit added a soft toe near 0. Those localized knees will return once the detector is dialed back in.</div>
-</div>
-<div>
-<p class="font-medium text-lg mb-2">Sample Data</p>
-<div class="flex gap-2">
-<div class="flex-1">
-<button class="w-full px-2 py-1 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded transition-colors font-bold" id="helpLoadSampleLab">Load LAB-Data-sample.txt</button>
-<a class="block text-center text-xs text-blue-600 hover:text-blue-800 mt-1" href="#" id="helpDownloadSampleLab">↓ Download LAB-Data-sample.txt</a>
-</div>
-<div class="flex-1">
-<button class="w-full px-2 py-1 text-xs bg-purple-100 hover:bg-purple-200 text-purple-700 rounded transition-colors font-bold" id="helpLoadSampleCube">Load Sample LUT.cube</button>
-<a class="block text-center text-xs text-purple-600 hover:text-purple-800 mt-1" href="#" id="helpDownloadSampleCube">↓ Download LUT_sample.cube</a>
-</div>
-</div>
-</div>
-</div>
-</div>
-</div>
 <!-- Intent Help Popup (Correction vs Intent) -->
-<div class="fixed inset-0 bg-black bg-opacity-50 hidden z-50 flex items-center justify-center p-4" id="intentHelpPopup">
+<div aria-hidden="true" aria-labelledby="intentHelpTitle" aria-modal="true" class="fixed inset-0 bg-black bg-black/50 hidden z-50 flex items-center justify-center p-4" id="intentHelpPopup" role="dialog">
 <div class="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] p-6 relative">
-<button aria-label="Close" class="absolute top-4 right-4 text-gray-400 hover:text-gray-600 transition-colors" id="closeIntentHelpBtn">
+<button aria-label="Close Intent Help" class="absolute right-2 top-2 inline-flex h-11 w-11 items-center justify-center rounded text-gray-400 transition-colors hover:text-gray-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" id="closeIntentHelpBtn" type="button">
 <svg class="w-6 h-6" fill="none" stroke="currentColor" viewbox="0 0 24 24">
 <path d="M6 18L18 6M6 6l12 12" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"></path>
 </svg>
 </button>
-<h2 class="text-xl font-bold mb-4">Global Correction &amp; Intent</h2>
+<h2 class="text-xl font-bold mb-4 pr-12" id="intentHelpTitle">Global Correction &amp; Intent</h2>
 <div class="text-sm text-gray-700 space-y-6 max-h-[70vh] overflow-y-auto" id="intentHelpContent"></div>
 </div>
 </div>
 <!-- Channel Builder Modal -->
-<div id="channelBuilderModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 p-4">
+<div aria-hidden="true" aria-labelledby="channelBuilderModalTitle" aria-modal="true" class="fixed inset-0 bg-black bg-black/50 hidden flex items-center justify-center z-50 p-4" id="channelBuilderModal" role="dialog">
   <div class="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] flex flex-col">
     <!-- Header -->
     <div class="p-4 border-b border-gray-200 flex-shrink-0">
       <div class="flex justify-between items-center">
-        <h3 class="text-lg font-semibold">Channel Builder</h3>
-        <button id="closeChannelBuilderModal" class="text-gray-500 hover:text-gray-700 text-xl">&times;</button>
+        <h3 class="text-lg font-semibold" id="channelBuilderModalTitle">Channel Builder</h3>
+        <button aria-label="Close Channel Builder" class="inline-flex h-11 w-11 items-center justify-center rounded text-2xl text-gray-500 hover:text-gray-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-blue-500" id="closeChannelBuilderModal" type="button"><span aria-hidden="true">&times;</span></button>
       </div>
       <p class="text-sm text-gray-500 mt-1">Build multi-ink quad files by measuring secondary channel L* contributions</p>
     </div>
@@ -882,7 +762,7 @@ Scope: This license applies to this HTML file (quadgen.html) only.
         <div class="text-sm text-gray-600 mb-4">
           Set up your reference K channel. Print a linear ramp at your chosen ink limit, measure L* values, then enter them below. This is the baseline for computing secondary channel positions.
         </div>
-        <div id="cbKStatus"></div>
+        <div aria-atomic="true" aria-live="polite" id="cbKStatus" role="status"></div>
         <div class="space-y-3">
           <!-- K Ink Limit -->
           <div>
@@ -928,7 +808,7 @@ Scope: This license applies to this HTML file (quadgen.html) only.
                 <tbody id="cbKEntryRows"></tbody>
               </table>
             </div>
-            <div id="cbKValidation" class="text-xs text-red-600 mt-2 hidden"></div>
+            <div aria-atomic="true" aria-live="polite" class="text-xs text-red-600 mt-2 hidden" id="cbKValidation" role="status"></div>
           </div>
 
           <button id="cbParseKMeasurements" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded text-sm">
@@ -998,7 +878,7 @@ Scope: This license applies to this HTML file (quadgen.html) only.
                 <tbody id="cbChEntryRows"></tbody>
               </table>
             </div>
-            <div id="cbChValidation" class="text-xs text-red-600 mt-2 hidden"></div>
+            <div aria-atomic="true" aria-live="polite" class="text-xs text-red-600 mt-2 hidden" id="cbChValidation" role="status"></div>
           </div>
         </div>
         <button id="cbAddChannelBtn" class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded text-sm">

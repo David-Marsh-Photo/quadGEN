@@ -7,6 +7,7 @@ Use the smallest reliable test layer that proves the behavior. Tests are maintai
 ```bash
 npm test                # Vitest suite
 npm run test:smoke      # Default browser smoke gate
+npm run test:history    # Focused history and undo/redo Playwright gate
 npm run test:e2e:gate   # Focused global-scaling Playwright gate
 npm run test:e2e        # Full retained Playwright suite
 ```
@@ -40,12 +41,14 @@ Do not use Playwright for a pure function or create a diagnostic script before e
 
 ## Required Verification
 
-Run focused tests while iterating. After a fix, run the complete Vitest suite and `npm run test:smoke`; run `npm run test:e2e:gate` for affected global-scaling workflows and the narrow relevant Playwright spec for other browser workflows. Run `npm run build:agent` after source changes and verify the generated artifact. Use `npm run test:e2e` when changing broad UI infrastructure or auditing the suite.
+Run focused tests while iterating. After a fix, run the complete Vitest suite and `npm run test:smoke`; run `npm run test:e2e:gate` for affected global-scaling workflows, `npm run test:history` for history capture or restoration changes, and the narrow relevant Playwright spec for other browser workflows. Run `npm run build:agent` after source changes and verify the generated artifact. Use `npm run test:e2e` when changing broad UI infrastructure or auditing the suite.
 
 ## Specialized Contracts
 
 - Correction workflow: `tests/e2e/triforce-correction-audit.spec.ts`, using `tests/e2e/utils/lab-flow.ts`.
+- Correction import rejection: `tests/e2e/correction-import-atomicity.spec.ts`.
 - Composite solver: `tests/lab/composite-density-ladder.test.js` and `tests/lab/composite-negative-ease.test.js`.
+- History and undo/redo: the seven retained Playwright contracts under `tests/history/`, run with `npm run test:history`.
 - Smooth photography curves must retain PCHIP and monotonicity guarantees.
 
 ## Organization
@@ -54,3 +57,4 @@ Run focused tests while iterating. After a fix, run the complete Vitest suite an
 - `tests/lab/`: LAB and correction tests
 - `tests/ui/`: UI/module tests
 - `tests/e2e/`: Playwright workflows
+- `tests/history/`: focused Playwright history contracts plus Vitest snapshot-rebase coverage

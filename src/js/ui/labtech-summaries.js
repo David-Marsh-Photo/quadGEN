@@ -7,7 +7,7 @@ import { make256 } from '../core/processing-pipeline.js';
 import { isChannelNormalizedToEnd } from '../core/state.js';
 import { LinearizationState, normalizeLinearizationEntry } from '../data/linearization-utils.js';
 import { getTargetRelAt } from '../data/lab-parser.js';
-import { createPCHIPSpline, createCubicSpline, createCatmullRomSpline, clamp01 } from '../math/interpolation.js';
+import { createPCHIPSpline, clamp01 } from '../math/interpolation.js';
 import { statusMessages } from './status-messages.js';
 import { isDensityNormalizationEnabled } from '../core/lab-settings.js';
 
@@ -16,15 +16,8 @@ const globalScope = typeof window !== 'undefined' ? window : globalThis;
 const LINE_SAMPLE_COUNT = 256;
 const CLAMP_THRESHOLD_PERCENT = 0.25; // detect touches within ±0.25% of limit
 
-function createInterpolator(type, xCoords, samples) {
-  if (type === 'pchip') {
-    return createPCHIPSpline(xCoords, samples);
-  }
-  if (type === 'catmull') {
-    const tension = Number(elements?.catmullTension?.value ?? 50) / 100;
-    return createCatmullRomSpline(xCoords, samples, tension);
-  }
-  return createCubicSpline(xCoords, samples);
+function createInterpolator(xCoords, samples) {
+  return createPCHIPSpline(xCoords, samples);
 }
 
 function buildGlobalDeltaSummary() {
@@ -64,8 +57,7 @@ function buildGlobalDeltaSummary() {
       xCoords = Array.from({ length: K }, (_, i) => i / (K - 1));
     }
 
-    const interpolationType = elements?.curveSmoothingMethod?.value || 'cubic';
-    const interp = createInterpolator(interpolationType, xCoords, samples);
+    const interp = createInterpolator(xCoords, samples);
 
     let minDelta = Infinity;
     let maxDelta = -Infinity;

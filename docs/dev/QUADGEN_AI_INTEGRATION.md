@@ -2,6 +2,11 @@
 
 AI integration system, Smart Curves, and key‑point operations for quadGEN.
 
+> **Shelved (2026-07-16):** The Lab Tech UI, assistant startup runtime,
+> configuration/chat compatibility globals, and public Worker route are disabled. The network-free action facade
+> and dormant assistant source are retained as implementation reference. The
+> sections below describe that retained contract, not a currently shipped assistant.
+
 ## AI Integration System
 
 ### Function Categories
@@ -48,20 +53,20 @@ The AI computes explicit numeric key points and applies them via the functions a
 - Labels: Smart key points are always labeled (1‑based), sorted by input. Label chips tint to the channel color with auto black/white text for contrast (dark/light theme aware).
 - Processing detail panel: when a Smart Curve is active and a per‑channel source is loaded but disabled, the panel consolidates into a single line showing the source filename (with ✦Edited✦ when modified) and the current Smart key‑point count, e.g., `✦Edited✦ strong_contrast.acv (6 key points)`.
 
-## Testing AI Integration
+## Archived AI Integration Testing
 
-**Local Development**:
-1. Ensure Cloudflare Worker is deployed with `CLAUDE_API_KEY`
-2. Worker URL hardcoded in quadgen.html: `https://sparkling-shape-8b5a.marshmonkey.workers.dev/`
-3. Test AI functions through the UI or browser console
+Do not deploy or exercise the dormant assistant path as part of normal app
+testing. A future revival must first complete product, security, authentication,
+provider, and deployment review; only then should these retained contracts be
+revalidated against a non-production endpoint.
 
 **Rate Limiting**: Configured in Cloudflare Worker
 - 10 requests/minute, 100/hour, 500/day per IP
 - KV storage tracks usage (`quadgen_rate_limits` namespace)
 - Graceful fallback if KV unavailable
 
-**AI Model**: Claude Sonnet 4 (`claude-sonnet-4-0`)
-- Latest snapshot alias - automatically uses newest Sonnet 4 version
+**AI Model**: Claude Sonnet 5 (`claude-sonnet-5`)
+- Adaptive thinking is disabled in the request so the existing 1,000-token output budget remains available for tool calls and concise operator guidance.
 - Focused on numeric key‑point computation; natural‑language preset curve generation is deprecated
 
 ## Canned LAB Linearization Explanation (for assistant responses)

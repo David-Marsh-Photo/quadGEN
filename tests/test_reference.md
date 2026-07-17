@@ -1,8 +1,8 @@
 # quadGEN Test Suite Reference
 
-**Note:** This document should be kept up-to-date whenever tests are added, removed, or significantly modified.
+**Note:** Keep referenced entries current when those tests are removed or significantly modified.
 
-This document provides a summary of the automated tests in the `/tests` directory.
+This document summarizes selected automated contracts in the `/tests` directory.
 
 ## Test Utilities
 
@@ -19,9 +19,9 @@ This document provides a summary of the automated tests in the `/tests` director
 *   **Purpose:** Tests the UI logic for the chart zoom feature.
 *   **Covers:** Ensures that zoom preferences are saved and loaded, zoom levels snap correctly, and the zoom buttons are disabled at the boundaries (e.g., you can't zoom past 100%).
 
-### 3. `cube_parser.test.js`
-*   **Purpose:** Tests the parsing of `.cube` LUT (Look-Up Table) files.
-*   **Covers:** Checks that a standard 1D `.cube` file is parsed correctly and that invalid files are rejected.
+### 3. `parsers/cube-parser.test.js`
+*   **Purpose:** Tests strict parsing of 1D and 3D `.cube` LUT files.
+*   **Covers:** Exact 1D declarations and size limits, headerless/lowercase compatibility, atomic finite rows, scalar/RGB domains, red-fastest per-axis 3D neutral extraction, malformed input rejection, and retained fixture behavior.
 
 ### 4. `dataspace.spec.js`
 *   **Purpose:** Tests the conversion logic between "image space" (0=white) and "printer space" (0=black).
@@ -35,6 +35,6 @@ This document provides a summary of the automated tests in the `/tests` director
 *   **Purpose:** Tests the main pipeline steps for generating a final 256-point curve.
 *   **Covers:** It tests the individual helper functions for building the base curve, applying per-channel linearization, applying global linearization, and applying the auto-endpoint adjustments.
 
-### 7. `history_flow.spec.js`
-*   **Purpose:** A placeholder for future tests related to the undo/redo history feature.
-*   **Covers:** Nothing. This test is currently skipped.
+### 7. `e2e/manual-lstar-apply.spec.ts`
+*   **Purpose:** Proves that Manual L* replacement and history form one reversible operator action.
+*   **Covers:** Exact prior-correction independence plus Apply/Undo/Redo convergence across active, central, and compatibility correction payloads; baked metadata and controls; runtime smoothing; chart and canvas; preview; and exported `.quad` content.

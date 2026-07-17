@@ -5,7 +5,7 @@ quadGEN helps inkjet printers get the most from QuadToneRIP by turning raw measu
 ## What You Can Do
 - **Tune curves quickly.** Import existing `.quad` files or measurement data and refine them with Smart Edit Mode.
 - **Stay flexible with formats.** Bring in LAB/CGATS/CTI3 readings, manual L* entries, LUT `.cube` files, or Photoshop `.acv` curves—the editor keeps everything in sync.
-- **Lean on built-in guidance.** Contrast “intents,” undo/redo, key-point labels, and Lab Tech automations help you hit your target look faster.
+- **Lean on built-in guidance.** Contrast “intents,” undo/redo, and key-point labels help you hit your target look faster.
 - **Share or archive results.** Export a single-file bundle that contains your updated curve, notes, and a lightweight help panel for future reference.
 
 ## How the App Feels

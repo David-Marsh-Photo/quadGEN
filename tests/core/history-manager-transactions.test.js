@@ -170,6 +170,20 @@ describe('HistoryManager transactions', () => {
     expect(history.history).toHaveLength(1);
   });
 
+  it('keeps a transaction latest when unchanged enabled state is replayed', () => {
+    const txId = history.beginTransaction('Scale 90%');
+    history.recordChannelAction('K', 'percentage', 100, 90);
+    history.commit(txId);
+
+    history.recordChannelAction('K', 'enabled', true, true);
+    history.recordChannelAction('C', 'enabled', false, false);
+
+    expect(history.history).toHaveLength(1);
+    expect(history.history[0].kind).toBe('transaction');
+    history.undo();
+    expect(stateManager.setChannelValue).toHaveBeenCalledWith('K', 'percentage', 100);
+  });
+
   it('restores snapshot when rolling back a transaction', () => {
     stateManager.state.printer.channelValues.K = { percentage: 90 };
     const txId = history.beginTransaction('Rollback scale');

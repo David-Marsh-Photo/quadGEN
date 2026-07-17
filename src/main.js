@@ -20,7 +20,6 @@ import {
 import {
     clamp01,
     createPCHIPSpline,
-    createCubicSpline,
     gammaMap
 } from './js/math/interpolation.js';
 
@@ -188,18 +187,8 @@ import {
     validateQuadFile
 } from './js/parsers/file-parsers.js';
 
-// Import AI integration
-import {
-    QuadGenActions,
-    createQuadGenActions
-} from './js/ai/ai-actions.js';
-
-import {
-    AI_CONFIG,
-    CLAUDE_FUNCTIONS,
-    getAIProviderConfig,
-    validateAIFunctionCall
-} from './js/ai/ai-config.js';
+// Programmatic editing facade shared by core UI and compatibility callers.
+import { createQuadGenActions } from './js/ai/ai-actions.js';
 
 // Import scaling utilities
 import {
@@ -209,21 +198,6 @@ import {
     resetGlobalScale,
     getCurrentScale
 } from './js/core/scaling-utils.js';
-
-// Import Chat Interface
-import {
-    ChatInterface,
-    getChatInterface,
-    sendChatMessage,
-    shouldShowAssistantStatus,
-    initializeChatInterface
-} from './js/ai/chat-interface.js';
-
-// Import Chat UI
-import {
-    ChatUI,
-    chatUI
-} from './js/ui/chat-ui.js';
 
 // Import Status Messages
 import {
@@ -383,55 +357,14 @@ function testExtractedModules() {
     const debouncedLog = debounce((msg) => console.log('  Debounced:', msg), 100);
     debouncedLog('Test debounce function');
 
-    // Test AI integration modules
-    console.log('🤖 Testing AI integration:');
-
-    // Test AI configuration
-    const aiConfig = getAIProviderConfig();
-    console.log('  AI Provider Config =', {
-        provider: aiConfig.provider,
-        model: aiConfig.model,
-        debug: aiConfig.debug
-    });
-
-    console.log('  CLAUDE_FUNCTIONS count =', CLAUDE_FUNCTIONS.length);
-    console.log('  Sample function =', CLAUDE_FUNCTIONS[0]?.name);
-
-    // Test QuadGenActions
+    // Test the network-free programmatic editing facade
+    console.log('🧰 Testing programmatic actions:');
     const quadActions = createQuadGenActions();
     console.log('  QuadGenActions created =', !!quadActions);
 
     // Test a simple action
     const testResult = quadActions.setChannelValue('K', 75);
     console.log('  Test action result =', testResult.success, '-', testResult.message);
-
-    // Test Chat Interface
-    const chatInterface = getChatInterface();
-    console.log('  getChatInterface() =', !!chatInterface);
-
-    // Test chat message handling
-    chatInterface.addMessage('system', 'Test system message');
-    console.log('  addMessage test =', chatInterface.getHistory().length > 0);
-
-    // Test assistant status function
-    console.log('  shouldShowAssistantStatus() =', shouldShowAssistantStatus());
-
-    // Test API key validation (async test)
-    chatInterface.validateApiKey('test-key-12345').then(apiValidation => {
-        console.log('  validateApiKey() =', {
-            valid: apiValidation.valid,
-            message: apiValidation.message
-        });
-    }).catch(error => {
-        console.log('  validateApiKey error =', error.message);
-    });
-
-    // Test function validation
-    const validationTest = validateAIFunctionCall('set_channel_value', { channelName: 'K', percentage: 50 });
-    console.log('  Function validation test =', validationTest.success);
-
-    const validationFailTest = validateAIFunctionCall('set_channel_value', { channelName: 'K' }); // Missing percentage
-    console.log('  Function validation fail test =', validationFailTest.success, '-', validationFailTest.message);
 
     // Test state management modules
     console.log('📊 Testing state management:');
@@ -620,7 +553,7 @@ function testExtractedModules() {
 
     // Test apply1DLUT function
     const testCurve = [0, 16384, 32768, 49152, 65535];
-    const lutResult = apply1DLUT(testCurve, null, 0, 1, 65535, 'cubic', 0);
+    const lutResult = apply1DLUT(testCurve, null, 0, 1, 65535, 'pchip', 0);
     console.log('  apply1DLUT() placeholder =', {
         inputLength: testCurve.length,
         outputLength: lutResult.length,
@@ -891,16 +824,9 @@ function initializeApplication() {
     }, 0);
 
     const quadActions = createQuadGenActions();
-    const aiConfig = getAIProviderConfig();
-    console.log(`🤖 AI Provider: ${aiConfig.provider} (${aiConfig.model})`);
-
-    initializeChatInterface();
     initializePreview();
     initializeTheme();
     initializeIntentSystem();
-
-    console.log('🎨 Initializing Chat UI components...');
-    chatUI.initialize();
 
     const currentPrinter = getCurrentPrinter();
     console.log(`🖨️ Printer: ${currentPrinter.name} (${currentPrinter.channels.length} channels)`);
@@ -1146,19 +1072,6 @@ function initializeApplication() {
         validateQuadFile
     };
 
-    const chatInterfaceCompat = {
-        ChatInterface,
-        getChatInterface,
-        sendChatMessage,
-        shouldShowAssistantStatus,
-        initializeChatInterface
-    };
-
-    const chatUICompat = {
-        ChatUI,
-        chatUI
-    };
-
     const statusMessagesCompat = {
         StatusMessages,
         statusMessages,
@@ -1176,7 +1089,6 @@ function initializeApplication() {
 
     const compatExports = {
         quadGenActions: quadActions,
-        aiConfig,
         PRINTERS,
         INK_COLORS,
         InputValidator,
@@ -1197,8 +1109,6 @@ function initializeApplication() {
         linearizationUtils: linearizationUtilsCompat,
         processingPipeline: processingPipelineCompat,
         fileParsers: fileParsersCompat,
-        chatInterface: chatInterfaceCompat,
-        chatUI: chatUICompat,
         statusMessages: statusMessagesCompat,
         graphStatus,
         updatePreview: updatePreviewCompat,

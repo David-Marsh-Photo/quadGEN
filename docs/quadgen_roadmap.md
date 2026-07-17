@@ -1,56 +1,312 @@
 # quadGEN Development Roadmap
 
-This document outlines potential future goals and architectural strategies for the quadGEN project. These are ideas for consideration as the tool grows and evolves.
+Status: current
 
-## Architectural Goals
+Last reviewed: 2026-07-16
 
-### 1. Implement a Build Step for Development
+quadGEN's roadmap is organized around operator outcomes, calibration fidelity, and
+small verified checkpoints. It is not a list of speculative rewrites. Product
+direction comes from [PRODUCT.md](../PRODUCT.md), and interface work follows
+[DESIGN.md](../DESIGN.md).
 
-- **Goal:** Preserve the project's core strength of single-file portability for end-users while adopting a modern, modular development workflow.
+## Completed Foundations
 
-- **Current State:** The entire application (`HTML`, `CSS`, `JavaScript`) is contained in `quadgen.html`. This is excellent for user portability but can become difficult to maintain, test, and collaborate on as the project grows.
+### Modular development and portable delivery — Complete
 
-- **Proposed Strategy:**
-    1.  **Develop in Modules:** The source code would be split into logical, separate files (e.g., `src/main.js`, `src/interpolation.js`, `src/styles.css`, `src/index.html`). This makes the code easier to navigate, maintain, and test.
-    2.  **Introduce a Build Step:** Use a simple, modern build tool (like Vite or esbuild) to run a single command (e.g., `npm run build`).
-    3.  **Automate Bundling:** The build tool would automatically compile all JavaScript and CSS, minify it to reduce file size, and inject it into the HTML skeleton.
-    4.  **Distribute the Single File:** The output of the build process would be a single, self-contained, and optimized `quadgen.html` file, just like the one that exists now.
+- Application source is organized under `src/` as ES modules.
+- Vite and `vite-plugin-singlefile` produce the self-contained browser build.
+- `npm run build:agent` rebuilds `dist/index.html` and the root `index.html`.
+- The user-facing artifact remains a portable, offline-capable HTML file.
 
-- **Benefits:**
-    - **For Users:** The final product remains a single, portable file. They would see no change except for a potentially smaller file size.
-    - **For Developers:** The development experience becomes much cleaner and more aligned with modern standards. It enables easier collaboration, better source control management, and makes implementing automated tests feasible.
+This replaces the original roadmap proposal to introduce a build step.
 
-### 2. Centralize State Management
+### Automated verification — Complete
 
-- **Goal:** Improve the clarity, predictability, and traceability of data as it flows through the application.
+- Vitest covers stable mathematical, parsing, state, and processing contracts.
+- Playwright provides a one-test smoke check, a focused browser gate, and the
+  complete retained browser inventory.
+- `npm run test:history` provides an isolated, zero-skip gate for seven retained
+  undo/redo and snapshot-restoration contracts.
+- Relevant fixture-backed parity checks protect calibration behavior when
+  production paths change.
+- The completed
+  [complexity-remediation roadmap](plans/complexity-remediation-roadmap.md)
+  records the test-baseline, gate, canonical-path, and workspace-hygiene work.
 
-- **Current State:** Application state (e.g., `linearizationData`, `loadedQuadData`, `perChannelLinearization`) is managed through several distinct global variables. While functional, this can make it difficult to track where and when data changes, especially as new features are added.
+This replaces the original roadmap proposal to introduce an automated test
+suite. New tests are added only when they prove a unique supported contract.
 
-- **Proposed Strategy:**
-    1. **Create a Single State Object:** Consolidate all dynamic application data into a single, comprehensive JavaScript object (e.g., `const quadgenState = { ... }`).
-    2. **Explicit State Updates:** Refactor functions to read from and write to this central state object, rather than modifying global variables directly. This makes the data flow explicit.
+### Product and visual contracts — Complete
 
-- **Benefits:**
-    - **Clarity & Debugging:** The entire state of the application can be inspected at any time by logging a single object (`console.log(quadgenState)`), providing a complete snapshot for debugging.
-    - **Traceability:** It becomes much easier to find where a piece of data is being modified, as all changes are channeled through the central state object.
-    - **Foundation for Future Features:** A centralized state is a prerequisite for advanced features like saving and loading user sessions.
+- [PRODUCT.md](../PRODUCT.md) defines users, purpose, product principles, and the
+  WCAG 2.2 AA accessibility baseline.
+- [DESIGN.md](../DESIGN.md) defines the light-first “Calibration Bench” visual
+  system and its component rules.
+- Feature and format documents under `docs/features/` and `docs/File_Specs/`
+  remain the durable behavior references.
 
-### 3. Implement an Automated Test Suite
+### State ownership foundation — In use
 
-- **Goal:** Increase code quality and developer confidence by creating a safety net that automatically verifies the correctness of core logic.
+The application already combines explicit module-owned state, `core/state.js`,
+`core/state-manager.js`, and a legacy bridge with active callers. Replacing all
+of that with one global object is not a standalone roadmap project. State is
+consolidated only when a concrete feature or reproduced defect identifies an
+ownership problem, and a bridge is removed only after a caller inventory and a
+behavior-complete replacement.
 
-- **Current State:** Testing relies on manual checks and isolated scripts. This is effective for targeted development but does not provide automated, comprehensive regression testing.
+## Current Roadmap
 
-- **Proposed Strategy:**
-    1. **Integrate a Testing Framework:** Introduce a lightweight, modern framework like **Vitest** or **Jest**. These tools are standard in the JavaScript ecosystem and provide a simple way to write and run tests.
-    2. **Start with Pure Functions:** Begin by writing **unit tests** for the core mathematical and data-processing functions that do not depend on the UI. These are the easiest to test and provide the highest value. Good candidates include:
-        - Interpolation algorithms (`createPCHIPSpline`, etc.)
-        - Color science conversions (`cieDensityFromLstar`)
-        - Coordinate space transformations (`DataSpace` object)
-        - File parsers (`parseCube1D`, `parseACVFile`)
-    3. **Expand Coverage:** Gradually add tests for more complex application logic.
+### 1. Release-readiness acceptance — Complete (2026-07-15)
 
-- **Benefits:**
-    - **Confidence & Safety:** Developers can make significant changes and run the test suite to instantly verify that they haven't accidentally broken existing functionality.
-    - **Living Documentation:** Tests act as a form of documentation, showing exactly how a function is expected to behave with various inputs.
-    - **Easier Onboarding:** New contributors can use the tests to understand the codebase and can contribute changes more safely.
+**Outcome:** Confirm that the remediated `main` branch supports the complete
+operator loop without a known release blocker.
+
+**Work:**
+
+- exercise the primary flow: create or import curves, ingest measurements,
+  choose and apply correction, inspect or edit curves, undo or revert, and
+  export the intended `.quad` file
+- confirm a clean checkout builds the portable single-file artifact
+- run the proportionate automated gates and the relevant checks from
+  [manual_tests.md](manual_tests.md)
+- align current user guidance, the Unreleased changelog, and version notes with
+  behavior found during acceptance
+- fix only reproduced blockers in separate bounded checkpoints
+
+**Exit:** The primary flow is accepted, required automated checks pass, the
+portable artifact opens correctly, and no known release-blocking discrepancy
+remains undocumented.
+
+**Acceptance result:** A composed browser flow imported a three-channel `.quad`,
+applied a valid 256-sample LAB correction through Simple Scaling, changed Global
+Scale from 100% to 90%, restored both states with one Undo and Redo, and
+downloaded a valid 5,879-byte `.quad` containing 2,048 numeric samples without a
+browser error. The exercise exposed one blocker: unchanged channel-enabled
+refreshes followed the Scale transaction in history, so Undo consumed a no-op.
+History now ignores only strict-equal `enabled` writes, keeping the Scale
+transaction latest. The failing browser flow and focused unit case were
+reproduced before the fix. Focused history checks passed (11/11), Vitest passed
+(295/295), the 103-module build passed, smoke passed (1/1), the focused gate
+passed (4/4), and the full Playwright inventory passed (93/93 in 18.9 seconds).
+The fix adds four production lines and 25 raw / 10 deterministic-gzip bundle
+bytes; no state owner, scaling or correction math, interpolation, or PCHIP path
+changed.
+
+### 2. Operator clarity and accessibility — Finding-driven
+
+**Outcome:** Consequential calibration choices are visible, understandable, and
+operable without a mouse.
+
+**Work when evidence warrants it:**
+
+- repair concrete WCAG 2.2 AA failures in semantics, keyboard operation, focus,
+  text or control contrast, and non-color state communication
+- keep correction methods and persistent preferences named and explained near
+  their controls
+- verify affected interfaces in light and dark themes and at the relevant
+  narrow layout
+- reuse the existing design tokens, native controls, and in-place guidance
+
+This is incremental conformance work, not authorization for a broad visual
+redesign or a new component framework.
+
+**Completed slice (2026-07-15): Main Help keyboard contract.** A targeted
+technical audit reproduced a WCAG modal failure in the shipped browser artifact:
+Help had no dialog semantics, opening left focus on the page behind it, Tab could
+escape to the document, and Escape left focus on the hidden close control. Help
+now exposes a named modal, moves focus to its close control, contains forward and
+reverse tabbing, and restores the actual opener. The regression failed before the
+fix and passed afterward at a 390×844 viewport. The same contract passed in light
+and dark desktop modes plus narrow light mode, with no browser errors or viewport
+overflow. Vitest passed (295/295), the 103-module build passed, smoke passed
+(1/1), the focused gate passed (4/4), and the full Playwright inventory passed
+(94/94 in 18.8 seconds). The change adds 63 net production lines and 1,169 raw /
+369 deterministic-gzip bundle bytes. The remaining audited dialog surfaces were
+handled in the next finding-driven slice.
+
+**Completed slice (2026-07-16): Remaining audited dialog contract.** Manual L*,
+Channel Builder, and Intent Help now use one bounded focus controller to expose
+named modal semantics, focus the visible close control, contain forward and
+reverse Tab navigation, close by Escape, close control, or backdrop, and restore
+the exact opener. Manual L* and Channel Builder validation regions are polite
+atomic live statuses, and all three close controls are 44×44 px with visible
+focus treatment. The dead Global Correction popup and its sample-only wiring,
+state cache, peer entry, and theme selector were removed. A 12-case browser
+matrix and visual review covered light/dark themes at 390×844 and 1280×900 with
+no panel overflow or browser errors. The eight touched production source files
+remove 18 net lines; the rebuilt artifact shrank 3,862 raw / 822 deterministic-
+gzip bytes to 999,657 bytes. The focused dialog contract passed 3/3, Vitest
+passed 297/297, the 100-module build passed, smoke passed 2/2, the focused gate
+passed 4/4, history passed 7/7, the full Playwright inventory passed 100/100,
+and the pre-commit guard passed 12/12. This closes only the three dialog surfaces
+named by the audit; other overlays remain finding-driven work.
+
+### 3. Lab Tech assistant — Shelved (2026-07-16)
+
+**Current decision:** Lab Tech is not part of the shipped product. Its tab and
+chat controls are removed, the app no longer starts the assistant configuration
+or chat runtime, and the public Worker route is disabled. The network-free
+programmatic action facade remains because core editing and compatibility callers
+still use it; dormant assistant source is retained for possible future work.
+
+**Historical completed slice (2026-07-15):** The Anthropic runtime moved from Claude Sonnet 4.5 to
+Claude Sonnet 5. Adaptive thinking is explicitly disabled so the existing
+1,000-token limit remains available for concise tool calls and operator guidance;
+the request continues to omit `temperature`, `top_p`, and `top_k`. Unused
+provider and model constants were removed from the version module, leaving
+`AI_CONFIG` as the runtime owner. A request-payload contract failed on the old
+model and passed after the migration. A live worker canary returned HTTP 200,
+identified Anthropic and `claude-sonnet-5`, and stopped on exactly one
+`get_current_state` tool call without executing it. The 103-module build passed,
+focused AI checks passed (4/4), Vitest passed (295/295), smoke passed (1/1), the
+focused browser gate passed (4/4), and Playwright passed (94/94 in 19.2 seconds).
+Production source shrank by six net lines; the portable bundle changed by 25 raw
+/ 9 deterministic-gzip bytes. Worker routing, provider selection, prompts, tool
+schemas, calibration behavior, interpolation, and PCHIP paths did not change.
+
+Any revival requires a fresh product decision, security and authentication
+review, deliberate route re-enablement, current provider validation, and a
+non-mutating live canary before the assistant returns to the UI.
+
+### 4. Calibration fidelity and format compatibility — Ongoing
+
+**Outcome:** Imported measurements and curves produce predictable, reversible,
+and exportable results across supported formats.
+
+**Rules:**
+
+- preserve PCHIP wherever smooth interpolation is required
+- protect monotonicity, endpoints, channel limits, history, and export semantics
+- require a format specification and provenance-safe fixture for new parser or
+  exporter behavior
+- use deterministic or byte-level comparisons when consolidating equivalent
+  processing paths
+- document user-visible numerical changes before release
+
+**Completed slice (2026-07-16): Mandatory PCHIP enforcement.** The shipped
+template has no interpolation selector, so Density Solver, CUBE/ACV correction,
+active-range correction, and retained summary paths had silently fallen back to
+cubic interpolation. The processing boundary now preserves only explicit Linear
+as a technical exception; missing, smooth, legacy Cubic/Catmull, and unknown
+labels all converge to PCHIP. The regression failed on the former default and
+passed after the fix. Focused correction/solver checks passed (26/26), Vitest
+passed (295/295), the 99-module build passed, smoke passed (1/1), and the focused
+browser gate passed (4/4).
+
+**Completed slice (2026-07-16): Canonical `.quad` parsing.** Editable and
+reference imports now share the dependency-free structural parser. Explicit
+channel declarations require unique, non-empty names and exactly 256 integer
+values per channel; headerless compatibility remains available only for the
+documented exact 8- and V/MK 10-channel layouts. Extra values or blocks,
+remainders, unsupported headerless counts, out-of-range values, and non-comment
+text are rejected rather than silently discarded. Reference import retains
+pre-parse file type/size guards and post-parse active-printer matching as workflow
+policy outside the structural parser. The consolidation
+removed 162 net production-source lines across three files and reduced the bundle
+by 2,284 raw bytes. The focused contract passed 20/20, a real generated-file
+round-trip remained bit-for-bit identical, all 15 tracked `.quad` fixtures parsed,
+Vitest passed 317/317, the 100-module build passed, smoke passed 2/2, the focused
+gate passed 4/4, history passed 7/7, the full Playwright inventory passed 101/101,
+and the pre-commit guard passed 12/12.
+
+**Completed slice (2026-07-16): CUBE declaration and domain conformance.** 1D
+size declarations now require exactly 2–65,536 finite rows instead of truncating
+or accepting missing data; the 2–256-row headerless safeguard and lowercase 1D
+inputs reach the same live parser. Scalar/RGB domains require matching arity and
+finite ascending ranges, with all three axes preserved and applied during red-fastest 3D
+trilinear evaluation. Malformed rows and non-finite results reject before the
+existing atomic correction boundary. The one truncated tracked fixture now
+declares its actual ten effective rows without changing its samples. Production
+scope remained one file at +139 net lines. The focused CUBE contract passed
+29/29, the broader LUT set passed 34/34, all seven tracked fixtures parsed,
+Vitest passed 346/346, the
+100-module build passed, smoke passed 2/2, the focused gate passed 4/4, history
+passed 7/7, the full Playwright inventory passed 101/101, and the pre-commit
+guard passed 12/12. Two builds produced identical 1,000,078-byte root and
+`dist` artifacts (275,234 deterministic gzip bytes), a 2,705-byte raw and
+899-byte gzip increase over the preceding checkpoint.
+
+### 5. State and architecture evolution — Triggered only
+
+**Outcome:** A touched workflow has one understandable owner and no unnecessary
+dual path.
+
+**Entry criteria:** A supported feature, reproduced defect, or measured change
+bottleneck demonstrates that the current ownership is inadequate.
+
+**Rules:**
+
+- inventory readers, writers, persistence, history, and compatibility callers
+  before changing ownership
+- migrate one behavior-complete slice at a time
+- remove superseded bridges or flags in the same checkpoint when safe
+- do not add a state framework, compatibility layer, cache, or telemetry path
+  without a current measured need and removal criteria
+
+Session save/load is a future product decision, not justification for a
+speculative state rewrite.
+
+**Completed slice (2026-07-16): Manual L* history convergence.** Manual L*
+Apply now replaces an existing global correction from the immutable source
+curves, reapplies the current Global Scale, clears baked state, and commits one
+rollback-safe transaction. Undo restores the prior correction, baked controls,
+loaded curves, channel values, metadata, chart, preview, export, and compatibility
+state; Redo restores the exact Manual correction and its callable smoothing
+provider. The focused browser contract compares identical nonlinear Manual input
+with and without a prior CUBE correction, then exercises Apply → Undo → Redo from
+a baked starting state across the active model, StateManager, compatibility state,
+controls, K curve, canvas, preview, and exported `.quad`. Production scope is
+three files and +131 net lines, exactly at but not over the bug-review tripwire.
+The focused contract passed 1/1, Vitest passed 346/346, the 100-module build
+passed, smoke passed 2/2, the focused gate passed 4/4, history passed 7/7, the
+full Playwright inventory passed 101/101, and the pre-commit guard passed 12/12.
+Two builds produced identical 1,002,576-byte root and `dist` artifacts (275,906
+deterministic gzip bytes), a 2,498-byte raw and 672-byte gzip increase over the
+preceding checkpoint.
+
+**Completed slice (2026-07-16): Auto-raise history convergence.** Raising a
+channel's ink limit now initializes HistoryManager before the StateManager
+mutations and relies on that canonical subscription for one percentage and one
+End action. The redundant explicit writes were removed, while a genuine
+disabled-to-enabled transition still records its distinct enabled action. The
+browser regression reproduced four actions in the former already-enabled path
+(`percentage`, `endValue`, then the duplicate pair) and now requires exactly the
+first two with their old and new values. Production scope is one file and -9 net
+lines; no auto-raise policy, correction math, interpolation, or PCHIP behavior
+changed. The auto-raise and Manual L* focused contracts passed 3/3, Vitest passed
+346/346, smoke passed 2/2, the focused gate passed 4/4, history passed 7/7, the
+full Playwright inventory passed 101/101, and the pre-commit guard passed 12/12.
+The root and `dist` artifacts match at 1,002,357 bytes (275,861 deterministic
+gzip bytes), 219 raw and 45 gzip bytes smaller than the preceding checkpoint.
+
+### 6. Distribution and documentation integrity — Ongoing
+
+**Outcome:** Source, tests, reference material, and the portable artifact agree.
+
+**Rules:**
+
+- rebuild both generated HTML files whenever source changes affect the bundle
+- update the architecture map when module dependencies change
+- keep feature documents current rather than treating historical plans as live
+- publish only approved calibration fixtures; keep unrelated local process data
+  ignored
+- record user-facing changes under the Unreleased changelog before a release
+
+## Not Currently Committed
+
+The following require a new user outcome and explicit scope before entering the
+roadmap:
+
+- saveable or shareable calibration sessions
+- cloud accounts, synchronization, hosted storage, or telemetry
+- a framework migration or wholesale state-management rewrite
+- a broad interface redesign
+- additional correction modes, interpolation systems, or persistent settings
+
+## Checkpoint Contract
+
+Every implementation slice must state its intended behavior, allowed files,
+non-goals, and verification before code changes. Work stops after its acceptance
+criteria, required checks, documentation, and one final diff review. New work
+enters this roadmap only when it advances a documented operator outcome or
+repairs a reproduced defect.

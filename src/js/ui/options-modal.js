@@ -46,7 +46,6 @@ function containOptionsFocus(event) {
 function getModalPeers() {
     return [
         elements.helpPopup,
-        elements.globalCorrectionHelpPopup,
         elements.editModeHelpPopup,
         elements.intentHelpPopup,
         elements.lstarModal,

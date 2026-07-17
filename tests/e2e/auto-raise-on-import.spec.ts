@@ -34,6 +34,10 @@ test.describe('Auto-raise ink limits on import (flagged)', () => {
     expect(Number(beforePercent)).toBeCloseTo(50, 1);
 
     await page.evaluate(() => {
+      window.getHistoryManager?.()?.clear?.();
+    });
+
+    await page.evaluate(() => {
       const samples = Array.from({ length: 256 }, (_, index) => {
         const t = index / 255;
         return Math.min(0.8, t * 0.8);
@@ -62,22 +66,49 @@ test.describe('Auto-raise ink limits on import (flagged)', () => {
       { timeout: 15000 },
     );
 
-    const { percentAfter, audit, summaryAutoRaise } = await page.evaluate(() => {
+    const { percentAfter, audit, summaryAutoRaise, historyEntries } = await page.evaluate(() => {
       const input = document.querySelector('tr[data-channel="K"] .percent-input') as HTMLInputElement | null;
       const percentValue = input?.getAttribute('data-base-percent') ?? input?.value ?? null;
       const auditState = window.__quadDebug?.autoRaiseInkLimits?.getAutoRaiseAuditState?.() || null;
       const summaryState = typeof window.getCompositeDebugState === 'function' ? window.getCompositeDebugState() : null;
       const autoRaisedEnds = summaryState?.summary?.autoRaisedEnds || [];
+      const history = window.getHistoryManager?.();
+      const historyEntries = Array.isArray(history?.history)
+        ? history.history
+          .map((entry: any) => ({
+            kind: entry?.kind ?? null,
+            channelName: entry?.action?.channelName ?? null,
+            type: entry?.action?.type ?? null,
+            oldValue: entry?.action?.oldValue ?? null,
+            newValue: entry?.action?.newValue ?? null,
+          }))
+        : [];
       return {
         percentAfter: percentValue,
         audit: auditState,
         summaryAutoRaise: autoRaisedEnds,
+        historyEntries,
       };
     });
 
     expect(Number(percentAfter)).toBeGreaterThanOrEqual(79.5);
     expect(audit?.adjustments?.length ?? 0).toBeGreaterThan(0);
     expect(summaryAutoRaise.some((entry: any) => entry?.channel === 'K' && entry?.locked === false)).toBe(true);
+    expect(historyEntries).toHaveLength(2);
+    expect(historyEntries[0]).toMatchObject({
+      kind: 'channel',
+      channelName: 'K',
+      type: 'percentage',
+      newValue: 80,
+    });
+    expect(Number(historyEntries[0].oldValue)).toBeCloseTo(50, 1);
+    expect(historyEntries[1]).toEqual({
+      kind: 'channel',
+      channelName: 'K',
+      type: 'endValue',
+      oldValue: 32768,
+      newValue: 52428,
+    });
   });
 
   test('global correction does not revive disabled channels with zero baseline', async ({ page }) => {

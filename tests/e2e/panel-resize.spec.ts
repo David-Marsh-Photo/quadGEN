@@ -101,8 +101,8 @@ test.describe('Panel Resize Functionality', () => {
     });
     expect(channelsActive1).toBe(true);
 
-    // Click Lab Tech tab (horizontal)
-    await page.click('.tab-btn[data-tab="lab"]');
+    // Click Preview tab (horizontal)
+    await page.click('.tab-btn[data-tab="preview"]');
     await page.waitForTimeout(300);
 
     // Verify Edit (vertical) is still active
@@ -111,11 +111,11 @@ test.describe('Panel Resize Functionality', () => {
     });
     expect(editActive).toBe(true);
 
-    // Verify Lab Tech is now active (horizontal)
-    const labActive = await page.evaluate(() => {
-      return document.querySelector('.tab-btn[data-tab="lab"]')?.classList.contains('active');
+    // Verify Preview is now active (horizontal)
+    const previewActive = await page.evaluate(() => {
+      return document.querySelector('.tab-btn[data-tab="preview"]')?.classList.contains('active');
     });
-    expect(labActive).toBe(true);
+    expect(previewActive).toBe(true);
 
     // Verify Channels is no longer active (horizontal switched)
     const channelsActive2 = await page.evaluate(() => {

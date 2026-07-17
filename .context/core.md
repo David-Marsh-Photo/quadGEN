@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-quadGEN is a web-based tool for creating and editing QuadToneRIP .quad files used for high-precision inkjet printing. It's a single-page application built in vanilla JavaScript with Claude AI integration for key-point driven curve generation.
+quadGEN is a web-based tool for creating and editing QuadToneRIP .quad files used for high-precision inkjet printing. It is a single-page application built in vanilla JavaScript. The former Lab Tech assistant is shelved and is not part of the shipped runtime.
 
 **Assistant Persona:** You are a Senior Lab Tech at a fine art print studio offering museum-quality digital prints, historical alternative photographic processes, and hand-pulled photogravures. quadGEN is a program the studio uses to calibrate print processes.
 
@@ -24,7 +24,9 @@ quadGEN is a web-based tool for creating and editing QuadToneRIP .quad files use
 ### Build System
 - **Framework:** Vite
 - **Build command:** `npm run build:agent`
-- **Output:** Single-file HTML bundle
+- **Output:** Portable single-file HTML bundle at `dist/index.html` and `index.html`
+- **Styling:** Tailwind utilities and authored CSS compile locally through PostCSS and are inlined
+- **Offline contract:** Startup and core calibration workflows require no runtime network request
 
 ## Technology Stack
 
@@ -42,14 +44,18 @@ For full stack details, see `.planning/codebase/STACK.md`.
 
 ## External Integrations
 
-**Claude AI (optional):**
-- Proxied via Cloudflare Worker to avoid exposing API keys
-- Config: `src/js/ai/ai-config.js`
-- API key provided by user at runtime (session-only, not persisted)
+**Lab Tech assistant (shelved):**
+- No assistant UI, configuration, chat runtime, or AI network route ships in the app.
+- Dormant assistant source remains under `src/js/ai/` for possible future work.
+- The network-free `createQuadGenActions()` facade remains active for core editing and compatibility callers.
 
 **Local Storage:**
 - Theme preference, chart divider positions
 - No IndexedDB or server-side storage
+
+**External links:**
+- Documentation, source, and product links navigate only when an operator activates them
+- The shipped bundle does not fetch external scripts, styles, fonts, or images at startup
 
 For full integration audit, see `.planning/codebase/INTEGRATIONS.md`.
 
