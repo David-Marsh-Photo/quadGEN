@@ -9,18 +9,60 @@ export const VERSION_HISTORY = {
     title: '',
     sections: {
       ADDED: [],
-      CHANGED: [
-        'Auto Black Limit now defaults OFF for new browser profiles; saved preferences remain unchanged.'
-      ],
-      FIXED: [
-        'Smooth correction paths now enforce PCHIP when interpolation metadata is missing, legacy, or unknown; Linear remains the only technical exception.'
-      ],
-      REMOVED: [
-        'Lab Tech has been shelved: its tab, chat controls, assistant runtime, and production network route are no longer included in the app.'
-      ],
+      CHANGED: [],
+      FIXED: [],
+      REMOVED: [],
       DOCS: []
     },
     aboutDialog: []
+  },
+  '5.2.0': {
+    date: '2026-07-16',
+    title: 'Release-readiness and workflow reliability',
+    sections: {
+      ADDED: [],
+      CHANGED: [
+        'Auto Black Limit now defaults OFF for new browser profiles; saved preferences remain unchanged.',
+        'Global Scale now uses one reversible transaction and one canonical percent/baseline state.'
+      ],
+      FIXED: [
+        'Smooth correction paths now enforce PCHIP when interpolation metadata is missing, legacy, or unknown; Linear remains the only technical exception.',
+        'Invalid correction imports now leave the active correction, curves, history, baselines, and controls unchanged.',
+        '.quad and CUBE imports now reject malformed, incomplete, extra, or non-finite data instead of silently truncating or reinterpreting it.',
+        'Manual L* corrections, auto-raised ink limits, and Global Scale now create exact reversible history actions.',
+        'Help, Manual L*, Channel Builder, and Intent Help now provide complete keyboard focus and close behavior.',
+        'The portable app now retains its full layout and styling without a network connection.'
+      ],
+      REMOVED: [
+        'Lab Tech has been shelved: its tab, chat controls, assistant runtime, and production network route are no longer included in the app.',
+        'Unused correction-help markup and the duplicate root build template were removed.'
+      ],
+      DOCS: [
+        'Format, architecture, workflow, and release-readiness documentation now reflect the shipped contracts.'
+      ]
+    },
+    aboutDialog: [
+      {
+        label: 'Safer correction imports',
+        desc: 'Malformed .quad and CUBE files are rejected before they can change active curves, history, or controls.'
+      },
+      {
+        label: 'Reliable Undo and Redo',
+        desc: 'Manual L*, Global Scale, and auto-raised ink-limit changes now restore the complete visible and exported state.'
+      },
+      {
+        label: 'Mandatory PCHIP smoothing',
+        desc: 'Smooth correction paths use shape-preserving PCHIP unless Linear is explicitly selected for technical use.'
+      },
+      {
+        label: 'Fully offline bundle',
+        desc: 'The single-file app now includes its styling and core workflows without requesting network resources.'
+      },
+      {
+        label: 'Accessible dialogs',
+        desc: 'Audited dialogs now keep keyboard focus contained, close consistently, and return focus to their opener.'
+      }
+    ]
   },
   '5.1.0': {
     date: '2026-02-06',
