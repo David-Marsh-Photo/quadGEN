@@ -1123,6 +1123,9 @@ export function updateInkChart() {
             overlay.style.width = canvas.style.width || `${rect.width}px`;
             overlay.style.height = canvas.style.height || `${rect.height}px`;
         }
+        // Align with the canvas, not the wrapper's padding box
+        overlay.style.top = `${canvas.offsetTop}px`;
+        overlay.style.left = `${canvas.offsetLeft}px`;
     }
 
     lastCanvasMetrics.width = targetWidth;

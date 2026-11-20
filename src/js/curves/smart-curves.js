@@ -895,10 +895,11 @@ export function validateKeyPoints(keyPoints) {
             };
         }
 
-        if (point.input < 0 || point.input > 100 || point.output < 0 || point.output > 100) {
+        // Outputs are relative to the channel Percent and may legitimately exceed 100 (see ControlPoints.normalize)
+        if (point.input < 0 || point.input > 100 || point.output < 0) {
             return {
                 valid: false,
-                message: `Point ${i} values outside 0-100 range`
+                message: `Point ${i} input must be 0-100% and output must not be negative`
             };
         }
     }

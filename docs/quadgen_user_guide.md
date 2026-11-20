@@ -48,7 +48,7 @@ Inspect the chart (output ink vs input ink). Dips below the diagonal indicate da
 Review density constants in the channel table (K/MK 1.00, C 0.21, LK 0.054 by default); the solver uses these for composite redistribution when needed. Apply contrast intents (Linear, Soft, Hard, Filmic, Gamma, Custom) or manual L* targets as needed; intents stack on top of the measurement correction.
 
 ### Step 8 — Edit Mode Touch-Up
-Toggle Edit Mode to expose Smart Key Points, then Recompute to seed them from the plotted curve. Adjust via XY inputs or drag (if enabled). When a change demands more ink than the current End, quadGEN either auto-raises (with a status toast) or blocks the edit if the channel is locked.
+Toggle Edit Mode to expose Smart Key Points, then Recompute to seed them from the plotted curve. Adjust via XY inputs or drag (if enabled), or hover the chart and click where the ring sits on the curve to add a Key Point. When a change demands more ink than the current End, quadGEN either auto-raises (with a status toast) or blocks the edit if the channel is locked.
 
 ### Step 9 — Export, Install, and Verify
 Export the corrected `.quad`, install it in QTR, and log the filename, measurement source, and intent. Reprint the wedge, re-measure, and compare against the diagonal. Iterate until the curve tracks the target with acceptable midtone deviation while keeping endpoints anchored.

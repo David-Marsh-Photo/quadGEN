@@ -9,18 +9,66 @@ export const VERSION_HISTORY = {
     title: '',
     sections: {
       ADDED: [],
-      CHANGED: [
-        'Auto Black Limit now defaults OFF for new browser profiles; saved preferences remain unchanged.'
-      ],
-      FIXED: [
-        'Smooth correction paths now enforce PCHIP when interpolation metadata is missing, legacy, or unknown; Linear remains the only technical exception.'
-      ],
-      REMOVED: [
-        'Lab Tech has been shelved: its tab, chat controls, assistant runtime, and production network route are no longer included in the app.'
-      ],
+      CHANGED: [],
+      FIXED: [],
+      REMOVED: [],
       DOCS: []
     },
     aboutDialog: []
+  },
+  '5.2.0': {
+    date: '2026-11-20',
+    title: 'Release-readiness and workflow reliability',
+    sections: {
+      ADDED: [],
+      CHANGED: [
+        'Auto Black Limit now defaults OFF for new browser profiles; saved preferences remain unchanged.',
+        'Global Scale now uses one reversible transaction and one canonical percent/baseline state.'
+      ],
+      FIXED: [
+        'The Edit Mode add-point cursor now sits on the curve instead of above it.',
+        'Edit Mode can add and delete points again on channels whose ink limit is not an exact displayed percent.',
+        'Smooth correction paths now enforce PCHIP when interpolation metadata is missing, legacy, or unknown; Linear remains the only technical exception.',
+        'Invalid correction imports now leave the active correction, curves, history, baselines, and controls unchanged.',
+        '.quad and CUBE imports now reject malformed, incomplete, extra, or non-finite data instead of silently truncating or reinterpreting it.',
+        'Manual L* corrections, auto-raised ink limits, and Global Scale now create exact reversible history actions.',
+        'Help, Manual L*, Channel Builder, and Intent Help now provide complete keyboard focus and close behavior.',
+        'The portable app now retains its full layout and styling without a network connection.'
+      ],
+      REMOVED: [
+        'Lab Tech has been shelved: its tab, chat controls, assistant runtime, and production network route are no longer included in the app.',
+        'Unused correction-help markup and the duplicate root build template were removed.'
+      ],
+      DOCS: [
+        'Format, architecture, workflow, and release-readiness documentation now reflect the shipped contracts.'
+      ]
+    },
+    aboutDialog: [
+      {
+        label: 'Safer correction imports',
+        desc: 'Malformed .quad and CUBE files are rejected before they can change active curves, history, or controls.'
+      },
+      {
+        label: 'Reliable Undo and Redo',
+        desc: 'Manual L*, Global Scale, and auto-raised ink-limit changes now restore the complete visible and exported state.'
+      },
+      {
+        label: 'Mandatory PCHIP smoothing',
+        desc: 'Smooth correction paths use shape-preserving PCHIP unless Linear is explicitly selected for technical use.'
+      },
+      {
+        label: 'Fully offline bundle',
+        desc: 'The single-file app now includes its styling and core workflows without requesting network resources.'
+      },
+      {
+        label: 'Accessible dialogs',
+        desc: 'Audited dialogs now keep keyboard focus contained, close consistently, and return focus to their opener.'
+      },
+      {
+        label: 'Edit Mode point fixes',
+        desc: 'The add-point ring sits on the curve, and clicking adds points again on channels whose ink limit is not an exact displayed percent.'
+      }
+    ]
   },
   '5.1.0': {
     date: '2026-02-06',
@@ -2206,7 +2254,8 @@ export function getHelpWorkflowHTML(){
           <ul>
             <li><strong>XY input</strong>: Type <code>X,Y</code> (Y is absolute after the channel End). The Up/Down nudges adjust absolute Y, and Left/Right nudges adjust X.</li>
             <li><strong>Point selection</strong>: Use the point selector arrows to step through Smart points in order; the label updates as you move.</li>
-            <li><strong>Insert/Delete</strong>: Click the chart to insert at the current curve location. Deleting endpoints is blocked; use Undo if a change goes too far.</li>
+            <li><strong>Insert/Delete</strong>: Hover the chart to see a ring on the curve with its X, Y readout and “click to add point”; click to insert a Smart point there (Y always follows the curve). Clicking an existing marker selects it instead, and points too close to a neighbor are refused. Deleting endpoints is blocked; use Undo if a change goes too far.</li>
+            <li><strong>Curve redraw</strong>: Smart points redraw the channel through PCHIP, so the curve can shift slightly (typically within Max error %) when you enter Edit Mode or make the first edit. Check the plot before exporting.</li>
             <li><strong>Undo / Redo</strong>: Every edit is logged in history, so you can step backwards or forwards as needed.</li>
           </ul>
         </li>

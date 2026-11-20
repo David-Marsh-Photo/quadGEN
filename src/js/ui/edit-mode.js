@@ -1393,7 +1393,11 @@ export function persistSmartPoints(channelName, points, interpolation = 'smooth'
         });
     }
 
-    const result = setSmartKeyPoints(channelName, relativePoints, interpolation, {
+    // When a point sits above 100% relative (End just above the rounded Percent field), store the
+    // points without rebuilding the loaded curve, so enabling Edit Mode keeps its samples; the first
+    // real edit rebuilds it. (validateKeyPoints used to enforce this by rejecting outputs above 100.)
+    const exceedsPercent = relativePoints.some((p) => p.output > 100);
+    const result = exceedsPercent ? { success: false } : setSmartKeyPoints(channelName, relativePoints, interpolation, {
         skipHistory: true,
         skipMarkEdited: true,
         skipUiRefresh,

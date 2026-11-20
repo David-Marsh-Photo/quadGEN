@@ -39,6 +39,16 @@ Do not use Playwright for a pure function or create a diagnostic script before e
 - Capture screenshots when visual evidence materially helps diagnosis or review.
 - After 2-3 failed approaches, reassess the premise before adding variants.
 
+## Interactive Browser Checks (Houston Browser)
+
+Use the Houston browser (shared skill `/home/davidmarsh/Dropbox/agents/skills/use-houston-browser/SKILL.md`, session path such as `quadGEN/dev`) for visual confirmation, screenshots, reproducing a user's report, and checking quadgen.ink. Do not write ad hoc Playwright scripts or download Playwright browsers just to look at the app.
+
+- Local build: serve the repo root with `python3 -m http.server 8765 --bind 127.0.0.1` (background) and open `http://127.0.0.1:8765/index.html` with `open-and-wait --foreground`; a background tab does not render for screenshots.
+- When `status` reports `debuggerControlReady: true`, `command --type debugger.send_command` (after `debugger.attach`) exposes CDP: `DOM.setFileInputFiles` on `#quadFile` or `#linearizationFile` loads files from `data/`, `Runtime.evaluate` reads app state (`window.isEditModeEnabled()`, element rects), `Input.dispatchMouseEvent` drives chart hover and clicks, and `Page.captureScreenshot` with a clip of the `#inkChart` rect captures evidence.
+- `debugger.send_command` returns the CDP result directly: `Runtime.evaluate` values are at `result.result.value`.
+- Detach the debugger and run `lease-release` when finished; it closes the tabs Houston opened.
+- The Playwright specs below remain the automated regression gates and use Playwright's own Chromium; the Houston extension bridge is not a CDP endpoint Playwright can attach to.
+
 ## Required Verification
 
 Run focused tests while iterating. After a fix, run the complete Vitest suite and `npm run test:smoke`; run `npm run test:e2e:gate` for affected global-scaling workflows, `npm run test:history` for history capture or restoration changes, and the narrow relevant Playwright spec for other browser workflows. Run `npm run build:agent` after source changes and verify the generated artifact. Use `npm run test:e2e` when changing broad UI infrastructure or auditing the suite.

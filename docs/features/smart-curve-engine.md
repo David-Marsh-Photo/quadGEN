@@ -18,7 +18,7 @@
 1. **ControlPoints Facade**
    - `ControlPoints.get(channel)` → { points (relative), interpolation }.
    - `ControlPoints.normalize(points)` clamps, sorts, enforces min gap.
-   - Persisted in `loadedQuadData.keyPoints` as relative outputs (0–100) scaled against channel End during sampling.
+   - Persisted in `loadedQuadData.keyPoints` as relative outputs (normally 0–100; values above 100 are valid when End sits above the channel Percent) scaled against channel End during sampling.
 
 2. **Set / Insert / Adjust / Delete**
    - `setSmartKeyPoints(channel, points, interpolation, options)` validates, applies, samples new 256-value curve, updates metadata (`keyPointsMeta`), triggers chart/UI refresh, and records history unless `skipHistory`.
