@@ -29,6 +29,7 @@ This changelog follows a concise, user-facing format. Engineering details live i
 
 ### Fixed
 - Edit Mode's add-point cursor circle now sits on the curve instead of about 20 px above it (inserted points were already placed correctly).
+- Edit Mode can add, delete, and undo/redo Smart points again when a channel's End sits slightly above its displayed Percent (for example End 19481 = 29.726% shown as 29.7); stored relative values above 100% were wrongly rejected as "outside 0-100 range".
 - Auto-raised ink limits now create one canonical percentage/End history pair instead of duplicate Undo steps; a real disabled-to-enabled transition still records its separate enabled-state change.
 - Manual L* Apply is now one reversible history action: it replaces any prior global correction from the immutable `.quad` baseline, clears baked controls, and Undo/Redo restore correction data, chart, preview, export, metadata, and smoothing behavior exactly.
 - CUBE imports now enforce exact declared 1D counts, atomic finite rows, strict scalar/RGB domains, and red-fastest per-axis 3D normalization while retaining lowercase and headerless 1D compatibility.

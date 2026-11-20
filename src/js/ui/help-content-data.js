@@ -27,6 +27,7 @@ export const VERSION_HISTORY = {
       ],
       FIXED: [
         'The Edit Mode add-point cursor now sits on the curve instead of above it.',
+        'Edit Mode can add and delete points again on channels whose ink limit is not an exact displayed percent.',
         'Smooth correction paths now enforce PCHIP when interpolation metadata is missing, legacy, or unknown; Linear remains the only technical exception.',
         'Invalid correction imports now leave the active correction, curves, history, baselines, and controls unchanged.',
         '.quad and CUBE imports now reject malformed, incomplete, extra, or non-finite data instead of silently truncating or reinterpreting it.',
