@@ -28,6 +28,7 @@ ALL smooth curve generation MUST use PCHIP (Piecewise Cubic Hermite Interpolatin
 Options:
 - `neighbors=4`, `sigmaFloor=0.036`, `sigmaCeil=0.30`, `sigmaAlpha=2.0`
 - LAB smoothing slider: `widenFactor = 1 + (percent/600) × 3` (range [1.0, 4.0])
+- Edge padding: an end whose last patch gap is under 25% of the average gap (bunched end patches) is padded by mirroring the readings through the end patch; other ends keep clamped linear extension, so 21/25-patch corrections are unchanged
 
 ## LAB Data Lifecycle & State Management
 

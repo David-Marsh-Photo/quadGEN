@@ -12,7 +12,7 @@ This changelog follows a concise, user-facing format. Engineering details live i
 - _Nothing yet._
 
 ### Fixed
-- _Nothing yet._
+- LAB and manual L* corrections from targets with patches bunched at the ends (such as 0.2%, 0.6% … 99.4%, 99.8%) no longer produce an ink cliff and a flat top. Smoothing had pulled the end patches away from their readings, so the darkest few percent of input all printed at nearly full ink. Targets with ordinary 21- or 25-patch layouts produce the same corrections as before.
 
 ### Removed
 - _Nothing yet._

@@ -9,6 +9,11 @@ import {
 const clamp01 = (value) => Math.max(0, Math.min(1, value));
 const IDENTITY_ALIGNMENT_THRESHOLD = 0.015;
 const HIGHLIGHT_TAPER_MAX_INPUT = 0.15;
+// An end whose last patch gap is under a quarter of the average gap has
+// bunched patches and is padded by reflection (bunched layouts measure about
+// 0.07). Common 21- and 25-patch layouts (0.6 or more) and sparse irregular
+// targets keep linear-extension padding.
+const DENSE_END_GAP_RATIO = 0.25;
 
 function blendHighlightWiden(pos, widenFactor) {
   if (!Number.isFinite(widenFactor) || widenFactor <= 1) {
@@ -101,28 +106,49 @@ export function buildInkInterpolatorFromMeasurements(points, options = {}) {
       Math.ceil(paddingSpan / Math.max(spacingEstimate, 1e-6))
     );
 
+    const addPad = (direction, pos, val) => {
+      if (direction > 0) {
+        paddedPositions.push(pos);
+        paddedValues.push(val);
+      } else {
+        paddedPositions.unshift(pos);
+        paddedValues.unshift(val);
+      }
+    };
+
+    // Targets that bunch patches at an end need different padding. Extending
+    // the last two patches there lets meter noise between them tilt the pads,
+    // packs the pads at that tiny gap, and the clamped pads drag the dense end
+    // patches toward the interior; the inverse turns that into a flat top and
+    // an ink cliff. Mirroring the readings through the end patch (odd
+    // reflection) keeps the target's own spacing and trend on both sides.
+    const mirrorSide = (direction, idxA) => {
+      for (let i = idxA - direction; i >= 0 && i < positions.length; i -= direction) {
+        const distance = Math.abs(positions[idxA] - positions[i]);
+        if (distance > paddingSpan) break;
+        if (distance > 0) {
+          addPad(direction, positions[idxA] + distance * direction, 2 * measuredInk[idxA] - measuredInk[i]);
+        }
+      }
+    };
+
     const extendSide = (direction) => {
       const idxA = direction > 0 ? positions.length - 1 : 0;
       const idxB = direction > 0 ? positions.length - 2 : 1;
-      const spacing = Math.max(
-        Math.abs(positions[idxA] - positions[idxB]),
-        1e-6
-      );
+      const lastGap = Math.abs(positions[idxA] - positions[idxB]);
+      if (lastGap < spacingEstimate * DENSE_END_GAP_RATIO) {
+        mirrorSide(direction, idxA);
+        return;
+      }
+
+      const spacing = Math.max(lastGap, 1e-6);
       const slope =
         (measuredInk[idxA] - measuredInk[idxB]) /
         Math.max(spacing, 1e-6);
 
       for (let step = 1; step <= paddingSamples; step += 1) {
         const offset = spacing * step * direction;
-        const pos = positions[idxA] + offset;
-        const val = clamp01(measuredInk[idxA] + slope * offset);
-        if (direction > 0) {
-          paddedPositions.push(pos);
-          paddedValues.push(val);
-        } else {
-          paddedPositions.unshift(pos);
-          paddedValues.unshift(val);
-        }
+        addPad(direction, positions[idxA] + offset, clamp01(measuredInk[idxA] + slope * offset));
       }
     };
 
