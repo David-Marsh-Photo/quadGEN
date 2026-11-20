@@ -20,7 +20,8 @@
    - First enable per channel auto-seeds Smart key points: direct copy when source ≤25 points; otherwise the curve is simplified to ≤21 points (configurable via `DIRECT_SEED_MAX_POINTS`).
    - Disabled channels persist key points without enabling ink; enabled channels seed and draw immediately.
    - Seed operations record a single undo batch.
-   - Seeding rebuilds the curve from the key points, except when any seeded relative output exceeds 100 (End just above the rounded Percent field, e.g. End 19481 = 29.726% against 29.7): those key points are stored without rebuilding, so the loaded samples stay exact until the first edit rebuilds them (`persistSmartPoints`; guarded by `tests/e2e/edit-mode-kclk-ceiling-regression.spec.ts`).
+   - Seeding rebuilds the curve from the key points, except when any seeded relative output exceeds 100 (End just above the rounded Percent field, e.g. End 19481 = 29.726% against 29.7) and no measurement correction is active: those key points are stored without rebuilding, so the loaded samples stay exact until the first edit rebuilds them (`persistSmartPoints`; guarded by `tests/e2e/edit-mode-kclk-ceiling-regression.spec.ts`).
+   - With a measurement correction active, seeding follows the corrected curve the user sees, not the loaded .quad (which never contains the correction), and the points always rebuild the curve so the correction carries into Edit Mode.
 
 2. **Focus & Rendering**
    - Selected channel renders last, full opacity with numbered markers; others dim to 50 % and hide ordinals.

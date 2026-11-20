@@ -208,3 +208,39 @@ test.describe('LAB Correction Gain 100% Baseline Bug', () => {
     expect(avgDiff).toBeLessThan(maxExpectedDiff);
   });
 });
+
+test.describe('Measurement correction applied exactly once', () => {
+  test('keeps the loaded quad and exports it with the correction applied once', async ({ page }) => {
+    await page.goto(pathToFileURL(resolve('index.html')).href);
+    await page.waitForFunction(
+      () => typeof window.getLoadedQuadData === 'function' && typeof window.apply1DLUT === 'function',
+      null,
+      { timeout: 20000 }
+    );
+
+    await page.setInputFiles('#quadFile', resolve('testdata/gravure-40patch-v1.quad'));
+    await page.waitForFunction(() => window.getLoadedQuadData()?.filename === 'gravure-40patch-v1.quad');
+    const loaded = await page.evaluate(() => Array.from(window.getLoadedQuadData().curves.K));
+
+    await page.setInputFiles('#linearizationFile', resolve('testdata/gravure-40patch-v1-lab.txt'));
+    await page.waitForFunction(() => {
+      const entry = window.LinearizationState?.getGlobalData?.();
+      return !!(window.LinearizationState?.globalApplied && entry?.filename?.includes('gravure-40patch-v1-lab'));
+    });
+
+    const result = await page.evaluate((original) => {
+      const lines = window.buildFile().split('\n');
+      const start = lines.indexOf('# K curve') + 1;
+      const entry = window.LinearizationState.getGlobalData();
+      return {
+        curve: Array.from(window.getLoadedQuadData().curves.K),
+        exported: lines.slice(start, start + 256).map(Number),
+        appliedOnce: Array.from(window.apply1DLUT(original, entry, 0, 1, Math.max(...original), 'pchip', 0))
+      };
+    }, loaded);
+
+    expect(result.curve, 'loading a measurement must not rewrite the loaded curve').toEqual(loaded);
+    const worst = Math.max(...result.exported.map((value, i) => Math.abs(value - result.appliedOnce[i])));
+    expect(worst, 'export should equal the loaded curve with the correction applied once').toBeLessThanOrEqual(1);
+  });
+});

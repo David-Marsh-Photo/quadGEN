@@ -13,6 +13,8 @@ This changelog follows a concise, user-facing format. Engineering details live i
 
 ### Fixed
 - LAB and manual L* corrections from targets with patches bunched at the ends (such as 0.2%, 0.6% … 99.4%, 99.8%) no longer produce an ink cliff and a flat top. Smoothing had pulled the end patches away from their readings, so the darkest few percent of input all printed at nearly full ink. Targets with ordinary 21- or 25-patch layouts produce the same corrections as before.
+- LAB and manual L* corrections are now applied once. With the default Simple Scaling method, loading a measurement replaced the loaded curves with a pre-scaled copy and then applied the full correction on top, so the readings were applied twice (on a 40-patch gravure target the quarter tones printed 4–6 L* too light; multi-ink inkjet exports change by a median 15% of End). The loaded .quad now stays as loaded.
+- Turning on Edit Mode with a measurement correction loaded keeps the corrected curve. Smart key points were taken from the loaded .quad, which does not contain the correction, so the curve jumped (up to 69% of End on a K/C/LK quad); it now moves by about 1.5% of End or less for single-ink quads.
 
 ### Removed
 - _Nothing yet._
