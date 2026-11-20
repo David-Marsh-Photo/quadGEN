@@ -20,10 +20,12 @@
    - First enable per channel auto-seeds Smart key points: direct copy when source ≤25 points; otherwise the curve is simplified to ≤21 points (configurable via `DIRECT_SEED_MAX_POINTS`).
    - Disabled channels persist key points without enabling ink; enabled channels seed and draw immediately.
    - Seed operations record a single undo batch.
+   - Seeding rebuilds the curve from the key points, except when any seeded relative output exceeds 100 (End just above the rounded Percent field, e.g. End 19481 = 29.726% against 29.7): those key points are stored without rebuilding, so the loaded samples stay exact until the first edit rebuilds them (`persistSmartPoints`; guarded by `tests/e2e/edit-mode-kclk-ceiling-regression.spec.ts`).
 
 2. **Focus & Rendering**
    - Selected channel renders last, full opacity with numbered markers; others dim to 50 % and hide ordinals.
    - A dashed linear reference (0→End) appears for context; cursor tooltip locks to the selected channel.
+   - The insert ring and LAB-marker hover highlights draw on `#inkChartOverlay`, which is positioned at the chart canvas offset (not the wrapper's padding box) so the ring sits on the curve.
 
 3. **Editing Tools**
    - XY input accepts `X,Y` (absolute percent after End). Validation clamps 0–100 and surfaces inline errors.
@@ -42,13 +44,15 @@
 
 ## Edge Cases & Constraints
 - Minimum gap (`ControlPolicy.minGap`, default 0.01) prevents key-point overlap; editing too close surfaces a descriptive error.
+- Stored relative outputs may exceed 100; `validateKeyPoints` rejects only negative outputs and inputs outside 0–100, so insert, delete, rescale, drag-cancel restore, and undo/redo work on channels whose End sits above the rounded Percent.
 - End=0 channels remain disabled; attempts to edit prompt the user to enable the channel first.
 - Edit Mode OFF blocks mutations but preserves seeded key points for the next session.
 - Auto-seeded overlays align with measurement patches when counts ≤25 to avoid mid-edit jumps.
 
 ## Testing
 - Playwright: `tests/e2e/edit-mode-drag-smart-point.spec.ts`, `tests/e2e/edit-mode-delete.spec.ts`, `tests/e2e/edit-mode-scale.spec.ts`, and `tests/e2e/edit-mode-ink-limit-raise.spec.ts` cover editing, deletion, scaling, and low-ink-limit interactions.
-- Unit: `tests/ui/edit-mode-persist-seeding.test.js` covers measurement-based reseeding with synthetic samples.
+- Playwright: `tests/e2e/edit-mode-click-select-point.spec.ts` checks click selection and that the insert-preview overlay aligns with the chart canvas.
+- Unit: `tests/ui/edit-mode-persist-seeding.test.js` covers measurement-based reseeding with synthetic samples; `tests/core/smart-key-point-validation.test.js` covers the relative-output validation contract.
 - Manual: `docs/manual_tests.md` (Edit Mode section) outlines nudge behavior, tooltip locking, and overlay expectations.
 
 ## Debugging Aids

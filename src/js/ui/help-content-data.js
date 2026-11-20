@@ -63,6 +63,10 @@ export const VERSION_HISTORY = {
       {
         label: 'Accessible dialogs',
         desc: 'Audited dialogs now keep keyboard focus contained, close consistently, and return focus to their opener.'
+      },
+      {
+        label: 'Edit Mode point fixes',
+        desc: 'The add-point ring sits on the curve, and clicking adds points again on channels whose ink limit is not an exact displayed percent.'
       }
     ]
   },
@@ -2250,7 +2254,8 @@ export function getHelpWorkflowHTML(){
           <ul>
             <li><strong>XY input</strong>: Type <code>X,Y</code> (Y is absolute after the channel End). The Up/Down nudges adjust absolute Y, and Left/Right nudges adjust X.</li>
             <li><strong>Point selection</strong>: Use the point selector arrows to step through Smart points in order; the label updates as you move.</li>
-            <li><strong>Insert/Delete</strong>: Click the chart to insert at the current curve location. Deleting endpoints is blocked; use Undo if a change goes too far.</li>
+            <li><strong>Insert/Delete</strong>: Hover the chart to see a ring on the curve with its X, Y readout and “click to add point”; click to insert a Smart point there (Y always follows the curve). Clicking an existing marker selects it instead, and points too close to a neighbor are refused. Deleting endpoints is blocked; use Undo if a change goes too far.</li>
+            <li><strong>Curve redraw</strong>: Smart points redraw the channel through PCHIP, so the curve can shift slightly (typically within Max error %) when you enter Edit Mode or make the first edit. Check the plot before exporting.</li>
             <li><strong>Undo / Redo</strong>: Every edit is logged in history, so you can step backwards or forwards as needed.</li>
           </ul>
         </li>
