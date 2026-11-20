@@ -66,4 +66,29 @@ test.describe('Edit Mode Smart point selection via click', () => {
     await waitForSelectedOrdinal(page, secondTarget);
     expect(await getPointCount(page)).toBe(initialCount);
   });
+
+  test('insert-preview overlay is aligned with the chart canvas', async ({ page }) => {
+    await gotoApp(page);
+    await loadManualLab(page);
+    await enableEditMode(page);
+    await waitForSmartPoints(page);
+
+    const chart = page.locator('#inkChart');
+    const box = await chart.boundingBox();
+    if (!box) throw new Error('Chart canvas has no layout box');
+    await page.mouse.move(box.x + box.width * 0.6, box.y + box.height * 0.5);
+
+    const rects = await page.evaluate(() => {
+      const read = (id: string) => {
+        const r = document.getElementById(id)?.getBoundingClientRect();
+        return r ? { top: r.top, left: r.left, width: r.width, height: r.height } : null;
+      };
+      return { chart: read('inkChart'), overlay: read('inkChartOverlay') };
+    });
+    expect(rects.overlay).not.toBeNull();
+    expect(rects.overlay!.top).toBeCloseTo(rects.chart!.top, 0);
+    expect(rects.overlay!.left).toBeCloseTo(rects.chart!.left, 0);
+    expect(rects.overlay!.width).toBeCloseTo(rects.chart!.width, 0);
+    expect(rects.overlay!.height).toBeCloseTo(rects.chart!.height, 0);
+  });
 });

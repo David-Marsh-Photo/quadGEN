@@ -20,7 +20,7 @@ This changelog follows a concise, user-facing format. Engineering details live i
 ### Docs
 - _Nothing yet._
 
-## [5.2.0] — 2026-07-16
+## [5.2.0] — 2026-11-20
 ### Added
 - _Nothing yet._
 
@@ -28,6 +28,7 @@ This changelog follows a concise, user-facing format. Engineering details live i
 - Global Scale now uses one rollback-safe transaction and one canonical percent/baseline state for the Scale field, history, and compatibility helpers; the unused rollout flags, mirrored state, subscriptions, and diagnostic queue/telemetry layers were removed.
 
 ### Fixed
+- Edit Mode's add-point cursor circle now sits on the curve instead of about 20 px above it (inserted points were already placed correctly).
 - Auto-raised ink limits now create one canonical percentage/End history pair instead of duplicate Undo steps; a real disabled-to-enabled transition still records its separate enabled-state change.
 - Manual L* Apply is now one reversible history action: it replaces any prior global correction from the immutable `.quad` baseline, clears baked controls, and Undo/Redo restore correction data, chart, preview, export, metadata, and smoothing behavior exactly.
 - CUBE imports now enforce exact declared 1D counts, atomic finite rows, strict scalar/RGB domains, and red-fastest per-axis 3D normalization while retaining lowercase and headerless 1D compatibility.

@@ -17,7 +17,7 @@ export const VERSION_HISTORY = {
     aboutDialog: []
   },
   '5.2.0': {
-    date: '2026-07-16',
+    date: '2026-11-20',
     title: 'Release-readiness and workflow reliability',
     sections: {
       ADDED: [],
@@ -26,6 +26,7 @@ export const VERSION_HISTORY = {
         'Global Scale now uses one reversible transaction and one canonical percent/baseline state.'
       ],
       FIXED: [
+        'The Edit Mode add-point cursor now sits on the curve instead of above it.',
         'Smooth correction paths now enforce PCHIP when interpolation metadata is missing, legacy, or unknown; Linear remains the only technical exception.',
         'Invalid correction imports now leave the active correction, curves, history, baselines, and controls unchanged.',
         '.quad and CUBE imports now reject malformed, incomplete, extra, or non-finite data instead of silently truncating or reinterpreting it.',
