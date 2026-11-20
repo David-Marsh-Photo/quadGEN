@@ -1991,9 +1991,6 @@ export function getHelpGlossaryHTML(){
         <dt>Epson Media Installer</dt>
         <dd>Epson utility that downloads and installs ICC profiles and media settings for specific paper types on Epson printers. Provides paper thickness settings and media handling parameters needed for optimal print quality with third-party papers.</dd>
 
-        <dt>Gaussian Weighted Correction</dt>
-        <dd>LAB processing method that spreads each measurement's influence smoothly across inputs; reduces artifacts versus naive inversion techniques.</dd>
-
         <dt>Gamma value</dt>
         <dd>Numerical parameter that controls the shape of a power-law tone curve. In quadGEN's contrast intent presets: gamma < 1.0 (e.g., 0.85) lowers contrast by brightening shadows; gamma > 1.0 (e.g., 1.2, 1.6, 2.2) increases contrast by darkening shadows. Gamma = 1.0 produces a linear curve with no tonal adjustment.</dd>
 
@@ -2056,6 +2053,9 @@ export function getHelpGlossaryHTML(){
 
         <dt>Monotonic</dt>
         <dd>Property of a curve where values either never decrease (monotonic increasing) or never increase (monotonic decreasing) as you move along the X-axis. quadGEN enforces monotonic curves to ensure predictable printer behavior—no ink output reversals that could cause banding or unstable prints.</dd>
+
+        <dt>Noise-band fit</dt>
+        <dd>How quadGEN turns LAB and manual L* readings into a smooth response before inverting it. Repeated patches are averaged, the reading noise is estimated (from the repeats, or from how each reading departs from close neighbours; sparse targets use a small default), and the response is the straightest curve that never gets lighter as ink increases and stays within 1.5× that noise of every reading. Real shape such as a sharp highlight shoulder is kept; wiggles smaller than the noise are ironed out. The LAB smoothing slider widens the band up to 4×.</dd>
 
         <dt>Options panel</dt>
         <dd>The ⚙️ Options modal opened from the toolbar beside Help. Centralizes quadGEN-wide preferences—including the log-density normalization toggle—so feature panels stay focused on their workflows.</dd>

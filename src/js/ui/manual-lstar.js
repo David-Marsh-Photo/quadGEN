@@ -501,7 +501,7 @@ function applyManualLinearizationState(validation, normalizationMode, correction
   const modeLabel = normalizationMode === LAB_NORMALIZATION_MODES.DENSITY
     ? 'CIE density (log)'
     : 'CIE L* (perceptual)';
-  showStatus(`Applied manual L* correction curve (${getBasePointCountLabel(correctionData)}) (${modeLabel}; Gaussian-weighted reconstruction with PCHIP interpolation)`);
+  showStatus(`Applied manual L* correction curve (${getBasePointCountLabel(correctionData)}) (${modeLabel}; noise-band fit with PCHIP interpolation)`);
   invokeLegacyHelper('postGlobalDeltaChatSummary');
 
   const inputs = elements.lstarInputs ? Array.from(elements.lstarInputs.querySelectorAll('.lstar-input')) : [];

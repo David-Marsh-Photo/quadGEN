@@ -352,10 +352,6 @@ export function parseLabData(fileContent, filename, options = {}) {
     const smoothingPercent = getLabSmoothingPercent();
 
     const helper = buildInkInterpolatorFromMeasurements(originalDataPoints, {
-      neighbors: LAB_TUNING.get('K_NEIGHBORS', 6),
-      sigmaFloor: LAB_TUNING.get('SIGMA_FLOOR', 0.02),
-      sigmaCeil: LAB_TUNING.get('SIGMA_CEIL', 0.15),
-      sigmaAlpha: LAB_TUNING.get('SIGMA_ALPHA', 3.0),
       normalizationMode,
       skipDefaultSmoothing: smoothingPercent <= 0,
       widenFactor: 1
@@ -540,10 +536,6 @@ export function rebuildLabSamplesFromOriginal(originalDataPoints, options = {}) 
     const normalizationMode = options.normalizationMode || getLabNormalizationMode();
 
     const helperOptions = {
-      neighbors: LAB_TUNING.get('K_NEIGHBORS', 6),
-      sigmaFloor: LAB_TUNING.get('SIGMA_FLOOR', 0.02),
-      sigmaCeil: LAB_TUNING.get('SIGMA_CEIL', 0.15),
-      sigmaAlpha: LAB_TUNING.get('SIGMA_ALPHA', 3.0),
       normalizationMode,
       ...options
     };

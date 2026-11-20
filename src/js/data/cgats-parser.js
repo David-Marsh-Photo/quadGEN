@@ -3,7 +3,6 @@
 
 import { DataSpace } from './processing-utils.js';
 import {
-  LAB_TUNING,
   getTargetRelAt,
   parseCgatsNumber,
   tokenizeCgatsLine
@@ -537,10 +536,6 @@ export function parseCGATS17(fileContent, filename, options = {}) {
   const normalizationMode = options.normalizationMode || getLabNormalizationMode();
 
   const helper = buildInkInterpolatorFromMeasurements(originalDataPoints, {
-    neighbors: LAB_TUNING.get('K_NEIGHBORS', 6),
-    sigmaFloor: LAB_TUNING.get('SIGMA_FLOOR', 0.02),
-    sigmaCeil: LAB_TUNING.get('SIGMA_CEIL', 0.15),
-    sigmaAlpha: LAB_TUNING.get('SIGMA_ALPHA', 3.0),
     normalizationMode
   });
 
