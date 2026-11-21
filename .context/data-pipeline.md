@@ -25,10 +25,11 @@ ALL smooth curve generation MUST use PCHIP (Piecewise Cubic Hermite Interpolatin
 - Returns: `{ evaluate(t), createEvaluator(widenFactor), positions }`
 - `evaluate` consumes normalized input 0–1, yields normalized ink
 
-Options:
-- `neighbors=4`, `sigmaFloor=0.036`, `sigmaCeil=0.30`, `sigmaAlpha=2.0`
-- LAB smoothing slider: `widenFactor = 1 + (percent/600) × 3` (range [1.0, 4.0])
-- Edge padding: an end whose last patch gap is under 25% of the average gap (bunched end patches) is padded by mirroring the readings through the end patch; other ends keep clamped linear extension, so 21/25-patch corrections are unchanged
+Smoothing is a noise-band fit, not an averaging window:
+- Repeats are averaged; reading noise σ comes from repeats or from neighbouring readings no more than 10.5% apart (floor and sparse-target default 0.25 L*)
+- The response is the straightest never-lighter curve within ±1.5σ/√repeats of every reading; end patches stay as read
+- LAB smoothing slider: `widenFactor = 1 + (percent/600) × 3` multiplies the band (range [1.0, 4.0])
+- The composite density solver alone still uses the old Gaussian window (`lab-gaussian-legacy.js`)
 
 ## LAB Data Lifecycle & State Management
 

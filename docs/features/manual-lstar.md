@@ -27,7 +27,7 @@
 
 2. **Correction generation**
    - `Generate Correction` creates a printer-space global correction with format `Manual L* Entry` and source `manual`.
-   - Gaussian-weighted measurement reconstruction uses PCHIP wherever a smooth interpolation is required.
+   - Measurement reconstruction uses the noise-band fit (see `docs/features/lab-ingestion.md`) and PCHIP wherever a smooth interpolation is required.
    - Applying over another global correction first restores the immutable source `.quad` curves, then reapplies the current Global Scale. The Manual result therefore depends on the measurements and current settings, not on the correction it replaces.
    - Chart, preview, filename, and exported `.quad` refresh before the modal closes.
 

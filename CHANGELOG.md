@@ -12,9 +12,25 @@ This changelog follows a concise, user-facing format. Engineering details live i
 - _Nothing yet._
 
 ### Fixed
+- _Nothing yet._
+
+### Removed
+- _Nothing yet._
+
+### Docs
+- _Nothing yet._
+
+## [5.3.0] — 2026-11-20
+### Added
+- _Nothing yet._
+
+### Changed
+- LAB and manual L* readings are now smoothed by measurement noise instead of an averaging window. Repeated patches are averaged, the reading noise is estimated from the repeats or from neighbouring readings, and the measured response is the straightest curve within 1.5× that noise of every reading. The old window could span 15% of the input range and flattened real shape: across the 41 measurement files in the project, corrections now land within a median 1.2 L* of the readings instead of 3.6 L*, and the curves bend less. The LAB smoothing slider now widens that noise band (up to 4×). The composite density solver keeps the previous smoothing for now.
+
+### Fixed
 - LAB and manual L* corrections from targets with patches bunched at the ends (such as 0.2%, 0.6% … 99.4%, 99.8%) no longer produce an ink cliff and a flat top. Smoothing had pulled the end patches away from their readings, so the darkest few percent of input all printed at nearly full ink. Targets with ordinary 21- or 25-patch layouts produce the same corrections as before.
 - LAB and manual L* corrections are now applied once. With the default Simple Scaling method, loading a measurement replaced the loaded curves with a pre-scaled copy and then applied the full correction on top, so the readings were applied twice (on a 40-patch gravure target the quarter tones printed 4–6 L* too light; multi-ink inkjet exports change by a median 15% of End). The loaded .quad now stays as loaded.
-- Turning on Edit Mode with a measurement correction loaded keeps the corrected curve. Smart key points were taken from the loaded .quad, which does not contain the correction, so the curve jumped (up to 69% of End on a K/C/LK quad); it now moves by about 1.5% of End or less for single-ink quads.
+- Turning on Edit Mode with a measurement correction loaded keeps the corrected curve. Smart key points were taken from the loaded .quad, which does not contain the correction, so the curve jumped (up to 69% of End on a K/C/LK quad); it now moves by about 1% of End or less, including multi-ink quads.
 
 ### Removed
 - _Nothing yet._

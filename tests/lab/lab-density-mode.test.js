@@ -24,10 +24,7 @@ describe('LAB normalization modes', () => {
     ];
 
     const helper = buildInkInterpolatorFromMeasurements(points, {
-      neighbors: 1,
-      sigmaFloor: 1e-6,
-      sigmaCeil: 1e-6,
-      sigmaAlpha: 1e-6
+      skipDefaultSmoothing: true
     });
 
     const measuredEvaluator = helper.createEvaluator(1);
@@ -54,10 +51,7 @@ describe('LAB normalization modes', () => {
     ];
 
     const helper = buildInkInterpolatorFromMeasurements(points, {
-      neighbors: 1,
-      sigmaFloor: 1e-6,
-      sigmaCeil: 1e-6,
-      sigmaAlpha: 1e-6
+      skipDefaultSmoothing: true
     });
 
     const measuredEvaluator = helper.createEvaluator(1);

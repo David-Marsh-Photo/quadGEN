@@ -16,6 +16,41 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '5.3.0': {
+    date: '2026-11-20',
+    title: 'Measurement corrections applied once, with noise-band smoothing',
+    sections: {
+      ADDED: [],
+      CHANGED: [
+        'LAB and manual L* readings are now smoothed by measurement noise instead of an averaging window: the measured response is the straightest curve within 1.5× the reading noise of every reading, so corrections land closer to the readings (a median 1.2 L* instead of 3.6 L* across the project\'s measurement files). The LAB smoothing slider now widens that band, up to 4×. The composite density solver keeps the previous smoothing for now.'
+      ],
+      FIXED: [
+        'Targets with patches bunched at the ends (such as 0.2% … 99.8%) no longer produce an ink cliff and a flat top.',
+        'LAB and manual L* corrections are now applied once; with Simple Scaling the readings had been applied twice (quarter tones on a 40-patch gravure target printed 4–6 L* too light).',
+        'Turning on Edit Mode with a measurement correction loaded now keeps the corrected curve instead of seeding points from the uncorrected .quad.'
+      ],
+      REMOVED: [],
+      DOCS: []
+    },
+    aboutDialog: [
+      {
+        label: 'Corrections applied once',
+        desc: 'LAB and manual L* corrections are no longer applied on top of a pre-corrected copy of the loaded .quad.'
+      },
+      {
+        label: 'Noise-band smoothing',
+        desc: 'Readings are smoothed only by as much as their measurement noise allows, so real curve shape is kept.'
+      },
+      {
+        label: 'No end-patch cliff',
+        desc: 'Targets with patches bunched near 0% and 100% no longer flatten the top of the correction.'
+      },
+      {
+        label: 'Edit Mode keeps corrections',
+        desc: 'Turning on Edit Mode with a measurement loaded no longer makes the corrected curve jump.'
+      }
+    ]
+  },
   '5.2.0': {
     date: '2026-11-20',
     title: 'Release-readiness and workflow reliability',
@@ -1991,9 +2026,6 @@ export function getHelpGlossaryHTML(){
         <dt>Epson Media Installer</dt>
         <dd>Epson utility that downloads and installs ICC profiles and media settings for specific paper types on Epson printers. Provides paper thickness settings and media handling parameters needed for optimal print quality with third-party papers.</dd>
 
-        <dt>Gaussian Weighted Correction</dt>
-        <dd>LAB processing method that spreads each measurement's influence smoothly across inputs; reduces artifacts versus naive inversion techniques.</dd>
-
         <dt>Gamma value</dt>
         <dd>Numerical parameter that controls the shape of a power-law tone curve. In quadGEN's contrast intent presets: gamma < 1.0 (e.g., 0.85) lowers contrast by brightening shadows; gamma > 1.0 (e.g., 1.2, 1.6, 2.2) increases contrast by darkening shadows. Gamma = 1.0 produces a linear curve with no tonal adjustment.</dd>
 
@@ -2056,6 +2088,9 @@ export function getHelpGlossaryHTML(){
 
         <dt>Monotonic</dt>
         <dd>Property of a curve where values either never decrease (monotonic increasing) or never increase (monotonic decreasing) as you move along the X-axis. quadGEN enforces monotonic curves to ensure predictable printer behavior—no ink output reversals that could cause banding or unstable prints.</dd>
+
+        <dt>Noise-band fit</dt>
+        <dd>How quadGEN turns LAB and manual L* readings into a smooth response before inverting it. Repeated patches are averaged, the reading noise is estimated (from the repeats, or from how each reading departs from close neighbours; sparse targets use a small default), and the response is the straightest curve that never gets lighter as ink increases and stays within 1.5× that noise of every reading. Real shape such as a sharp highlight shoulder is kept; wiggles smaller than the noise are ironed out. The LAB smoothing slider widens the band up to 4×.</dd>
 
         <dt>Options panel</dt>
         <dd>The ⚙️ Options modal opened from the toolbar beside Help. Centralizes quadGEN-wide preferences—including the log-density normalization toggle—so feature panels stay focused on their workflows.</dd>

@@ -81,16 +81,16 @@ describe('LAB smoothing at densely sampled ends', () => {
     (point) => point.input > 0 && point.input < 100 && (point.input <= 1.5 || point.input >= 98.5)
   );
 
-  it.each([1, 2])('keeps edge patches within meter noise of their readings at widen ×%d', (widenFactor) => {
-    const evaluator = buildInkInterpolatorFromMeasurements(DENSE_END_TARGET, {
+  it.each([1, 2])('keeps edge patches within the noise band of their readings at widen ×%d', (widenFactor) => {
+    const { evaluate, noiseBand } = buildInkInterpolatorFromMeasurements(DENSE_END_TARGET, {
       normalizationMode: LAB_NORMALIZATION_MODES.LSTAR,
       widenFactor
-    }).evaluate;
+    });
+    const allowed = (noiseBand * widenFactor) / span + 1e-3;
 
-    // 1% of the tonal range is about 0.7 L* on this print.
     for (const point of edgePatches) {
-      expect(Math.abs(evaluator(point.input / 100) - measured(point)), `patch ${point.input}%`)
-        .toBeLessThan(0.01);
+      expect(Math.abs(evaluate(point.input / 100) - measured(point)), `patch ${point.input}%`)
+        .toBeLessThan(allowed);
     }
   });
 

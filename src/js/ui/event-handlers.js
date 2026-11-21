@@ -2062,7 +2062,7 @@ function initializeLabNormalizationHandlers() {
         syncLabSmoothingControls(percent);
         scheduleNormalizationRefresh();
         const widen = mapSmoothingPercentToWiden(percent);
-        showStatus(`LAB smoothing set to ${percent}% (widen ≈ ${widen.toFixed(2)}×).`);
+        showStatus(`LAB smoothing set to ${percent}% (noise band ×${widen.toFixed(2)}).`);
         const numeric = Number(percent) || 0;
         if (numeric <= 0) {
             try {
@@ -5841,7 +5841,7 @@ export function setupChannelRow(tr) {
             const fmtLower = String(normalized.format || '').toLowerCase();
             let methodNote = '';
             if (fmtLower.includes('lab') || fmtLower.includes('manual')) {
-                methodNote = ' (CIE density; Gaussian-weighted reconstruction with PCHIP interpolation)';
+                methodNote = ' (noise-band fit with PCHIP interpolation)';
             }
 
             if (normalized.is3DLUT) {

@@ -7,7 +7,7 @@ import { InputValidator } from './validation.js';
 import { ControlPoints, isSmartCurve, isSmartCurveSourceTag } from '../curves/smart-curves.js';
 import { LinearizationState, ensurePrinterSpaceData, normalizeLinearizationEntry } from '../data/linearization-utils.js';
 import { createPCHIPSpline, clamp01 } from '../math/interpolation.js';
-import { buildInkInterpolatorFromMeasurements } from '../data/lab-utils.js';
+import { buildGaussianInkInterpolator } from '../data/lab-gaussian-legacy.js';
 import { captureMake256Step } from '../debug/debug-make256.js';
 import { CurveSimplification, normalizeSmoothingAlgorithm } from '../data/curve-simplification.js';
 import { isLabLinearizationData, processLabLegacy } from '../data/lab-legacy-bypass.js';
@@ -746,7 +746,7 @@ function computeCompositeDensityWeights(channels, baseCurves, endValues, normali
     let measurementEvaluator = null;
     if (Array.isArray(normalizedEntry?.originalData) && normalizedEntry.originalData.length >= 2) {
         try {
-            const helper = buildInkInterpolatorFromMeasurements(normalizedEntry.originalData, {
+            const helper = buildGaussianInkInterpolator(normalizedEntry.originalData, {
                 widenFactor
             });
             if (helper && typeof helper.evaluate === 'function') {

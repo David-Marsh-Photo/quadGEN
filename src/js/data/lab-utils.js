@@ -8,29 +8,164 @@ import {
 
 const clamp01 = (value) => Math.max(0, Math.min(1, value));
 const IDENTITY_ALIGNMENT_THRESHOLD = 0.015;
-const HIGHLIGHT_TAPER_MAX_INPUT = 0.15;
-// An end whose last patch gap is under a quarter of the average gap has
-// bunched patches and is padded by reflection (bunched layouts measure about
-// 0.07). Common 21- and 25-patch layouts (0.6 or more) and sparse irregular
-// targets keep linear-extension padding.
-const DENSE_END_GAP_RATIO = 0.25;
+const MONOTONIC_EPSILON = 1 / 4096;
+// The fitted response may sit this many standard deviations of reading noise
+// away from a reading before it has to bend toward it. Across the 41 measurement
+// files in data/ and testdata/, ±1.5σ landed corrections within a median 1.2 L*
+// of the readings while bending less than the old Gaussian window; ±1σ bent as
+// much as the old window and ±2σ gave up more accuracy. The slider widens it.
+const NOISE_BAND_SIGMAS = 1.5;
+// Floor for the per-reading noise estimate, in L* (about a spectrophotometer's
+// repeatability), so clean or synthetic data still gets a small band.
+const MIN_READING_NOISE_LSTAR = 0.25;
+// Noise is estimated from a reading's neighbours only when they span at most
+// this much input (21- and 25-patch layouts span 10%); sparser targets use the floor.
+const MAX_NOISE_NEIGHBOUR_SPAN_PERCENT = 10.5;
 
-function blendHighlightWiden(pos, widenFactor) {
-  if (!Number.isFinite(widenFactor) || widenFactor <= 1) {
-    return 1;
+const median = (values) => {
+  const sorted = values.slice().sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+};
+
+// Averages repeated readings of the same patch input.
+function averageRepeats(sorted) {
+  const groups = [];
+  sorted.forEach((point) => {
+    const last = groups[groups.length - 1];
+    if (last && Math.abs(last.input - point.input) < 1e-9) {
+      last.readings.push(point.lab);
+    } else {
+      groups.push({ input: point.input, readings: [point.lab] });
+    }
+  });
+  return groups.map(({ input, readings }) => ({
+    input,
+    readings,
+    count: readings.length,
+    lab: readings.reduce((sum, value) => sum + value, 0) / readings.length
+  }));
+}
+
+// Noise of a single reading, in L*. Repeated patches give it directly (pooled
+// standard deviation). Otherwise each reading is compared with the straight line
+// through its neighbours and a robust spread of those differences is used
+// (Gasser, Sroka & Jennen-Steinmetz, 1986).
+function estimateReadingNoise(groups) {
+  let sumSquares = 0;
+  let degreesOfFreedom = 0;
+  groups.forEach((group) => {
+    if (group.count < 2) return;
+    group.readings.forEach((value) => { sumSquares += (value - group.lab) ** 2; });
+    degreesOfFreedom += group.count - 1;
+  });
+  if (degreesOfFreedom >= 2) {
+    return Math.max(MIN_READING_NOISE_LSTAR, Math.sqrt(sumSquares / degreesOfFreedom));
   }
-  const clampedPos = Math.max(0, Math.min(HIGHLIGHT_TAPER_MAX_INPUT, pos));
-  if (clampedPos === HIGHLIGHT_TAPER_MAX_INPUT) {
-    return widenFactor;
+
+  // Only closely spaced neighbours: across wider gaps real curvature would be
+  // mistaken for noise (a 5-patch target's S-shape reads as ~6 L* of "noise").
+  const residuals = [];
+  for (let i = 1; i < groups.length - 1; i += 1) {
+    const before = groups[i - 1];
+    const after = groups[i + 1];
+    const span = after.input - before.input;
+    if (!(span > 0) || span > MAX_NOISE_NEIGHBOUR_SPAN_PERCENT) continue;
+    const w = (groups[i].input - before.input) / span;
+    const expected = before.lab + w * (after.lab - before.lab);
+    residuals.push((groups[i].lab - expected) / Math.sqrt(1 + w * w + (1 - w) ** 2));
   }
-  const t = HIGHLIGHT_TAPER_MAX_INPUT > 0 ? clampedPos / HIGHLIGHT_TAPER_MAX_INPUT : 1;
-  // Smoothstep easing keeps transition gentle
-  const eased = t * t * (3 - 2 * t);
-  return 1 + (widenFactor - 1) * eased;
+  if (residuals.length < 5) return MIN_READING_NOISE_LSTAR;
+  const center = median(residuals);
+  const spread = median(residuals.map((value) => Math.abs(value - center))) / 0.6745;
+  return Math.max(MIN_READING_NOISE_LSTAR, spread);
+}
+
+// Pool-adjacent-violators: the closest weighted sequence that never increases,
+// so a darker patch never reads lighter than the one before it.
+function fitNonIncreasing(values, weights) {
+  const blocks = [];
+  values.forEach((value, i) => {
+    blocks.push({ mean: value, weight: weights[i], size: 1 });
+    while (blocks.length > 1 && blocks[blocks.length - 2].mean < blocks[blocks.length - 1].mean) {
+      const top = blocks.pop();
+      const previous = blocks[blocks.length - 1];
+      const weight = previous.weight + top.weight;
+      previous.mean = (previous.mean * previous.weight + top.mean * top.weight) / weight;
+      previous.weight = weight;
+      previous.size += top.size;
+    }
+  });
+  const fitted = [];
+  blocks.forEach((block) => {
+    for (let k = 0; k < block.size; k += 1) fitted.push(block.mean);
+  });
+  return fitted;
+}
+
+// Shortest path between the pinned end values that stays within [lower, upper]
+// at every position (a taut string). It bends only where the band forces it, so
+// it is the straightest curve the readings allow, and it never decreases when a
+// non-decreasing path fits inside the band.
+function tautString(xs, lower, upper) {
+  const n = xs.length;
+  const fitted = new Array(n);
+  fitted[0] = lower[0];
+  const drawLine = (from, to, endValue) => {
+    for (let k = from + 1; k <= to; k += 1) {
+      const t = (xs[k] - xs[from]) / (xs[to] - xs[from]);
+      fitted[k] = fitted[from] + t * (endValue - fitted[from]);
+    }
+  };
+
+  let anchor = 0;
+  while (anchor < n - 1) {
+    let minSlope = -Infinity;
+    let maxSlope = Infinity;
+    let minIndex = anchor;
+    let maxIndex = anchor;
+    for (let j = anchor + 1; j < n; j += 1) {
+      const dx = xs[j] - xs[anchor];
+      const lowSlope = (lower[j] - fitted[anchor]) / dx;
+      const highSlope = (upper[j] - fitted[anchor]) / dx;
+      if (lowSlope > maxSlope) {
+        drawLine(anchor, maxIndex, upper[maxIndex]);
+        anchor = maxIndex;
+        break;
+      }
+      if (highSlope < minSlope) {
+        drawLine(anchor, minIndex, lower[minIndex]);
+        anchor = minIndex;
+        break;
+      }
+      if (lowSlope > minSlope) { minSlope = lowSlope; minIndex = j; }
+      if (highSlope < maxSlope) { maxSlope = highSlope; maxIndex = j; }
+      if (j === n - 1) {
+        drawLine(anchor, j, lower[j]);
+        anchor = j;
+      }
+    }
+  }
+  return fitted;
+}
+
+function enforceRising(values, finalFloor = 0) {
+  if (!values.length) return values;
+  values[0] = clamp01(values[0]);
+  for (let i = 1; i < values.length; i += 1) {
+    if (values[i] <= values[i - 1]) {
+      values[i] = clamp01(values[i - 1] + MONOTONIC_EPSILON);
+    }
+  }
+  const last = values.length - 1;
+  values[last] = Math.max(values[last], clamp01(finalFloor));
+  return values;
 }
 
 export function buildInkInterpolatorFromMeasurements(points, options = {}) {
-  const sorted = [...points].sort((a, b) => a.input - b.input);
+  const sorted = [...points]
+    .filter((point) => Number.isFinite(point?.input) && Number.isFinite(point?.lab))
+    .sort((a, b) => a.input - b.input);
   if (!sorted.length) {
     const identity = (t) => clamp01(t);
     return {
@@ -45,21 +180,28 @@ export function buildInkInterpolatorFromMeasurements(points, options = {}) {
   const configuredWidenFactor = Number.isFinite(options.widenFactor)
     ? Math.max(0.1, Number(options.widenFactor))
     : null;
-  let measuredInk;
 
-  if (normalizationMode === LAB_NORMALIZATION_MODES.LSTAR) {
-    const maxLab = Math.max(...sorted.map(point => point.lab));
-    const minLab = Math.min(...sorted.map(point => point.lab));
-    const span = Math.max(1e-6, maxLab - minLab);
-    measuredInk = sorted.map(point => clamp01((maxLab - point.lab) / span));
-  } else {
-    const densityValues = sorted.map(point => cieDensityFromLstar(point.lab));
-    const minDensity = Math.min(...densityValues);
-    const maxDensity = Math.max(...densityValues);
-    const span = Math.max(1e-6, maxDensity - minDensity);
-    measuredInk = densityValues.map((value) => clamp01((value - minDensity) / span));
-  }
-  const positions = sorted.map(point => clamp01(point.input / 100));
+  const groups = averageRepeats(sorted);
+  const labs = groups.map((group) => group.lab);
+
+  // Maps an L* reading to normalized ink (0 at the lightest reading, 1 at the
+  // darkest), linear in L* or in CIE density. Not clamped, so band edges can
+  // sit slightly outside [0, 1].
+  const toInk = (() => {
+    if (normalizationMode === LAB_NORMALIZATION_MODES.LSTAR) {
+      const maxLab = Math.max(...labs);
+      const span = Math.max(1e-6, maxLab - Math.min(...labs));
+      return (lab) => (maxLab - lab) / span;
+    }
+    const density = (lab) => cieDensityFromLstar(Math.max(0, Math.min(100, lab)));
+    const densities = labs.map(density);
+    const minDensity = Math.min(...densities);
+    const span = Math.max(1e-6, Math.max(...densities) - minDensity);
+    return (lab) => (density(lab) - minDensity) / span;
+  })();
+
+  const measuredInk = labs.map((lab) => clamp01(toInk(lab)));
+  const positions = groups.map((group) => clamp01(group.input / 100));
 
   const identityDeviation = measuredInk.reduce((max, value, index) => {
     const deviation = Math.abs(value - (positions[index] ?? 0));
@@ -67,190 +209,43 @@ export function buildInkInterpolatorFromMeasurements(points, options = {}) {
   }, 0);
   const treatAsIdentity = identityDeviation <= IDENTITY_ALIGNMENT_THRESHOLD;
 
-  const smoothingBypass = skipDefaultSmoothing || treatAsIdentity;
+  const smoothingBypass = skipDefaultSmoothing || treatAsIdentity || groups.length < 3;
   const baseWidenFactor = configuredWidenFactor
     || (smoothingBypass ? 1 : getLabWidenFactor());
 
-  const neighbors = options.neighbors ?? 6;
-  const sigmaFloor = options.sigmaFloor ?? 0.02;
-  const sigmaCeil = options.sigmaCeil ?? 0.15;
-  const sigmaAlpha = options.sigmaAlpha ?? 3.0;
+  const readingNoise = estimateReadingNoise(groups);
+  const fittedLab = fitNonIncreasing(labs, groups.map((group) => group.count));
 
-  function buildPaddedKernel() {
-    if (positions.length < 2) {
-      return {
-        positions: positions.slice(),
-        values: measuredInk.slice()
-      };
-    }
-
-    const paddedPositions = positions.slice();
-    const paddedValues = measuredInk.slice();
-
-    const spacingEstimate = (() => {
-      let total = 0;
-      let count = 0;
-      for (let i = 1; i < positions.length; i += 1) {
-        const delta = Math.abs(positions[i] - positions[i - 1]);
-        if (delta > 0) {
-          total += delta;
-          count += 1;
-        }
-      }
-      return count > 0 ? total / count : 0.05;
-    })();
-
-    const paddingSpan = sigmaCeil * 3; // cover ±3σ for the widest kernel
-    const paddingSamples = Math.max(
-      3,
-      Math.ceil(paddingSpan / Math.max(spacingEstimate, 1e-6))
-    );
-
-    const addPad = (direction, pos, val) => {
-      if (direction > 0) {
-        paddedPositions.push(pos);
-        paddedValues.push(val);
-      } else {
-        paddedPositions.unshift(pos);
-        paddedValues.unshift(val);
-      }
-    };
-
-    // Targets that bunch patches at an end need different padding. Extending
-    // the last two patches there lets meter noise between them tilt the pads,
-    // packs the pads at that tiny gap, and the clamped pads drag the dense end
-    // patches toward the interior; the inverse turns that into a flat top and
-    // an ink cliff. Mirroring the readings through the end patch (odd
-    // reflection) keeps the target's own spacing and trend on both sides.
-    const mirrorSide = (direction, idxA) => {
-      for (let i = idxA - direction; i >= 0 && i < positions.length; i -= direction) {
-        const distance = Math.abs(positions[idxA] - positions[i]);
-        if (distance > paddingSpan) break;
-        if (distance > 0) {
-          addPad(direction, positions[idxA] + distance * direction, 2 * measuredInk[idxA] - measuredInk[i]);
-        }
-      }
-    };
-
-    const extendSide = (direction) => {
-      const idxA = direction > 0 ? positions.length - 1 : 0;
-      const idxB = direction > 0 ? positions.length - 2 : 1;
-      const lastGap = Math.abs(positions[idxA] - positions[idxB]);
-      if (lastGap < spacingEstimate * DENSE_END_GAP_RATIO) {
-        mirrorSide(direction, idxA);
-        return;
-      }
-
-      const spacing = Math.max(lastGap, 1e-6);
-      const slope =
-        (measuredInk[idxA] - measuredInk[idxB]) /
-        Math.max(spacing, 1e-6);
-
-      for (let step = 1; step <= paddingSamples; step += 1) {
-        const offset = spacing * step * direction;
-        addPad(direction, positions[idxA] + offset, clamp01(measuredInk[idxA] + slope * offset));
-      }
-    };
-
-    extendSide(-1);
-    extendSide(1);
-
-    return { positions: paddedPositions, values: paddedValues };
-  }
-
-  const paddedKernel = buildPaddedKernel();
-
-  function localSigmaAt(t, sigmaPositions) {
-    const n = sigmaPositions.length;
-    if (n <= 1) return sigmaCeil;
-    let lo = 0;
-    let hi = n;
-    while (lo < hi) {
-      const mid = (lo + hi) >> 1;
-      if (sigmaPositions[mid] < t) lo = mid + 1;
-      else hi = mid;
-    }
-    const distances = [];
-    let left = lo - 1;
-    let right = lo;
-    while ((left >= 0 || right < n) && distances.length < neighbors) {
-      const dl = left >= 0 ? Math.abs(t - sigmaPositions[left]) : Infinity;
-      const dr = right < n ? Math.abs(t - sigmaPositions[right]) : Infinity;
-      if (dl <= dr) {
-        if (Number.isFinite(dl)) distances.push(dl);
-        left -= 1;
-      } else {
-        if (Number.isFinite(dr)) distances.push(dr);
-        right += 1;
-      }
-    }
-    if (!distances.length) return sigmaCeil;
-    distances.sort((a, b) => a - b);
-    const midIdx = distances.length >> 1;
-    const median = distances.length % 2 === 0
-      ? 0.5 * (distances[midIdx - 1] + distances[midIdx])
-      : distances[midIdx];
-    return Math.min(sigmaCeil, Math.max(sigmaFloor, sigmaAlpha * median));
-  }
-
+  // Smoothing is bounded by measurement noise instead of an averaging window:
+  // the response is the straightest curve within ±1.5σ of every (averaged)
+  // reading, where σ comes from repeats or neighbouring readings. The slider's
+  // widen factor scales the band. End patches stay as read.
   function smoothPoints(widenFactor = 1) {
     if (smoothingBypass) {
-      const direct = measuredInk.slice();
-      const epsilon = 1 / 4096;
-      if (direct.length) {
-        direct[0] = clamp01(measuredInk[0]);
-        for (let i = 1; i < direct.length; i += 1) {
-          if (direct[i] <= direct[i - 1]) {
-            direct[i] = clamp01(direct[i - 1] + epsilon);
-          }
-        }
-        const last = direct.length - 1;
-        direct[last] = Math.max(direct[last], clamp01(measuredInk[measuredInk.length - 1]));
-      }
-      return direct;
+      return enforceRising(measuredInk.slice(), measuredInk[measuredInk.length - 1]);
     }
 
-    const smoothed = measuredInk.map((value, idx) => {
-      const pos = positions[idx];
-      const highlightAdjusted = blendHighlightWiden(pos, widenFactor);
-      const sigma = Math.min(
-        sigmaCeil,
-        Math.max(
-          sigmaFloor,
-          localSigmaAt(pos, paddedKernel.positions) * highlightAdjusted
-        )
-      );
-      const denom = Math.max(1e-9, 2 * sigma * sigma);
-      let numerator = 0;
-      let weightSum = 0;
-      for (let j = 0; j < paddedKernel.positions.length; j++) {
-        const dist = Math.abs(pos - paddedKernel.positions[j]);
-        const weight = Math.exp(-(dist * dist) / denom);
-        numerator += paddedKernel.values[j] * weight;
-        weightSum += weight;
-      }
-      const baseValue = weightSum > 0 ? numerator / weightSum : paddedKernel.values[idx];
-      return clamp01(baseValue);
+    const last = groups.length - 1;
+    const lower = [];
+    const upper = [];
+    groups.forEach((group, i) => {
+      const isEnd = i === 0 || i === last;
+      const band = isEnd ? 0 : (NOISE_BAND_SIGMAS * readingNoise * widenFactor) / Math.sqrt(group.count);
+      lower.push(toInk(fittedLab[i] + band));
+      upper.push(toInk(fittedLab[i] - band));
     });
 
-    const epsilon = 1 / 4096;
-    if (smoothed.length) {
-      smoothed[0] = clamp01(measuredInk[0]);
-      for (let i = 1; i < smoothed.length; i++) {
-        if (smoothed[i] <= smoothed[i - 1]) {
-          smoothed[i] = clamp01(smoothed[i - 1] + epsilon);
-        }
-      }
-      const last = smoothed.length - 1;
-      smoothed[last] = Math.max(smoothed[last], clamp01(measuredInk[measuredInk.length - 1]));
-    }
-    return smoothed;
+    const fitted = tautString(positions, lower, upper);
+    const start = fitted[0];
+    const range = fitted[last] - start;
+    const normalized = fitted.map((value) => (range > 1e-9 ? clamp01((value - start) / range) : 0));
+    return enforceRising(normalized);
   }
 
   function createSpline(widenFactor = baseWidenFactor) {
     const effectiveWiden = Math.max(0.1, Number.isFinite(widenFactor) ? widenFactor : baseWidenFactor);
     const smoothed = smoothPoints(effectiveWiden);
-    const xsPercent = positions.map(p => p * 100);
+    const xsPercent = positions.map((p) => p * 100);
     return createPCHIPSpline(xsPercent, smoothed);
   }
 
@@ -263,6 +258,8 @@ export function buildInkInterpolatorFromMeasurements(points, options = {}) {
     createEvaluator(widenFactor = baseWidenFactor) {
       return toEvaluator(createSpline(widenFactor));
     },
-    positions: positions.slice()
+    positions: positions.slice(),
+    // Allowed distance from each single reading at widen ×1, in L*.
+    noiseBand: NOISE_BAND_SIGMAS * readingNoise
   };
 }

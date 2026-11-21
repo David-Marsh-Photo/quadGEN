@@ -7,6 +7,7 @@ import {
   applyDefaultLabSmoothingToEntry,
   rebuildLabSamplesFromOriginal
 } from '../../src/js/data/lab-parser.js';
+import { buildInkInterpolatorFromMeasurements } from '../../src/js/data/lab-utils.js';
 import { LAB_NORMALIZATION_MODES } from '../../src/js/core/lab-settings.js';
 
 const LSTAR = { normalizationMode: LAB_NORMALIZATION_MODES.LSTAR };
@@ -52,6 +53,8 @@ function worstPredictedError(entry, samples) {
 
 const GRAVURE = 'testdata/gravure-40patch-v1-lab.txt';
 const INKJET = 'data/P800_K35_1440S_V2.txt';
+// Five patches 25% apart with a real S-shape: curvature must not be read as noise.
+const SPARSE = 'testdata/Manual-LAB-Data.txt';
 
 describe('predicted print from a measurement correction', () => {
   it.each([GRAVURE, INKJET])('the unsmoothed inverse lands on target for %s', (file) => {
@@ -64,12 +67,25 @@ describe('predicted print from a measurement correction', () => {
     expect(Math.abs(worstPredictedError(entry, raw).error)).toBeLessThan(0.5);
   });
 
-  // Known defect: the default smoothing window (up to 15% of the input range)
-  // flattens real response shape, leaving 3-6 L* of error. Flip to `it.each`
-  // once smoothing is bounded by meter noise.
-  it.fails.each([GRAVURE, INKJET])('default smoothing lands within 1 L* of target for %s', (file) => {
+  // Smoothing may only ignore differences the reading noise can explain. The old
+  // Gaussian window missed by 5.7 L* (gravure) and 2.8 L* (inkjet).
+  it.each([GRAVURE, INKJET])('default smoothing lands within the noise band for %s', (file) => {
     const entry = applyDefaultLabSmoothingToEntry(loadReadings(file), LSTAR);
+    const { noiseBand } = buildInkInterpolatorFromMeasurements(entry.originalData, LSTAR);
 
+    expect(noiseBand).toBeLessThan(1.5);
+    expect(Math.abs(worstPredictedError(entry, entry.samples).error)).toBeLessThanOrEqual(noiseBand + 0.1);
+  });
+
+  // With patches far apart, curvature between neighbours must not be read as
+  // noise: an estimate of ~6 L* straightened this S-shape into no correction.
+  // Between widely spaced patches PCHIP and the straight-line model differ, so
+  // the bound is looser than the noise band.
+  it('a sparse target keeps its correction', () => {
+    const entry = applyDefaultLabSmoothingToEntry(loadReadings(SPARSE), LSTAR);
+    const { noiseBand } = buildInkInterpolatorFromMeasurements(entry.originalData, LSTAR);
+
+    expect(noiseBand).toBeLessThan(1);
     expect(Math.abs(worstPredictedError(entry, entry.samples).error)).toBeLessThan(1);
   });
 });
