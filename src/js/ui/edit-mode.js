@@ -238,12 +238,14 @@ function seedChannelFromSamples(channelName, samples, contextLabel = 'default') 
     if (!Array.isArray(samples) || samples.length !== CURVE_RESOLUTION) {
         return false;
     }
-    const fallbackSamples = getFallbackCurveSamples(channelName);
+    const measurementActive = !!(LinearizationState?.hasAnyLinearization?.());
+    // With a measurement correction active, the samples are the corrected curve the
+    // user sees; the loaded .quad lacks the correction, so it must not anchor the seed.
+    const fallbackSamples = measurementActive ? null : getFallbackCurveSamples(channelName);
     const fallbackValid = Array.isArray(fallbackSamples) && fallbackSamples.length === CURVE_RESOLUTION;
     const verificationTarget = fallbackValid
         ? fallbackSamples
         : samples;
-    const measurementActive = !!(LinearizationState?.hasAnyLinearization?.());
     if (!measurementActive && Array.isArray(fallbackSamples) && fallbackSamples.length === CURVE_RESOLUTION && shouldPreferFallbackSamples(samples, fallbackSamples)) {
         editModeDebugLog(`Seed samples overridden by fallback for ${channelName}`, { context: contextLabel });
         samples = fallbackSamples.slice();
@@ -1396,8 +1398,10 @@ export function persistSmartPoints(channelName, points, interpolation = 'smooth'
     // When a point sits above 100% relative (End just above the rounded Percent field), store the
     // points without rebuilding the loaded curve, so enabling Edit Mode keeps its samples; the first
     // real edit rebuilds it. (validateKeyPoints used to enforce this by rejecting outputs above 100.)
-    const exceedsPercent = relativePoints.some((p) => p.output > 100);
-    const result = exceedsPercent ? { success: false } : setSmartKeyPoints(channelName, relativePoints, interpolation, {
+    // A measurement correction is not in the loaded curve, so then the points must rebuild it.
+    const keepLoadedCurve = relativePoints.some((p) => p.output > 100) &&
+        !LinearizationState.hasAnyLinearization?.();
+    const result = keepLoadedCurve ? { success: false } : setSmartKeyPoints(channelName, relativePoints, interpolation, {
         skipHistory: true,
         skipMarkEdited: true,
         skipUiRefresh,
@@ -1509,7 +1513,9 @@ function sampleLinearizedCurve(channelName, endValue, applyLinearization = true)
         try {
             const result = runner(endValue, channelName, applyLinearization, { forceSmartApplied: false });
             if (Array.isArray(result) && result.length === CURVE_RESOLUTION) {
-                const fallback = getFallbackCurveSamples(channelName);
+                // A measurement correction makes the curve differ from the loaded .quad on purpose.
+                const correctionActive = !!(applyLinearization && LinearizationState?.hasAnyLinearization?.());
+                const fallback = correctionActive ? null : getFallbackCurveSamples(channelName);
                 if (Array.isArray(fallback) && fallback.length === CURVE_RESOLUTION && shouldPreferFallbackSamples(result, fallback)) {
                     editModeDebugLog(`Primary make256 samples deviated for ${channelName}`, { stage: 'sampleLinearizedCurve' });
                     return fallback.slice();

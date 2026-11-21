@@ -3175,17 +3175,19 @@ function rebaseChannelsToCorrectedCurves(channelNames = [], options = {}) {
                     }
                     return;
                 }
-                const samples = Array.isArray(channelResult.samples) ? channelResult.samples.slice() : entry.curve;
-                entry.curve = samples;
-                entry.currentEnd = Number(channelResult.endValue) || samples.reduce((max, value) => (value > max ? value : max), 0);
+                // The loaded curve stays the baseline (entry.curve is left as is).
+                // Rendering and export apply the measurement correction to it,
+                // so writing the simple-scaled samples here would apply the
+                // same readings twice. Simple scaling only contributes its
+                // metadata and residual warning.
 
                 // Generate LAB-corrected curves by calling make256 WITH linearization applied
                 // These are what should be stored as "corrected curves" (what you'd see at 100% gain)
                 const labCorrected = make256(entry.currentEnd, entry.channelName, true, undefined);
-                correctedCurves[entry.channelName] = Array.isArray(labCorrected) ? labCorrected.slice() : samples.slice();
+                correctedCurves[entry.channelName] = Array.isArray(labCorrected) ? labCorrected.slice() : entry.curve.slice();
 
                 if (typeof DEBUG_LOGS !== 'undefined' && DEBUG_LOGS && entry.channelName === 'K') {
-                    console.log('[SimpleScaling] baseline samples for K:', samples?.slice(0, 10));
+                    console.log('[SimpleScaling] simple-scaled samples for K:', channelResult.samples?.slice(0, 10));
                     console.log('[SimpleScaling] LAB-corrected for K:', labCorrected?.slice(0, 10));
                 }
             });
