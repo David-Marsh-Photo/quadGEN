@@ -16,6 +16,41 @@ export const VERSION_HISTORY = {
     },
     aboutDialog: []
   },
+  '5.3.0': {
+    date: '2026-11-20',
+    title: 'Measurement corrections applied once, with noise-band smoothing',
+    sections: {
+      ADDED: [],
+      CHANGED: [
+        'LAB and manual L* readings are now smoothed by measurement noise instead of an averaging window: the measured response is the straightest curve within 1.5× the reading noise of every reading, so corrections land closer to the readings (a median 1.2 L* instead of 3.6 L* across the project\'s measurement files). The LAB smoothing slider now widens that band, up to 4×. The composite density solver keeps the previous smoothing for now.'
+      ],
+      FIXED: [
+        'Targets with patches bunched at the ends (such as 0.2% … 99.8%) no longer produce an ink cliff and a flat top.',
+        'LAB and manual L* corrections are now applied once; with Simple Scaling the readings had been applied twice (quarter tones on a 40-patch gravure target printed 4–6 L* too light).',
+        'Turning on Edit Mode with a measurement correction loaded now keeps the corrected curve instead of seeding points from the uncorrected .quad.'
+      ],
+      REMOVED: [],
+      DOCS: []
+    },
+    aboutDialog: [
+      {
+        label: 'Corrections applied once',
+        desc: 'LAB and manual L* corrections are no longer applied on top of a pre-corrected copy of the loaded .quad.'
+      },
+      {
+        label: 'Noise-band smoothing',
+        desc: 'Readings are smoothed only by as much as their measurement noise allows, so real curve shape is kept.'
+      },
+      {
+        label: 'No end-patch cliff',
+        desc: 'Targets with patches bunched near 0% and 100% no longer flatten the top of the correction.'
+      },
+      {
+        label: 'Edit Mode keeps corrections',
+        desc: 'Turning on Edit Mode with a measurement loaded no longer makes the corrected curve jump.'
+      }
+    ]
+  },
   '5.2.0': {
     date: '2026-11-20',
     title: 'Release-readiness and workflow reliability',
